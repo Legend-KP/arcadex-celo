@@ -72,7 +72,6 @@ export async function POST(
       name: body.name.trim(),
       score: body.score,
       walletAddress: body.walletAddress,
-      isHumanVerified: body.isHumanVerified === true,
     };
 
     await submitLeaderboardEntryOnServer(id, entry);

@@ -85,14 +85,7 @@ export default function Leaderboard({
                 >
                   {i < 3 ? MEDALS[i] : `#${i + 1}`}
                 </span>
-                <span className="lb-name">
-                  {e.isHumanVerified && (
-                    <span className="human-badge" title="Verified human" aria-label="Verified human">
-                      ✓
-                    </span>
-                  )}
-                  {e.name}
-                </span>
+                <span className="lb-name">{e.name}</span>
                 <span className="lb-score">{e.score.toLocaleString()}</span>
               </div>
             ))}

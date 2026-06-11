@@ -4,7 +4,6 @@ export interface LeaderboardEntry {
   name: string;
   score: number;
   walletAddress?: string;
-  isHumanVerified?: boolean;
   createdAt?: number;
 }
 
@@ -12,8 +11,6 @@ export interface PlayerProfile {
   id: string;
   name: string;
   walletAddress?: string;
-  isHumanVerified?: boolean;
-  nullifier?: string;
   createdAt: number;
   updatedAt: number;
 }

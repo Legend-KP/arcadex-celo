@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import MiniKitProvider from "@/components/MiniKitProvider";
+import MiniPayProvider from "@/components/MiniPayProvider";
 import PlayerProfileProvider from "@/components/PlayerProfileProvider";
 
 export default function AppProviders({
@@ -17,8 +17,8 @@ export default function AppProviders({
   }
 
   return (
-    <MiniKitProvider>
+    <MiniPayProvider>
       <PlayerProfileProvider>{children}</PlayerProfileProvider>
-    </MiniKitProvider>
+    </MiniPayProvider>
   );
 }

@@ -10,7 +10,6 @@ import {
   useState,
 } from "react";
 import PlayerNameModal from "@/components/PlayerNameModal";
-import HumanVerificationRunner from "@/components/HumanVerificationRunner";
 import {
   bootstrapPlayerProfile,
   fetchPlayerProfile,
@@ -24,7 +23,6 @@ import {
   setCachedWallet,
 } from "@/lib/player-id";
 import {
-  getWorldUsername,
   readWalletImmediately,
   resolveWalletForSave,
   resolveWalletOnAppOpen,
@@ -41,7 +39,6 @@ interface PlayerProfileContextValue {
   profile: PlayerProfile | null;
   playerName: string;
   walletAddress: string;
-  isHumanVerified: boolean;
   isReady: boolean;
   updateWalletAddress: (walletAddress: string) => Promise<void>;
 }
@@ -82,7 +79,6 @@ export default function PlayerProfileProvider({
   const [walletAddress, setWalletAddress] = useState("");
   const [isReady, setIsReady] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [nameSuggestion, setNameSuggestion] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const nameCompleteRef = useRef(false);
@@ -110,7 +106,6 @@ export default function PlayerProfileProvider({
       if (cancelled) return;
 
       if (!wallet) {
-        setNameSuggestion(getWorldUsername() ?? "");
         setShowModal(true);
         nameCompleteRef.current = false;
         setIsReady(true);
@@ -136,7 +131,6 @@ export default function PlayerProfileProvider({
 
         if (shouldShowNameModal(user)) {
           nameCompleteRef.current = false;
-          setNameSuggestion(getWorldUsername() ?? "");
           setShowModal(true);
         } else {
           nameCompleteRef.current = syncNameCompletion(user);
@@ -145,7 +139,6 @@ export default function PlayerProfileProvider({
       } catch (err) {
         if (cancelled) return;
         nameCompleteRef.current = false;
-        setNameSuggestion(getWorldUsername() ?? "");
         setShowModal(true);
         setError(
           err instanceof Error
@@ -181,7 +174,7 @@ export default function PlayerProfileProvider({
 
         if (!isWalletAddress(wallet)) {
           throw new Error(
-            "Could not connect your wallet. Open ArcadeX in World App and try again."
+            "Could not connect your wallet. Open ArcadeX in MiniPay and try again."
           );
         }
 
@@ -222,17 +215,12 @@ export default function PlayerProfileProvider({
     [profile?.name]
   );
 
-  const handleHumanVerified = useCallback((user: PlayerProfile) => {
-    setProfile(user);
-  }, []);
-
   const value = useMemo(
     () => ({
       playerId,
       profile,
       playerName: profile?.name ?? "",
       walletAddress,
-      isHumanVerified: profile?.isHumanVerified === true,
       isReady,
       updateWalletAddress,
     }),
@@ -242,18 +230,11 @@ export default function PlayerProfileProvider({
   return (
     <PlayerProfileContext.Provider value={value}>
       {children}
-      <HumanVerificationRunner
-        walletAddress={walletAddress}
-        isHumanVerified={profile?.isHumanVerified === true}
-        isReady={isReady}
-        blocked={showModal || saving || !hasPlayerName(profile)}
-        onVerified={handleHumanVerified}
-      />
       <PlayerNameModal
         open={showModal}
         saving={saving}
         error={error}
-        defaultName={nameSuggestion}
+        defaultName=""
         onSubmit={handleSubmit}
       />
     </PlayerProfileContext.Provider>

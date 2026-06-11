@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import AppProviders from "@/components/AppProviders";
 import { readFirebaseConfigFromEnv } from "@/lib/firebase-config";
-import { readWorldAppConfigFromEnv } from "@/lib/world-app-config";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +16,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const firebaseConfig = readFirebaseConfigFromEnv();
-  const worldAppConfig = readWorldAppConfigFromEnv();
-  const configScript = `window.__FIREBASE_CONFIG__=${JSON.stringify(firebaseConfig).replace(/</g, "\\u003c")};window.__WORLD_APP_CONFIG__=${JSON.stringify(worldAppConfig).replace(/</g, "\\u003c")};`;
+  const configScript = `window.__FIREBASE_CONFIG__=${JSON.stringify(firebaseConfig).replace(/</g, "\\u003c")};`;
 
   return (
     <html lang="en">

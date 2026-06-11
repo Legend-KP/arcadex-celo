@@ -121,39 +121,6 @@ function deduplicateLeaderboardEntries(entries: LeaderboardEntry[]): Leaderboard
   return Array.from(best.values());
 }
 
-async function enrichLeaderboardWithHumanStatus(
-  entries: LeaderboardEntry[]
-): Promise<LeaderboardEntry[]> {
-  const wallets = [
-    ...new Set(
-      entries
-        .map((e) => tryNormalizeWalletAddress(e.walletAddress))
-        .filter((w): w is string => Boolean(w))
-    ),
-  ];
-
-  if (wallets.length === 0) return entries;
-
-  const verified = new Set<string>();
-  await Promise.all(
-    wallets.map(async (wallet) => {
-      try {
-        const user = await fetchUserFromServer(wallet);
-        if (user?.isHumanVerified) verified.add(wallet);
-      } catch {
-        // Skip lookup failures
-      }
-    })
-  );
-
-  return entries.map((entry) => ({
-    ...entry,
-    isHumanVerified:
-      entry.isHumanVerified === true ||
-      (entry.walletAddress ? verified.has(entry.walletAddress) : false),
-  }));
-}
-
 // ─── Users ───────────────────────────────────────────────────────────────────
 
 export async function fetchUserFromServer(
@@ -182,8 +149,6 @@ export async function upsertUserOnServer(
   const stored: StoredUser = {
     name: data.name.trim(),
     walletAddress: wallet,
-    isHumanVerified: existing?.isHumanVerified ?? false,
-    nullifier: existing?.nullifier ?? "",
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
@@ -207,8 +172,6 @@ export async function bootstrapUserOnServer(
     const stored: StoredUser = {
       name: "",
       walletAddress: wallet,
-      isHumanVerified: false,
-      nullifier: "",
       createdAt: now,
       updatedAt: now,
     };
@@ -217,51 +180,6 @@ export async function bootstrapUserOnServer(
   }
 
   return existing;
-}
-
-export async function fetchNullifierOwner(
-  nullifierDocId: string
-): Promise<string | null> {
-  const data = await readPath<{ walletAddress?: string }>(
-    `nullifiers/${nullifierDocId}`
-  );
-  return data?.walletAddress?.trim() || null;
-}
-
-export async function storeNullifier(
-  nullifierDocId: string,
-  data: { nullifier: string; walletAddress: string }
-): Promise<void> {
-  await writePath(`nullifiers/${nullifierDocId}`, {
-    nullifier: data.nullifier,
-    action: "human-verify",
-    walletAddress: data.walletAddress,
-    verifiedAt: Date.now(),
-  });
-}
-
-export async function markUserHumanVerified(
-  walletAddress: string,
-  nullifier: string
-): Promise<PlayerProfile> {
-  if (!isWalletAddress(walletAddress)) {
-    throw new Error("Human verification requires a valid wallet address.");
-  }
-
-  const wallet = normalizeWalletAddress(walletAddress);
-  const existing = await fetchUserFromServer(wallet);
-  const now = Date.now();
-  const stored: StoredUser = {
-    name: existing?.name ?? "",
-    walletAddress: wallet,
-    isHumanVerified: true,
-    nullifier,
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
-  };
-
-  await writePath(`users/${wallet}`, stored);
-  return toPlayerProfile(wallet, stored)!;
 }
 
 // ─── Game play counts ──────────────────────────────────────────────────────────
@@ -296,11 +214,9 @@ export async function fetchLeaderboardFromServer(
   limit = LEADERBOARD_MAX_ENTRIES
 ): Promise<LeaderboardEntry[]> {
   const map = await readPath<LeaderboardMap>(`leaderboards/${gameId}`);
-  const entries = deduplicateLeaderboardEntries(mapToLeaderboardEntries(map))
+  return deduplicateLeaderboardEntries(mapToLeaderboardEntries(map))
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
-
-  return enrichLeaderboardWithHumanStatus(entries);
 }
 
 export async function fetchUserBestScoreFromServer(
@@ -338,7 +254,6 @@ export async function submitLeaderboardEntryOnServer(
     name: entry.name,
     score: entry.score,
     ...(wallet ? { walletAddress: wallet } : {}),
-    isHumanVerified: entry.isHumanVerified === true,
     createdAt: entry.createdAt ?? Date.now(),
   };
 

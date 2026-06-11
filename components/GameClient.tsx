@@ -25,7 +25,7 @@ export default function GameClient({ game }: GameClientProps) {
   const [gameReady, setGameReady] = useState(false);
   const leaderboardEnabled = gameHasLeaderboard(game);
   const theme = getGameTheme(game);
-  const { playerName, profile, walletAddress, isHumanVerified, updateWalletAddress } =
+  const { playerName, profile, walletAddress, updateWalletAddress } =
     usePlayerProfile();
 
   const markGameReady = useCallback(() => {
@@ -126,7 +126,6 @@ export default function GameClient({ game }: GameClientProps) {
             name: playerName || name,
             score,
             walletAddress: resolvedWallet,
-            isHumanVerified,
           });
           sendToUnity(iframeRef, "OnScoreSubmitted", {
             success: true,
@@ -147,7 +146,6 @@ export default function GameClient({ game }: GameClientProps) {
       profile?.walletAddress,
       walletAddress,
       updateWalletAddress,
-      isHumanVerified,
       markGameReady,
     ]
   );
