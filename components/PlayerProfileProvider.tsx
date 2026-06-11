@@ -1,0 +1,261 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import PlayerNameModal from "@/components/PlayerNameModal";
+import HumanVerificationRunner from "@/components/HumanVerificationRunner";
+import {
+  bootstrapPlayerProfile,
+  fetchPlayerProfile,
+  savePlayerProfile,
+} from "@/lib/player-profile-client";
+import {
+  clearCachedPlayerName,
+  clearInvalidCachedWallet,
+  clearStaleGuestId,
+  getCachedWallet,
+  setCachedWallet,
+} from "@/lib/player-id";
+import {
+  getWorldUsername,
+  readWalletImmediately,
+  resolveWalletForSave,
+  resolveWalletOnAppOpen,
+  retryResolveWallet,
+} from "@/lib/walletAuth";
+import {
+  isWalletAddress,
+  normalizeWalletAddress,
+} from "@/lib/wallet-address";
+import { PlayerProfile } from "@/types";
+
+interface PlayerProfileContextValue {
+  playerId: string;
+  profile: PlayerProfile | null;
+  playerName: string;
+  walletAddress: string;
+  isHumanVerified: boolean;
+  isReady: boolean;
+  updateWalletAddress: (walletAddress: string) => Promise<void>;
+}
+
+const PlayerProfileContext = createContext<PlayerProfileContextValue | null>(
+  null
+);
+
+export function usePlayerProfile(): PlayerProfileContextValue {
+  const ctx = useContext(PlayerProfileContext);
+  if (!ctx) {
+    throw new Error("usePlayerProfile must be used within PlayerProfileProvider");
+  }
+  return ctx;
+}
+
+function hasPlayerName(profile: PlayerProfile | null): boolean {
+  return Boolean(profile?.name?.trim());
+}
+
+function shouldShowNameModal(profile: PlayerProfile | null): boolean {
+  return !hasPlayerName(profile);
+}
+
+function syncNameCompletion(profile: PlayerProfile | null): boolean {
+  const complete = hasPlayerName(profile);
+  if (!complete) clearCachedPlayerName();
+  return complete;
+}
+
+export default function PlayerProfileProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [playerId, setPlayerId] = useState("");
+  const [profile, setProfile] = useState<PlayerProfile | null>(null);
+  const [walletAddress, setWalletAddress] = useState("");
+  const [isReady, setIsReady] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [nameSuggestion, setNameSuggestion] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const nameCompleteRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveWallet(): Promise<string | null> {
+      const immediate = readWalletImmediately();
+      if (immediate) return immediate;
+
+      let wallet = await resolveWalletOnAppOpen();
+      if (!wallet) {
+        wallet = await retryResolveWallet();
+      }
+      return wallet;
+    }
+
+    async function loadProfile() {
+      clearInvalidCachedWallet();
+      clearStaleGuestId();
+      setError("");
+
+      const wallet = await resolveWallet();
+      if (cancelled) return;
+
+      if (!wallet) {
+        setNameSuggestion(getWorldUsername() ?? "");
+        setShowModal(true);
+        nameCompleteRef.current = false;
+        setIsReady(true);
+        return;
+      }
+
+      setCachedWallet(wallet);
+      setWalletAddress(wallet);
+      setPlayerId(wallet);
+
+      try {
+        let user = await bootstrapPlayerProfile(wallet);
+        if (cancelled) return;
+
+        if (!hasPlayerName(user)) {
+          clearCachedPlayerName();
+          const fresh = await fetchPlayerProfile(wallet);
+          if (fresh) user = fresh;
+        }
+        if (cancelled) return;
+
+        setProfile(user);
+
+        if (shouldShowNameModal(user)) {
+          nameCompleteRef.current = false;
+          setNameSuggestion(getWorldUsername() ?? "");
+          setShowModal(true);
+        } else {
+          nameCompleteRef.current = syncNameCompletion(user);
+          setShowModal(false);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        nameCompleteRef.current = false;
+        setNameSuggestion(getWorldUsername() ?? "");
+        setShowModal(true);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not load your profile. Please try again."
+        );
+      } finally {
+        if (!cancelled) setIsReady(true);
+      }
+    }
+
+    loadProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSubmit = useCallback(
+    async (name: string) => {
+      setSaving(true);
+      setError("");
+
+      try {
+        let wallet =
+          walletAddress ||
+          getCachedWallet() ||
+          profile?.walletAddress ||
+          readWalletImmediately();
+
+        if (!wallet) {
+          wallet = await resolveWalletForSave();
+        }
+
+        if (!isWalletAddress(wallet)) {
+          throw new Error(
+            "Could not connect your wallet. Open ArcadeX in World App and try again."
+          );
+        }
+
+        wallet = normalizeWalletAddress(wallet);
+
+        const saved = await savePlayerProfile(wallet, name, wallet);
+
+        setCachedWallet(wallet);
+        setWalletAddress(saved.walletAddress ?? wallet);
+        setPlayerId(saved.id);
+        setProfile(saved);
+        nameCompleteRef.current = true;
+        setShowModal(false);
+      } catch (err) {
+        nameCompleteRef.current = false;
+        setShowModal(true);
+        setError(
+          err instanceof Error ? err.message : "Could not save your name."
+        );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [walletAddress, profile?.walletAddress]
+  );
+
+  const updateWalletAddress = useCallback(
+    async (nextWallet: string) => {
+      if (!profile?.name) return;
+
+      const wallet = nextWallet.trim();
+      const saved = await savePlayerProfile(wallet, profile.name, wallet);
+      setProfile(saved);
+      setPlayerId(saved.id);
+      setWalletAddress(wallet);
+      setCachedWallet(wallet);
+    },
+    [profile?.name]
+  );
+
+  const handleHumanVerified = useCallback((user: PlayerProfile) => {
+    setProfile(user);
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      playerId,
+      profile,
+      playerName: profile?.name ?? "",
+      walletAddress,
+      isHumanVerified: profile?.isHumanVerified === true,
+      isReady,
+      updateWalletAddress,
+    }),
+    [playerId, profile, walletAddress, isReady, updateWalletAddress]
+  );
+
+  return (
+    <PlayerProfileContext.Provider value={value}>
+      {children}
+      <HumanVerificationRunner
+        walletAddress={walletAddress}
+        isHumanVerified={profile?.isHumanVerified === true}
+        isReady={isReady}
+        blocked={showModal || saving || !hasPlayerName(profile)}
+        onVerified={handleHumanVerified}
+      />
+      <PlayerNameModal
+        open={showModal}
+        saving={saving}
+        error={error}
+        defaultName={nameSuggestion}
+        onSubmit={handleSubmit}
+      />
+    </PlayerProfileContext.Provider>
+  );
+}

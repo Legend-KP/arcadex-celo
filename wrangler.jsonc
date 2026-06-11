@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "arcadex",
+  "compatibility_date": "2025-05-05",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "keep_vars": true,
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "arcadex"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
