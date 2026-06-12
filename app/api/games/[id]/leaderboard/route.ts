@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { corsOptionsResponse, jsonWithCors } from "@/lib/cors";
 import { fetchGameFromServer } from "@/lib/firestore-server";
 import {
   fetchLeaderboardFromServer,
@@ -9,10 +9,14 @@ import { gameHasLeaderboard, LEADERBOARD_MAX_ENTRIES, LeaderboardEntry } from "@
 
 export const dynamic = "force-dynamic";
 
+export async function OPTIONS() {
+  return corsOptionsResponse();
+}
+
 async function assertLeaderboardEnabled(gameId: string) {
   const game = await fetchGameFromServer(gameId);
   if (!game || !gameHasLeaderboard(game)) {
-    return NextResponse.json(
+    return jsonWithCors(
       { error: "Leaderboard is not enabled for this game." },
       { status: 404 }
     );
@@ -42,11 +46,11 @@ export async function GET(
           })
         : undefined;
 
-    return NextResponse.json({ entries, personalBest });
+    return jsonWithCors({ entries, personalBest });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to load leaderboard.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return jsonWithCors({ error: message }, { status: 500 });
   }
 }
 
@@ -62,7 +66,7 @@ export async function POST(
     const body = (await request.json()) as LeaderboardEntry;
 
     if (!body.name?.trim() || typeof body.score !== "number") {
-      return NextResponse.json(
+      return jsonWithCors(
         { error: "name and score are required." },
         { status: 400 }
       );
@@ -81,10 +85,10 @@ export async function POST(
       playerName: entry.name,
     });
 
-    return NextResponse.json({ success: true, personalBest });
+    return jsonWithCors({ success: true, personalBest });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to submit score.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return jsonWithCors({ error: message }, { status: 500 });
   }
 }

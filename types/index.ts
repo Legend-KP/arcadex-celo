@@ -32,3 +32,20 @@ export interface Game {
 export function gameHasLeaderboard(game: Pick<Game, "hasLeaderboard">): boolean {
   return game.hasLeaderboard !== false;
 }
+
+/**
+ * Raw RTDB shape at `users/{wallet}/games/{gameId}`.
+ * Score games store `s`; level games store `l`. No timestamp field.
+ */
+export interface StoredGameProgress {
+  /** High score (when hasLeaderboard is true) */
+  s?: number;
+  /** Current level (when hasLeaderboard is false) */
+  l?: number;
+}
+
+/** API / client-facing game progress */
+export interface GameProgress {
+  score?: number;
+  level?: number;
+}

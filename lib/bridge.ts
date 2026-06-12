@@ -43,7 +43,9 @@ export type UnityMessageType =
   | "MINIPAY_BUY_REVIVE"
   | "MINIPAY_BUY_LIVES"
   | "MINIPAY_SUBMIT_SCORE"
-  | "MINIPAY_GET_LEADERBOARD";
+  | "MINIPAY_GET_LEADERBOARD"
+  | "MINIPAY_GET_PROGRESS"
+  | "MINIPAY_SAVE_PROGRESS";
 
 export interface UnityMessage {
   type: UnityMessageType;

@@ -322,7 +322,8 @@ export default function AdminPortal() {
             />
             <span>Leaderboard</span>
             <span className="form-checkbox-hint">
-              Enable score tracking, leaderboard button, and RTDB path for this game
+              Checked: score game — stores high score (s) and enables leaderboard.
+              Unchecked: level-based — stores current level (l) only, no leaderboard.
             </span>
           </label>
           <button
@@ -415,7 +416,8 @@ export default function AdminPortal() {
                     />
                     <span>Leaderboard</span>
                     <span className="form-checkbox-hint">
-                      Enable score tracking, leaderboard button, and RTDB path for this game
+                      Checked: score game — stores high score (s) and enables leaderboard.
+                      Unchecked: level-based — stores current level (l) only, no leaderboard.
                     </span>
                   </label>
                   <button

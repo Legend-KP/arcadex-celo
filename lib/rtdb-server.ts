@@ -1,4 +1,10 @@
-import { LEADERBOARD_MAX_ENTRIES, LeaderboardEntry, PlayerProfile } from "@/types";
+import {
+  GameProgress,
+  LEADERBOARD_MAX_ENTRIES,
+  LeaderboardEntry,
+  PlayerProfile,
+  StoredGameProgress,
+} from "@/types";
 import { getDatabaseUrl } from "./firebase-admin";
 import {
   isWalletAddress,
@@ -82,6 +88,18 @@ async function writePath(path: string, data: unknown): Promise<void> {
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Realtime Database write failed (${res.status}): ${text}`);
+  }
+}
+
+async function patchPath(path: string, data: unknown): Promise<void> {
+  const res = await rtdbFetch(path, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Realtime Database patch failed (${res.status}): ${text}`);
   }
 }
 
@@ -264,8 +282,105 @@ export async function submitLeaderboardEntryOnServer(
   ).find((e) => leaderboardUserKey(e) === userKey);
 
   if (existingBest && existingBest.score >= payload.score) {
+    if (wallet) {
+      await saveGameProgressOnServer(wallet, gameId, existingBest.score, true).catch(
+        () => {
+          // User-node backfill is best-effort
+        }
+      );
+    }
     return;
   }
 
   await writePath(`leaderboards/${gameId}/${leaderboardStorageKey(payload)}`, payload);
+
+  if (wallet) {
+    await saveGameProgressOnServer(wallet, gameId, payload.score, true).catch(
+      () => {
+        // User-node sync is best-effort
+      }
+    );
+  }
+}
+
+// ─── Per-user game progress ───────────────────────────────────────────────────
+
+function gameProgressPath(walletAddress: string, gameId: string): string {
+  return `users/${normalizeWalletAddress(walletAddress)}/games/${gameId}`;
+}
+
+export function storedProgressToGameProgress(
+  stored: StoredGameProgress | null,
+  hasLeaderboard: boolean
+): GameProgress {
+  if (!stored) return {};
+  if (hasLeaderboard) {
+    return stored.s !== undefined ? { score: stored.s } : {};
+  }
+  return stored.l !== undefined ? { level: stored.l } : {};
+}
+
+export async function fetchGameProgressFromServer(
+  walletAddress: string,
+  gameId: string
+): Promise<StoredGameProgress | null> {
+  if (!isWalletAddress(walletAddress)) return null;
+  return readPath<StoredGameProgress>(gameProgressPath(walletAddress, gameId));
+}
+
+export async function resolveGameProgressFromServer(
+  walletAddress: string,
+  gameId: string,
+  hasLeaderboard: boolean,
+  opts?: { playerName?: string }
+): Promise<GameProgress> {
+  const stored = await fetchGameProgressFromServer(walletAddress, gameId);
+  let progress = storedProgressToGameProgress(stored, hasLeaderboard);
+
+  if (hasLeaderboard && stored?.s === undefined) {
+    const leaderboardBest = await fetchUserBestScoreFromServer(gameId, {
+      walletAddress,
+      playerName: opts?.playerName,
+    });
+    if (leaderboardBest > 0) {
+      progress = { score: leaderboardBest };
+      await saveGameProgressOnServer(
+        walletAddress,
+        gameId,
+        leaderboardBest,
+        true
+      ).catch(() => {
+        // Backfill is best-effort
+      });
+    }
+  }
+
+  return progress;
+}
+
+export async function saveGameProgressOnServer(
+  walletAddress: string,
+  gameId: string,
+  value: number,
+  hasLeaderboard: boolean
+): Promise<GameProgress> {
+  if (!isWalletAddress(walletAddress)) {
+    throw new Error("A valid wallet address is required.");
+  }
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error("value must be a non-negative number.");
+  }
+
+  const current = await fetchGameProgressFromServer(walletAddress, gameId);
+  const field: "s" | "l" = hasLeaderboard ? "s" : "l";
+  const currentValue = hasLeaderboard ? (current?.s ?? 0) : (current?.l ?? 0);
+
+  if (value <= currentValue) {
+    return storedProgressToGameProgress(current, hasLeaderboard);
+  }
+
+  await patchPath(gameProgressPath(walletAddress, gameId), { [field]: value });
+
+  const updated: StoredGameProgress = { ...current, [field]: value };
+  return storedProgressToGameProgress(updated, hasLeaderboard);
 }
