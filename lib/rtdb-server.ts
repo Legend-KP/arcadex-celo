@@ -282,25 +282,10 @@ export async function submitLeaderboardEntryOnServer(
   ).find((e) => leaderboardUserKey(e) === userKey);
 
   if (existingBest && existingBest.score >= payload.score) {
-    if (wallet) {
-      await saveGameProgressOnServer(wallet, gameId, existingBest.score, true).catch(
-        () => {
-          // User-node backfill is best-effort
-        }
-      );
-    }
     return;
   }
 
   await writePath(`leaderboards/${gameId}/${leaderboardStorageKey(payload)}`, payload);
-
-  if (wallet) {
-    await saveGameProgressOnServer(wallet, gameId, payload.score, true).catch(
-      () => {
-        // User-node sync is best-effort
-      }
-    );
-  }
 }
 
 // ─── Per-user game progress ───────────────────────────────────────────────────
@@ -328,34 +313,36 @@ export async function fetchGameProgressFromServer(
   return readPath<StoredGameProgress>(gameProgressPath(walletAddress, gameId));
 }
 
+/**
+ * Resolves progress for API / bootstrap. Score games use max(user `s`, leaderboard best)
+ * and sync leaderboard → user node when the leaderboard is ahead.
+ */
 export async function resolveGameProgressFromServer(
   walletAddress: string,
   gameId: string,
   hasLeaderboard: boolean,
   opts?: { playerName?: string }
 ): Promise<GameProgress> {
-  const stored = await fetchGameProgressFromServer(walletAddress, gameId);
-  let progress = storedProgressToGameProgress(stored, hasLeaderboard);
+  if (!isWalletAddress(walletAddress)) return {};
 
-  if (hasLeaderboard && stored?.s === undefined) {
-    const leaderboardBest = await fetchUserBestScoreFromServer(gameId, {
-      walletAddress,
-      playerName: opts?.playerName,
-    });
-    if (leaderboardBest > 0) {
-      progress = { score: leaderboardBest };
-      await saveGameProgressOnServer(
-        walletAddress,
-        gameId,
-        leaderboardBest,
-        true
-      ).catch(() => {
-        // Backfill is best-effort
-      });
-    }
+  const stored = await fetchGameProgressFromServer(walletAddress, gameId);
+
+  if (!hasLeaderboard) {
+    return storedProgressToGameProgress(stored, false);
   }
 
-  return progress;
+  const userScore = stored?.s ?? 0;
+  const leaderboardBest = await fetchUserBestScoreFromServer(gameId, {
+    walletAddress,
+    playerName: opts?.playerName,
+  });
+  const score = Math.max(userScore, leaderboardBest);
+
+  if (score > userScore) {
+    await saveGameProgressOnServer(walletAddress, gameId, score, true);
+  }
+
+  return score > 0 ? { score } : storedProgressToGameProgress(stored, true);
 }
 
 export async function saveGameProgressOnServer(

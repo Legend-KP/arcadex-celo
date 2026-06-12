@@ -7,12 +7,9 @@ import LoadingScreen from "@/components/LoadingScreen";
 import { sendToUnity, UnityMessage } from "@/lib/bridge";
 import { getLeaderboard, submitScore } from "@/lib/firebase";
 import { getGameProgress, saveGameProgress } from "@/lib/game-progress-client";
-import { buildGameIframeUrl } from "@/lib/game-iframe-url";
+import { buildGameIframeUrl, getShellOrigin } from "@/lib/game-iframe-url";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
-import {
-  resolveWalletOnAppOpen,
-  retryResolveWallet,
-} from "@/lib/walletAuth";
+import { resolveWalletOnAppOpen } from "@/lib/walletAuth";
 import { getGameTheme } from "@/lib/game-themes";
 import { Game, gameHasLeaderboard } from "@/types";
 
@@ -21,18 +18,18 @@ interface GameClientProps {
 }
 
 const GAME_LOAD_FALLBACK_MS = 12000;
-const SESSION_PUSH_DELAYS_MS = [0, 600, 1500, 3000];
+const PROGRESS_RETRY_DELAYS_MS = [0, 600, 1500, 3000] as const;
 
 export default function GameClient({ game }: GameClientProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const loadFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const walletRef = useRef("");
-  const sessionPushTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const router = useRouter();
   const [exitOpen, setExitOpen] = useState(false);
   const [gameReady, setGameReady] = useState(false);
   const leaderboardEnabled = gameHasLeaderboard(game);
   const theme = getGameTheme(game);
+  const shellOrigin = getShellOrigin();
+  const progressRetryRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const {
     playerName,
     profile,
@@ -41,10 +38,6 @@ export default function GameClient({ game }: GameClientProps) {
     updateWalletAddress,
   } = usePlayerProfile();
 
-  useEffect(() => {
-    walletRef.current = walletAddress || profile?.walletAddress || "";
-  }, [walletAddress, profile?.walletAddress]);
-
   const resolvedName = playerName || profile?.name || "";
   const resolvedWallet = walletAddress || profile?.walletAddress || "";
 
@@ -52,7 +45,8 @@ export default function GameClient({ game }: GameClientProps) {
     if (!isReady) return null;
     return buildGameIframeUrl(game.url, {
       gameId: game.id,
-      wallet: resolvedWallet || undefined,
+      shellOrigin,
+      walletAddress: resolvedWallet || undefined,
       playerName: resolvedName || undefined,
       hasLeaderboard: leaderboardEnabled,
     });
@@ -60,10 +54,35 @@ export default function GameClient({ game }: GameClientProps) {
     isReady,
     game.url,
     game.id,
+    shellOrigin,
     resolvedWallet,
     resolvedName,
     leaderboardEnabled,
   ]);
+
+  const clearProgressRetries = useCallback(() => {
+    for (const id of progressRetryRef.current) clearTimeout(id);
+    progressRetryRef.current = [];
+  }, []);
+
+  const scheduleProgressRetries = useCallback(
+    (payload: {
+      highScore: number;
+      level: number;
+      hasLeaderboard: boolean;
+    }) => {
+      clearProgressRetries();
+      progressRetryRef.current = PROGRESS_RETRY_DELAYS_MS.map((delay) =>
+        setTimeout(() => {
+          sendToUnity(iframeRef, "OnProgressReceived", {
+            success: true,
+            ...payload,
+          });
+        }, delay)
+      );
+    },
+    [clearProgressRetries]
+  );
 
   const markGameReady = useCallback(() => {
     if (loadFallbackRef.current) {
@@ -78,86 +97,13 @@ export default function GameClient({ game }: GameClientProps) {
     loadFallbackRef.current = setTimeout(markGameReady, GAME_LOAD_FALLBACK_MS);
   }, [markGameReady]);
 
-  const resolveWalletForSession = useCallback(async (): Promise<string> => {
-    let wallet = walletRef.current;
-    if (!wallet) {
-      wallet =
-        (await resolveWalletOnAppOpen()) ||
-        (await retryResolveWallet()) ||
-        "";
-      if (wallet) walletRef.current = wallet;
-    }
-    return wallet;
-  }, []);
-
-  const pushSessionDataToUnity = useCallback(async () => {
-    const wallet = await resolveWalletForSession();
-    const name = playerName || profile?.name || "";
-
-    let highScore = 0;
-    let level = 0;
-    if (wallet) {
-      try {
-        const { progress } = await getGameProgress(game.id, wallet, name);
-        highScore = progress.score ?? 0;
-        level = progress.level ?? 0;
-      } catch {
-        // Progress is optional during session push
-      }
-    }
-
-    if (wallet) {
-      sendToUnity(iframeRef, "OnWalletAddressResolved", wallet);
-    }
-
-    sendToUnity(iframeRef, "OnBootstrapDataReceived", {
-      gameId: game.id,
-      walletAddress: wallet,
-      playerName: name,
-      highScore,
-      level,
-      hints: 0,
-      tutorialComplete: false,
-      gamePurchased: true,
-      hasLeaderboard: leaderboardEnabled,
-    });
-
-    sendToUnity(iframeRef, "OnProgressReceived", {
-      success: true,
-      highScore,
-      level,
-      hasLeaderboard: leaderboardEnabled,
-    });
-  }, [
-    game.id,
-    leaderboardEnabled,
-    playerName,
-    profile?.name,
-    resolveWalletForSession,
-  ]);
-
   useEffect(() => {
     setGameReady(false);
     return () => {
       if (loadFallbackRef.current) clearTimeout(loadFallbackRef.current);
+      clearProgressRetries();
     };
-  }, [iframeSrc]);
-
-  useEffect(() => {
-    if (!gameReady) return;
-
-    sessionPushTimersRef.current.forEach(clearTimeout);
-    sessionPushTimersRef.current = SESSION_PUSH_DELAYS_MS.map((delayMs) =>
-      setTimeout(() => {
-        void pushSessionDataToUnity();
-      }, delayMs)
-    );
-
-    return () => {
-      sessionPushTimersRef.current.forEach(clearTimeout);
-      sessionPushTimersRef.current = [];
-    };
-  }, [gameReady, pushSessionDataToUnity]);
+  }, [game.url, clearProgressRetries]);
 
   const handleMessage = useCallback(
     async (event: MessageEvent) => {
@@ -167,7 +113,49 @@ export default function GameClient({ game }: GameClientProps) {
       switch (msg.type) {
         case "MINIPAY_BOOTSTRAP": {
           markGameReady();
-          await pushSessionDataToUnity();
+          const wallet =
+            walletAddress ||
+            profile?.walletAddress ||
+            (await resolveWalletOnAppOpen()) ||
+            "";
+
+          if (wallet) {
+            sendToUnity(iframeRef, "OnWalletAddressResolved", wallet);
+          }
+
+          const bootstrapName = playerName || profile?.name || "";
+          let highScore = 0;
+          let level = 0;
+          if (wallet) {
+            try {
+              const { progress } = await getGameProgress(game.id, wallet, {
+                playerName: bootstrapName || undefined,
+              });
+              highScore = progress.score ?? 0;
+              level = progress.level ?? 0;
+            } catch {
+              // Progress is optional during bootstrap
+            }
+          }
+
+          const progressPayload = {
+            highScore,
+            level,
+            hasLeaderboard: leaderboardEnabled,
+          };
+
+          sendToUnity(iframeRef, "OnBootstrapDataReceived", {
+            gameId: game.id,
+            shellOrigin,
+            walletAddress: wallet,
+            playerName: bootstrapName,
+            ...progressPayload,
+            hints: 0,
+            tutorialComplete: false,
+            gamePurchased: true,
+          });
+
+          scheduleProgressRetries(progressPayload);
           break;
         }
 
@@ -194,26 +182,20 @@ export default function GameClient({ game }: GameClientProps) {
             score: number;
             walletAddress?: string;
           };
-          const submitWallet =
-            walletRef.current ||
-            walletAddress ||
-            payloadWallet ||
-            profile?.walletAddress ||
-            "";
+          const resolvedWallet =
+            walletAddress || payloadWallet || profile?.walletAddress;
           if (payloadWallet && payloadWallet !== profile?.walletAddress) {
             updateWalletAddress(payloadWallet).catch(() => {
               // Wallet sync is best-effort
             });
           }
-          if (submitWallet) walletRef.current = submitWallet;
-
           const personalBest = await submitScore(game.id, {
             name: playerName || name,
             score,
-            walletAddress: submitWallet || undefined,
+            walletAddress: resolvedWallet,
           });
-          if (submitWallet) {
-            saveGameProgress(game.id, submitWallet, personalBest).catch(() => {
+          if (resolvedWallet) {
+            saveGameProgress(game.id, resolvedWallet, score).catch(() => {
               // User-node sync is best-effort
             });
           }
@@ -225,7 +207,8 @@ export default function GameClient({ game }: GameClientProps) {
         }
 
         case "MINIPAY_GET_PROGRESS": {
-          const wallet = await resolveWalletForSession();
+          const wallet =
+            walletAddress || profile?.walletAddress || "";
           if (!wallet) {
             sendToUnity(iframeRef, "OnProgressReceived", {
               success: false,
@@ -234,18 +217,21 @@ export default function GameClient({ game }: GameClientProps) {
             break;
           }
           try {
-            const name = playerName || profile?.name || "";
             const { progress, hasLeaderboard } = await getGameProgress(
               game.id,
               wallet,
-              name
+              { playerName: playerName || profile?.name || undefined }
             );
-            sendToUnity(iframeRef, "OnProgressReceived", {
-              success: true,
+            const payload = {
               highScore: progress.score ?? 0,
               level: progress.level ?? 0,
               hasLeaderboard,
+            };
+            sendToUnity(iframeRef, "OnProgressReceived", {
+              success: true,
+              ...payload,
             });
+            scheduleProgressRetries(payload);
           } catch (err) {
             sendToUnity(iframeRef, "OnProgressReceived", {
               success: false,
@@ -274,7 +260,8 @@ export default function GameClient({ game }: GameClientProps) {
             });
             break;
           }
-          const wallet = await resolveWalletForSession();
+          const wallet =
+            walletAddress || profile?.walletAddress || "";
           if (!wallet) {
             sendToUnity(iframeRef, "OnProgressSaved", {
               success: false,
@@ -312,10 +299,10 @@ export default function GameClient({ game }: GameClientProps) {
       profile?.name,
       profile?.walletAddress,
       walletAddress,
+      shellOrigin,
       updateWalletAddress,
       markGameReady,
-      pushSessionDataToUnity,
-      resolveWalletForSession,
+      scheduleProgressRetries,
     ]
   );
 
@@ -324,13 +311,11 @@ export default function GameClient({ game }: GameClientProps) {
     return () => window.removeEventListener("message", handleMessage);
   }, [handleMessage]);
 
-  const showLoading = !isReady || !gameReady;
-
   return (
     <div className="game-page">
-      {showLoading && (
+      {!gameReady && (
         <div className="game-loading-overlay" aria-hidden={false}>
-          <LoadingScreen message={isReady ? "Loading game" : "Connecting wallet"} />
+          <LoadingScreen message="Loading game" />
         </div>
       )}
 
@@ -357,7 +342,9 @@ export default function GameClient({ game }: GameClientProps) {
       </div>
 
       <div className="iframe-wrap">
-        {iframeSrc && (
+        {!isReady || !iframeSrc ? (
+          <LoadingScreen message="Connecting wallet" />
+        ) : (
           <iframe
             ref={iframeRef}
             src={iframeSrc}

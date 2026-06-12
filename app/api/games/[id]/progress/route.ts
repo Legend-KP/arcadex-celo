@@ -1,16 +1,19 @@
 import { fetchGameFromServer } from "@/lib/firestore-server";
-import { corsOptionsResponse, jsonWithCors } from "@/lib/cors";
 import {
   resolveGameProgressFromServer,
   saveGameProgressOnServer,
 } from "@/lib/rtdb-server";
+import {
+  corsJsonResponse,
+  handleCorsPreflightRequest,
+} from "@/lib/cors";
 import { gameHasLeaderboard } from "@/types";
 import { isWalletAddress } from "@/lib/wallet-address";
 
 export const dynamic = "force-dynamic";
 
-export async function OPTIONS() {
-  return corsOptionsResponse();
+export async function OPTIONS(request: Request) {
+  return handleCorsPreflightRequest(request);
 }
 
 export async function GET(
@@ -21,19 +24,25 @@ export async function GET(
     const { id } = await params;
     const game = await fetchGameFromServer(id);
     if (!game) {
-      return jsonWithCors({ error: "Game not found." }, { status: 404 });
+      return corsJsonResponse(
+        request,
+        { error: "Game not found." },
+        { status: 404 }
+      );
     }
 
     const { searchParams } = new URL(request.url);
     const wallet = searchParams.get("wallet") ?? "";
+    const name = searchParams.get("name") ?? undefined;
+
     if (!isWalletAddress(wallet)) {
-      return jsonWithCors(
+      return corsJsonResponse(
+        request,
         { error: "A valid wallet query parameter is required." },
         { status: 400 }
       );
     }
 
-    const name = searchParams.get("name") ?? undefined;
     const hasLeaderboard = gameHasLeaderboard(game);
     const progress = await resolveGameProgressFromServer(
       wallet,
@@ -42,11 +51,11 @@ export async function GET(
       { playerName: name }
     );
 
-    return jsonWithCors({ progress, hasLeaderboard });
+    return corsJsonResponse(request, { progress, hasLeaderboard });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to load game progress.";
-    return jsonWithCors({ error: message }, { status: 500 });
+    return corsJsonResponse(request, { error: message }, { status: 500 });
   }
 }
 
@@ -58,7 +67,11 @@ export async function POST(
     const { id } = await params;
     const game = await fetchGameFromServer(id);
     if (!game) {
-      return jsonWithCors({ error: "Game not found." }, { status: 404 });
+      return corsJsonResponse(
+        request,
+        { error: "Game not found." },
+        { status: 404 }
+      );
     }
 
     const body = (await request.json()) as {
@@ -67,14 +80,19 @@ export async function POST(
     };
 
     if (!body.walletAddress || !isWalletAddress(body.walletAddress)) {
-      return jsonWithCors(
+      return corsJsonResponse(
+        request,
         { error: "walletAddress is required." },
         { status: 400 }
       );
     }
 
     if (typeof body.value !== "number") {
-      return jsonWithCors({ error: "value is required." }, { status: 400 });
+      return corsJsonResponse(
+        request,
+        { error: "value is required." },
+        { status: 400 }
+      );
     }
 
     const hasLeaderboard = gameHasLeaderboard(game);
@@ -85,10 +103,10 @@ export async function POST(
       hasLeaderboard
     );
 
-    return jsonWithCors({ success: true, progress, hasLeaderboard });
+    return corsJsonResponse(request, { success: true, progress, hasLeaderboard });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to save game progress.";
-    return jsonWithCors({ error: message }, { status: 500 });
+    return corsJsonResponse(request, { error: message }, { status: 500 });
   }
 }

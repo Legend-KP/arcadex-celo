@@ -8,11 +8,11 @@ export interface GameProgressResponse {
 export async function getGameProgress(
   gameId: string,
   walletAddress: string,
-  playerName?: string
+  opts?: { playerName?: string }
 ): Promise<GameProgressResponse> {
   const params = new URLSearchParams({ wallet: walletAddress });
-  if (playerName?.trim()) {
-    params.set("name", playerName.trim());
+  if (opts?.playerName?.trim()) {
+    params.set("name", opts.playerName.trim());
   }
   const res = await fetch(`/api/games/${gameId}/progress?${params}`, {
     cache: "no-store",
