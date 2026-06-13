@@ -195,7 +195,9 @@ export default function GameClient({ game }: GameClientProps) {
             walletAddress: resolvedWallet,
           });
           if (resolvedWallet) {
-            saveGameProgress(game.id, resolvedWallet, score).catch(() => {
+            saveGameProgress(game.id, resolvedWallet, score, {
+              playerName: playerName || name,
+            }).catch(() => {
               // User-node sync is best-effort
             });
           }
@@ -245,13 +247,6 @@ export default function GameClient({ game }: GameClientProps) {
         }
 
         case "MINIPAY_SAVE_PROGRESS": {
-          if (leaderboardEnabled) {
-            sendToUnity(iframeRef, "OnProgressSaved", {
-              success: false,
-              error: "Use MINIPAY_SUBMIT_SCORE for score-based games.",
-            });
-            break;
-          }
           const { value } = (msg.payload ?? {}) as { value?: number };
           if (typeof value !== "number") {
             sendToUnity(iframeRef, "OnProgressSaved", {
@@ -270,10 +265,14 @@ export default function GameClient({ game }: GameClientProps) {
             break;
           }
           try {
-            const result = await saveGameProgress(game.id, wallet, value);
+            const result = await saveGameProgress(game.id, wallet, value, {
+              playerName: playerName || profile?.name || undefined,
+            });
             sendToUnity(iframeRef, "OnProgressSaved", {
               success: true,
-              level: result.progress.level ?? value,
+              ...(leaderboardEnabled
+                ? { highScore: result.progress.score ?? value }
+                : { level: result.progress.level ?? value }),
               hasLeaderboard: result.hasLeaderboard,
             });
           } catch (err) {

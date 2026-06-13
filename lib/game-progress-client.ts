@@ -32,12 +32,19 @@ export async function getGameProgress(
 export async function saveGameProgress(
   gameId: string,
   walletAddress: string,
-  value: number
+  value: number,
+  opts?: { playerName?: string }
 ): Promise<GameProgressResponse & { success: boolean }> {
   const res = await fetch(`/api/games/${gameId}/progress`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ walletAddress, value }),
+    body: JSON.stringify({
+      walletAddress,
+      value,
+      ...(opts?.playerName?.trim()
+        ? { playerName: opts.playerName.trim() }
+        : {}),
+    }),
   });
 
   const data = (await res.json()) as GameProgressResponse & {

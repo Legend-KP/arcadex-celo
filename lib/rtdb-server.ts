@@ -345,11 +345,22 @@ export async function resolveGameProgressFromServer(
   return score > 0 ? { score } : storedProgressToGameProgress(stored, true);
 }
 
+function resolveLeaderboardPlayerName(
+  wallet: string,
+  playerName?: string,
+  profileName?: string
+): string {
+  const trimmed = playerName?.trim() || profileName?.trim();
+  if (trimmed) return trimmed;
+  return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
+}
+
 export async function saveGameProgressOnServer(
   walletAddress: string,
   gameId: string,
   value: number,
-  hasLeaderboard: boolean
+  hasLeaderboard: boolean,
+  opts?: { playerName?: string }
 ): Promise<GameProgress> {
   if (!isWalletAddress(walletAddress)) {
     throw new Error("A valid wallet address is required.");
@@ -358,7 +369,8 @@ export async function saveGameProgressOnServer(
     throw new Error("value must be a non-negative number.");
   }
 
-  const current = await fetchGameProgressFromServer(walletAddress, gameId);
+  const wallet = normalizeWalletAddress(walletAddress);
+  const current = await fetchGameProgressFromServer(wallet, gameId);
   const field: "s" | "l" = hasLeaderboard ? "s" : "l";
   const currentValue = hasLeaderboard ? (current?.s ?? 0) : (current?.l ?? 0);
 
@@ -366,7 +378,20 @@ export async function saveGameProgressOnServer(
     return storedProgressToGameProgress(current, hasLeaderboard);
   }
 
-  await patchPath(gameProgressPath(walletAddress, gameId), { [field]: value });
+  await patchPath(gameProgressPath(wallet, gameId), { [field]: value });
+
+  if (hasLeaderboard) {
+    const profile = await fetchUserFromServer(wallet);
+    await submitLeaderboardEntryOnServer(gameId, {
+      name: resolveLeaderboardPlayerName(
+        wallet,
+        opts?.playerName,
+        profile?.name
+      ),
+      score: value,
+      walletAddress: wallet,
+    });
+  }
 
   const updated: StoredGameProgress = { ...current, [field]: value };
   return storedProgressToGameProgress(updated, hasLeaderboard);

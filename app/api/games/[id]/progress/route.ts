@@ -77,6 +77,8 @@ export async function POST(
     const body = (await request.json()) as {
       walletAddress?: string;
       value?: number;
+      name?: string;
+      playerName?: string;
     };
 
     if (!body.walletAddress || !isWalletAddress(body.walletAddress)) {
@@ -100,7 +102,8 @@ export async function POST(
       body.walletAddress,
       id,
       body.value,
-      hasLeaderboard
+      hasLeaderboard,
+      { playerName: body.playerName ?? body.name }
     );
 
     return corsJsonResponse(request, { success: true, progress, hasLeaderboard });
