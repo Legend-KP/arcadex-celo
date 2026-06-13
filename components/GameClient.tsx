@@ -247,11 +247,20 @@ export default function GameClient({ game }: GameClientProps) {
         }
 
         case "MINIPAY_SAVE_PROGRESS": {
-          const { value } = (msg.payload ?? {}) as { value?: number };
-          if (typeof value !== "number") {
+          const { value, score } = (msg.payload ?? {}) as {
+            value?: number;
+            score?: number;
+          };
+          const progressValue =
+            typeof value === "number"
+              ? value
+              : typeof score === "number"
+                ? score
+                : undefined;
+          if (typeof progressValue !== "number") {
             sendToUnity(iframeRef, "OnProgressSaved", {
               success: false,
-              error: "value is required.",
+              error: "value or score is required.",
             });
             break;
           }
@@ -265,14 +274,14 @@ export default function GameClient({ game }: GameClientProps) {
             break;
           }
           try {
-            const result = await saveGameProgress(game.id, wallet, value, {
+            const result = await saveGameProgress(game.id, wallet, progressValue, {
               playerName: playerName || profile?.name || undefined,
             });
             sendToUnity(iframeRef, "OnProgressSaved", {
               success: true,
               ...(leaderboardEnabled
-                ? { highScore: result.progress.score ?? value }
-                : { level: result.progress.level ?? value }),
+                ? { highScore: result.progress.score ?? progressValue }
+                : { level: result.progress.level ?? progressValue }),
               hasLeaderboard: result.hasLeaderboard,
             });
           } catch (err) {

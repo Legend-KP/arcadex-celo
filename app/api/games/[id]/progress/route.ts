@@ -77,6 +77,7 @@ export async function POST(
     const body = (await request.json()) as {
       walletAddress?: string;
       value?: number;
+      score?: number;
       name?: string;
       playerName?: string;
     };
@@ -89,10 +90,17 @@ export async function POST(
       );
     }
 
-    if (typeof body.value !== "number") {
+    const scoreValue =
+      typeof body.value === "number"
+        ? body.value
+        : typeof body.score === "number"
+          ? body.score
+          : undefined;
+
+    if (typeof scoreValue !== "number") {
       return corsJsonResponse(
         request,
-        { error: "value is required." },
+        { error: "value or score is required." },
         { status: 400 }
       );
     }
@@ -101,7 +109,7 @@ export async function POST(
     const progress = await saveGameProgressOnServer(
       body.walletAddress,
       id,
-      body.value,
+      scoreValue,
       hasLeaderboard,
       { playerName: body.playerName ?? body.name }
     );

@@ -41,6 +41,7 @@ export async function saveGameProgress(
     body: JSON.stringify({
       walletAddress,
       value,
+      score: value,
       ...(opts?.playerName?.trim()
         ? { playerName: opts.playerName.trim() }
         : {}),

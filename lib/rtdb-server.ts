@@ -332,14 +332,24 @@ export async function resolveGameProgressFromServer(
   }
 
   const userScore = stored?.s ?? 0;
+  const wallet = normalizeWalletAddress(walletAddress);
   const leaderboardBest = await fetchUserBestScoreFromServer(gameId, {
-    walletAddress,
+    walletAddress: wallet,
     playerName: opts?.playerName,
   });
+
+  if (userScore > leaderboardBest) {
+    await syncLeaderboardFromScoreOnServer(gameId, wallet, userScore, {
+      playerName: opts?.playerName,
+    });
+  }
+
   const score = Math.max(userScore, leaderboardBest);
 
   if (score > userScore) {
-    await saveGameProgressOnServer(walletAddress, gameId, score, true);
+    await saveGameProgressOnServer(wallet, gameId, score, true, {
+      playerName: opts?.playerName,
+    });
   }
 
   return score > 0 ? { score } : storedProgressToGameProgress(stored, true);
@@ -353,6 +363,24 @@ function resolveLeaderboardPlayerName(
   const trimmed = playerName?.trim() || profileName?.trim();
   if (trimmed) return trimmed;
   return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
+}
+
+async function syncLeaderboardFromScoreOnServer(
+  gameId: string,
+  wallet: string,
+  score: number,
+  opts?: { playerName?: string }
+): Promise<void> {
+  const profile = await fetchUserFromServer(wallet);
+  await submitLeaderboardEntryOnServer(gameId, {
+    name: resolveLeaderboardPlayerName(
+      wallet,
+      opts?.playerName,
+      profile?.name
+    ),
+    score,
+    walletAddress: wallet,
+  });
 }
 
 export async function saveGameProgressOnServer(
@@ -374,24 +402,15 @@ export async function saveGameProgressOnServer(
   const field: "s" | "l" = hasLeaderboard ? "s" : "l";
   const currentValue = hasLeaderboard ? (current?.s ?? 0) : (current?.l ?? 0);
 
+  if (hasLeaderboard) {
+    await syncLeaderboardFromScoreOnServer(gameId, wallet, value, opts);
+  }
+
   if (value <= currentValue) {
     return storedProgressToGameProgress(current, hasLeaderboard);
   }
 
   await patchPath(gameProgressPath(wallet, gameId), { [field]: value });
-
-  if (hasLeaderboard) {
-    const profile = await fetchUserFromServer(wallet);
-    await submitLeaderboardEntryOnServer(gameId, {
-      name: resolveLeaderboardPlayerName(
-        wallet,
-        opts?.playerName,
-        profile?.name
-      ),
-      score: value,
-      walletAddress: wallet,
-    });
-  }
 
   const updated: StoredGameProgress = { ...current, [field]: value };
   return storedProgressToGameProgress(updated, hasLeaderboard);
