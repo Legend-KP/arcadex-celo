@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { gameAssetCandidates } from "@/lib/game-assets";
+import { gameAssetCandidates, gameFallbackCandidates } from "@/lib/game-assets";
 import { Game, gameHasLeaderboard } from "@/types";
 
 interface GameMenuProps {
@@ -28,12 +28,18 @@ export default function GameMenu({ game, onStart, onLeaderboard }: GameMenuProps
     });
     return [...logos, ...thumbs];
   }, [game]);
+  const fallbackCandidates = useMemo(
+    () => gameFallbackCandidates(game),
+    [game]
+  );
 
   const [thumbIdx, setThumbIdx] = useState(0);
   const [logoIdx, setLogoIdx] = useState(0);
+  const [fallbackIdx, setFallbackIdx] = useState(0);
 
   const thumbSrc = thumbCandidates[thumbIdx];
   const logoSrc = logoCandidates[logoIdx];
+  const fallbackSrc = fallbackCandidates[fallbackIdx];
 
   return (
     <div className="game-menu">
@@ -64,8 +70,16 @@ export default function GameMenu({ game, onStart, onLeaderboard }: GameMenuProps
               className="game-menu-logo"
               onError={() => setLogoIdx((i) => i + 1)}
             />
+          ) : fallbackSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={fallbackSrc}
+              alt={game.name}
+              className="game-menu-logo"
+              onError={() => setFallbackIdx((i) => i + 1)}
+            />
           ) : (
-            <span className="game-menu-logo-fallback">{game.emoji || "🎮"}</span>
+            <span className="game-menu-logo-fallback">🎮</span>
           )}
         </div>
 

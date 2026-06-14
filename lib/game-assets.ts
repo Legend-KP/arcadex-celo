@@ -92,3 +92,31 @@ export function gameAssetCandidates(
 
   return out;
 }
+
+/** Fallback image URLs when thumbnail and logo are unavailable. */
+export function gameFallbackCandidates(game: Game): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  const push = (url?: string) => {
+    if (!url?.trim() || seen.has(url)) return;
+    seen.add(url);
+    out.push(url);
+  };
+
+  push(game.fallbackImage);
+
+  const localFolder = resolveLocalGameFolder(game);
+  if (localFolder) {
+    push(`/games/${localFolder}/fallback.webp`);
+    push(`/games/${localFolder}/fallback.png`);
+  }
+
+  const nameSlug = slugifyGameName(game.name);
+  if (nameSlug && nameSlug !== localFolder) {
+    push(`/games/${nameSlug}/fallback.webp`);
+    push(`/games/${nameSlug}/fallback.png`);
+  }
+
+  return out;
+}

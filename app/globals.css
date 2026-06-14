@@ -187,6 +187,73 @@ a { color: inherit; text-decoration: none; }
 }
 .game-card:active { opacity: 0.85; }
 
+.game-card--coming-soon {
+  cursor: default;
+  pointer-events: none;
+}
+.game-card--coming-soon:hover {
+  box-shadow:
+    0 4px 18px rgba(59, 130, 246, 0.1),
+    0 1px 4px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+.game-card--coming-soon:hover .thumb-wrap {
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    0 0 10px rgba(255, 200, 100, 0.22);
+}
+
+.coming-soon-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.coming-soon-overlay span {
+  font-family: var(--font-head);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #fff;
+  text-align: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.85);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+.coming-soon-screen {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg);
+}
+.coming-soon-screen__title {
+  font-family: var(--font-head);
+  font-size: clamp(28px, 6vw, 40px);
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text);
+  margin: 0;
+}
+.coming-soon-screen__subtitle {
+  font-size: 15px;
+  color: var(--muted);
+  margin: 0 0 8px;
+  max-width: 320px;
+}
+
 .thumb-wrap {
   position: relative;
   aspect-ratio: 2 / 3;
@@ -1021,18 +1088,6 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid var(--border);
 }
 .thumb-preview-wrap img { width: 100%; height: 100%; object-fit: cover; }
-
-.emoji-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
-.emoji-btn {
-  background: var(--surface2);
-  border: 2px solid transparent;
-  border-radius: 10px;
-  width: 40px; height: 40px;
-  font-size: 20px;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-.emoji-btn.selected { border-color: var(--accent3); }
 
 .add-submit-btn {
   width: 100%;

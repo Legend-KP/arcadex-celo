@@ -60,8 +60,9 @@ export async function POST(request: Request) {
       thumbnail: body.thumbnail?.trim() ?? "",
       url: body.url.trim(),
       plays: body.plays?.trim() || "0",
-      emoji: body.emoji || "🎮",
+      fallbackImage: body.fallbackImage?.trim() ?? "",
       active: body.active ?? true,
+      live: body.live !== false,
       hasLeaderboard: body.hasLeaderboard !== false,
     });
 

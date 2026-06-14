@@ -22,8 +22,10 @@ export interface Game {
   logo?: string;       // square 1:1 logo URL (menu screen)
   url: string;         // Unity WebGL URL
   plays: string;       // display string e.g. "1.2m"
-  emoji: string;       // fallback if no thumbnail
+  fallbackImage: string; // image URL when thumbnail/logo are missing
   active: boolean;
+  /** When false, the game is visible but shows "Coming Soon" and cannot be played. Defaults to true. */
+  live?: boolean;
   /** When false, leaderboard UI, RTDB paths, and score APIs are disabled. Defaults to true. */
   hasLeaderboard?: boolean;
   createdAt: number;
@@ -31,6 +33,10 @@ export interface Game {
 
 export function gameHasLeaderboard(game: Pick<Game, "hasLeaderboard">): boolean {
   return game.hasLeaderboard !== false;
+}
+
+export function gameIsLive(game: Pick<Game, "live">): boolean {
+  return game.live !== false;
 }
 
 /**

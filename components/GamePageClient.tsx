@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { Game, gameHasLeaderboard } from "@/types";
+import { useParams, useRouter } from "next/navigation";
+import { Game, gameHasLeaderboard, gameIsLive } from "@/types";
 import GameClient from "@/components/GameClient";
 import GameMenu from "@/components/GameMenu";
 import Leaderboard from "@/components/Leaderboard";
@@ -10,6 +10,7 @@ import LoadingScreen from "@/components/LoadingScreen";
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [game, setGame] = useState<Game | null>(null);
   const [started, setStarted] = useState(false);
   const [lbOpen, setLbOpen] = useState(false);
@@ -30,7 +31,7 @@ export default function GamePageClient() {
 
         if (!cancelled) {
           setGame(data.game ?? null);
-          if (data.game) {
+          if (data.game && gameIsLive(data.game)) {
             fetch(`/api/games/${id}/play`, { method: "POST" }).catch(() => {
               // Play tracking is best-effort
             });
@@ -60,6 +61,22 @@ export default function GamePageClient() {
     return (
       <div className="loading-screen">
         <p className="loading-screen__text">{error || "Game not found."}</p>
+      </div>
+    );
+  }
+
+  if (!gameIsLive(game)) {
+    return (
+      <div className="coming-soon-screen">
+        <p className="coming-soon-screen__title">Coming Soon</p>
+        <p className="coming-soon-screen__subtitle">{game.name} is not available yet.</p>
+        <button
+          type="button"
+          className="game-menu-btn game-menu-btn--back"
+          onClick={() => router.push("/")}
+        >
+          Back
+        </button>
       </div>
     );
   }

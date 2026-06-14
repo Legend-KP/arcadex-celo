@@ -11,12 +11,10 @@ import {
   saveAdminSession,
   updateAdminGame,
 } from "@/lib/admin-api";
-import { Game, gameHasLeaderboard } from "@/types";
+import { Game, gameHasLeaderboard, gameIsLive } from "@/types";
 import Logo from "@/components/Logo";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "/";
-
-const EMOJIS = ["🎮", "🏹", "🔷", "🔢", "🎂", "➕", "⚡", "🌀", "🎯", "🚀"];
 
 export default function AdminPortal() {
   const [authed, setAuthed] = useState(() => hasAdminSession());
@@ -34,16 +32,18 @@ export default function AdminPortal() {
   const [thumbnail, setThumbnail] = useState("");
   const [url, setUrl] = useState("");
   const [plays, setPlays] = useState("");
-  const [emoji, setEmoji] = useState("🎮");
+  const [fallbackImage, setFallbackImage] = useState("");
   const [hasLeaderboard, setHasLeaderboard] = useState(true);
+  const [live, setLive] = useState(true);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editThumbnail, setEditThumbnail] = useState("");
   const [editUrl, setEditUrl] = useState("");
   const [editPlays, setEditPlays] = useState("");
-  const [editEmoji, setEditEmoji] = useState("🎮");
+  const [editFallbackImage, setEditFallbackImage] = useState("");
   const [editHasLeaderboard, setEditHasLeaderboard] = useState(true);
+  const [editLive, setEditLive] = useState(true);
   const [editSaving, setEditSaving] = useState(false);
 
   async function handleLogin() {
@@ -102,16 +102,18 @@ export default function AdminPortal() {
         thumbnail: thumbnail.trim(),
         url: url.trim(),
         plays: plays.trim() || "0",
-        emoji,
+        fallbackImage: fallbackImage.trim(),
         active: true,
+        live,
         hasLeaderboard,
       });
       setName("");
       setThumbnail("");
       setUrl("");
       setPlays("");
-      setEmoji("🎮");
+      setFallbackImage("");
       setHasLeaderboard(true);
+      setLive(true);
       await refresh();
       showToast("Game added! 🎮");
     } catch (err) {
@@ -147,14 +149,26 @@ export default function AdminPortal() {
     }
   }
 
+  async function handleToggleLive(game: Game) {
+    try {
+      await updateAdminGame(game.id, { live: !gameIsLive(game) });
+      await refresh();
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Failed to update game."
+      );
+    }
+  }
+
   function startEdit(game: Game) {
     setEditingId(game.id);
     setEditName(game.name);
     setEditThumbnail(game.thumbnail);
     setEditUrl(game.url);
     setEditPlays(game.plays);
-    setEditEmoji(game.emoji || "🎮");
+    setEditFallbackImage(game.fallbackImage || "");
     setEditHasLeaderboard(gameHasLeaderboard(game));
+    setEditLive(gameIsLive(game));
   }
 
   function cancelEdit() {
@@ -176,8 +190,9 @@ export default function AdminPortal() {
         thumbnail: editThumbnail.trim(),
         url: editUrl.trim(),
         plays: editPlays.trim() || "0",
-        emoji: editEmoji,
+        fallbackImage: editFallbackImage.trim(),
         hasLeaderboard: editHasLeaderboard,
+        live: editLive,
       });
       cancelEdit();
       await refresh();
@@ -271,7 +286,7 @@ export default function AdminPortal() {
             <label className="form-label">Thumbnail URL</label>
             <input
               className="form-input"
-              placeholder="https://..."
+              placeholder="/thumbnails/my-game.webp"
               value={thumbnail}
               onChange={(e) => setThumbnail(e.target.value)}
             />
@@ -301,19 +316,32 @@ export default function AdminPortal() {
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Fallback Emoji</label>
-            <div className="emoji-grid">
-              {EMOJIS.map((e) => (
-                <button
-                  key={e}
-                  className={`emoji-btn ${emoji === e ? "selected" : ""}`}
-                  onClick={() => setEmoji(e)}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
+            <label className="form-label">Fallback Image</label>
+            <input
+              className="form-input"
+              placeholder="/games/my-game/fallback.png"
+              value={fallbackImage}
+              onChange={(e) => setFallbackImage(e.target.value)}
+            />
+            {fallbackImage && (
+              <div className="thumb-preview-wrap">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={fallbackImage} alt="fallback preview" />
+              </div>
+            )}
           </div>
+          <label className="form-checkbox">
+            <input
+              type="checkbox"
+              checked={live}
+              onChange={(e) => setLive(e.target.checked)}
+            />
+            <span>App is live</span>
+            <span className="form-checkbox-hint">
+              Unchecked: the game appears on the home page with a &quot;Coming Soon&quot;
+              overlay and cannot be opened.
+            </span>
+          </label>
           <label className="form-checkbox">
             <input
               type="checkbox"
@@ -366,7 +394,7 @@ export default function AdminPortal() {
                     <label className="form-label">Thumbnail URL</label>
                     <input
                       className="form-input"
-                      placeholder="https://..."
+                      placeholder="/thumbnails/my-game.webp"
                       value={editThumbnail}
                       onChange={(e) => setEditThumbnail(e.target.value)}
                     />
@@ -394,20 +422,32 @@ export default function AdminPortal() {
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Fallback Emoji</label>
-                    <div className="emoji-grid">
-                      {EMOJIS.map((e) => (
-                        <button
-                          key={e}
-                          type="button"
-                          className={`emoji-btn ${editEmoji === e ? "selected" : ""}`}
-                          onClick={() => setEditEmoji(e)}
-                        >
-                          {e}
-                        </button>
-                      ))}
-                    </div>
+                    <label className="form-label">Fallback Image</label>
+                    <input
+                      className="form-input"
+                      placeholder="/games/my-game/fallback.png"
+                      value={editFallbackImage}
+                      onChange={(e) => setEditFallbackImage(e.target.value)}
+                    />
+                    {editFallbackImage && (
+                      <div className="thumb-preview-wrap">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={editFallbackImage} alt="fallback preview" />
+                      </div>
+                    )}
                   </div>
+                  <label className="form-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={editLive}
+                      onChange={(e) => setEditLive(e.target.checked)}
+                    />
+                    <span>App is live</span>
+                    <span className="form-checkbox-hint">
+                      Unchecked: the game appears on the home page with a &quot;Coming Soon&quot;
+                      overlay and cannot be opened.
+                    </span>
+                  </label>
                   <label className="form-checkbox">
                     <input
                       type="checkbox"
@@ -438,15 +478,19 @@ export default function AdminPortal() {
                     {g.thumbnail ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={g.thumbnail} alt={g.name} />
+                    ) : g.fallbackImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={g.fallbackImage} alt={g.name} />
                     ) : (
-                      <span>{g.emoji}</span>
+                      <span>🎮</span>
                     )}
                   </div>
                   <div className="admin-game-info">
                     <p className="admin-game-name">{g.name}</p>
                     <p className="admin-game-url">{g.url}</p>
                     <p className="admin-game-plays">
-                      {g.plays} plays · {g.active ? "🟢 Live" : "⚫ Hidden"} ·{" "}
+                      {g.plays} plays · {g.active ? "🟢 Visible" : "⚫ Hidden"} ·{" "}
+                      {gameIsLive(g) ? "✅ Live" : "🔜 Coming Soon"} ·{" "}
                       {gameHasLeaderboard(g) ? "🏆 Leaderboard" : "📊 Level-based"}
                     </p>
                   </div>
@@ -457,6 +501,13 @@ export default function AdminPortal() {
                       onClick={() => startEdit(g)}
                     >
                       Edit
+                    </button>
+                    <button
+                      className="toggle-btn"
+                      type="button"
+                      onClick={() => handleToggleLive(g)}
+                    >
+                      {gameIsLive(g) ? "Coming Soon" : "Go Live"}
                     </button>
                     <button
                       className="toggle-btn"

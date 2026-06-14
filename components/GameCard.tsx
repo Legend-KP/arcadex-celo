@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { gameAssetCandidates } from "@/lib/game-assets";
+import { gameAssetCandidates, gameFallbackCandidates } from "@/lib/game-assets";
 import { formatPlayCount } from "@/lib/format-play-count";
-import { Game } from "@/types";
+import { Game, gameIsLive } from "@/types";
 
 interface GameCardProps {
   game: Game;
@@ -12,6 +12,8 @@ interface GameCardProps {
 }
 
 export default function GameCard({ game, playCount = 0 }: GameCardProps) {
+  const isLive = gameIsLive(game);
+
   const thumbCandidates = useMemo(
     () => gameAssetCandidates(game, "thumbnail"),
     [game]
@@ -20,34 +22,55 @@ export default function GameCard({ game, playCount = 0 }: GameCardProps) {
     () => gameAssetCandidates(game, "logo"),
     [game]
   );
+  const fallbackCandidates = useMemo(
+    () => gameFallbackCandidates(game),
+    [game]
+  );
 
   const [thumbIdx, setThumbIdx] = useState(0);
   const [logoIdx, setLogoIdx] = useState(0);
+  const [fallbackIdx, setFallbackIdx] = useState(0);
 
   const thumbSrc = thumbCandidates[thumbIdx];
   const logoSrc = logoCandidates[logoIdx];
+  const fallbackSrc = fallbackCandidates[fallbackIdx];
 
-  return (
-    <Link href={`/game/${game.id}`} className="game-card">
+  const thumbContent = thumbSrc ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={thumbSrc}
+      alt={game.name}
+      className="thumb-img"
+      onError={() => setThumbIdx((i) => i + 1)}
+    />
+  ) : logoSrc ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={logoSrc}
+      alt={game.name}
+      className="thumb-img"
+      onError={() => setLogoIdx((i) => i + 1)}
+    />
+  ) : fallbackSrc ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={fallbackSrc}
+      alt={game.name}
+      className="thumb-img"
+      onError={() => setFallbackIdx((i) => i + 1)}
+    />
+  ) : (
+    <div className="thumb-placeholder">🎮</div>
+  );
+
+  const cardBody = (
+    <>
       <div className="thumb-wrap">
-        {thumbSrc ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={thumbSrc}
-            alt={game.name}
-            className="thumb-img"
-            onError={() => setThumbIdx((i) => i + 1)}
-          />
-        ) : logoSrc ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={logoSrc}
-            alt={game.name}
-            className="thumb-img"
-            onError={() => setLogoIdx((i) => i + 1)}
-          />
-        ) : (
-          <div className="thumb-placeholder">{game.emoji || "🎮"}</div>
+        {thumbContent}
+        {!isLive && (
+          <div className="coming-soon-overlay" aria-hidden>
+            <span>Coming Soon</span>
+          </div>
         )}
       </div>
 
@@ -55,6 +78,20 @@ export default function GameCard({ game, playCount = 0 }: GameCardProps) {
         <p className="card-title">{game.name}</p>
         <p className="card-plays">{formatPlayCount(playCount)} plays</p>
       </div>
+    </>
+  );
+
+  if (!isLive) {
+    return (
+      <div className="game-card game-card--coming-soon" aria-label={`${game.name} — coming soon`}>
+        {cardBody}
+      </div>
+    );
+  }
+
+  return (
+    <Link href={`/game/${game.id}`} className="game-card">
+      {cardBody}
     </Link>
   );
 }

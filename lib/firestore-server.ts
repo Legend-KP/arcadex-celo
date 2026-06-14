@@ -32,8 +32,11 @@ function docToGame(doc: FirestoreDocument): Game {
     logo: parseField(fields.logo) as string | undefined,
     url: String(parseField(fields.url) ?? ""),
     plays: String(parseField(fields.plays) ?? "0"),
-    emoji: String(parseField(fields.emoji) ?? "🎮"),
+    fallbackImage: String(
+      parseField(fields.fallbackImage) ?? parseField(fields.emoji) ?? ""
+    ),
     active: parseField(fields.active) !== false,
+    live: parseField(fields.live) !== false,
     hasLeaderboard: parseField(fields.hasLeaderboard) !== false,
     createdAt: Number(parseField(fields.createdAt) ?? 0),
   };
