@@ -4,7 +4,11 @@ import { celo } from "viem/chains";
 
 export const wagmiConfig = createConfig({
   chains: [celo],
-  connectors: [injected()],
+  connectors: [
+    injected({
+      target: "metaMask",
+    }),
+  ],
   transports: {
     [celo.id]: http(),
   },

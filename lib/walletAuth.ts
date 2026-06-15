@@ -38,29 +38,6 @@ function cacheWallet(address: string): string {
   return normalized;
 }
 
-export function hasInjectedWallet(): boolean {
-  return getInjectedProvider() !== null;
-}
-
-async function requestAccountsFromProvider(): Promise<string | null> {
-  const provider = getInjectedProvider();
-  if (!provider?.request) return null;
-
-  try {
-    const accounts = (await provider.request({
-      method: "eth_requestAccounts",
-    })) as string[] | undefined;
-    const first = accounts?.[0];
-    if (first && isWalletAddress(first)) {
-      return normalizeWalletAddress(first);
-    }
-  } catch {
-    // User rejected the connection prompt or the provider errored.
-  }
-
-  return null;
-}
-
 async function readAddressFromProvider(): Promise<string | null> {
   const client = createMiniPayWalletClient();
   if (!client) return null;
@@ -143,10 +120,7 @@ export async function retryResolveWallet(): Promise<string | null> {
 
 function walletInitErrorMessage(): string {
   if (!isMiniPay()) {
-    if (!hasInjectedWallet()) {
-      return "Install a Web3 wallet (e.g. MetaMask) or open ArcadeX in MiniPay.";
-    }
-    return "Connect your wallet to continue.";
+    return "Open ArcadeX inside MiniPay to continue.";
   }
   return "Could not connect to your MiniPay wallet. Update MiniPay and try again.";
 }
@@ -155,11 +129,6 @@ function walletInitErrorMessage(): string {
 export async function resolveWalletForSave(): Promise<string> {
   const silent = await resolveWalletOnAppOpen();
   if (silent) return silent;
-
-  if (!isMiniPay()) {
-    const requested = await requestAccountsFromProvider();
-    if (requested) return cacheWallet(requested);
-  }
 
   const wallet = await waitForProviderWallet();
   if (wallet) return cacheWallet(wallet);

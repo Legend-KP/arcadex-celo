@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAccount, useConnect } from "wagmi";
 import PlayerNameModal from "@/components/PlayerNameModal";
 import {
   bootstrapPlayerProfile,
@@ -23,7 +22,6 @@ import {
   getCachedWallet,
   setCachedWallet,
 } from "@/lib/player-id";
-import { isMiniPay } from "@/lib/minipay";
 import {
   readWalletImmediately,
   resolveWalletForSave,
@@ -83,14 +81,7 @@ export default function PlayerProfileProvider({
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [inMiniPay, setInMiniPay] = useState(false);
   const nameCompleteRef = useRef(false);
-  const { address } = useAccount();
-  const { connect, connectors, isPending: isConnecting } = useConnect();
-
-  useEffect(() => {
-    setInMiniPay(isMiniPay());
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,85 +156,6 @@ export default function PlayerProfileProvider({
     };
   }, []);
 
-  useEffect(() => {
-    if (!address || !isWalletAddress(address)) return;
-
-    const normalized = normalizeWalletAddress(address);
-    if (walletAddress === normalized && profile) return;
-
-    let cancelled = false;
-
-    async function loadConnectedProfile() {
-      setCachedWallet(normalized);
-      setWalletAddress(normalized);
-      setPlayerId(normalized);
-      setError("");
-
-      try {
-        let user = await bootstrapPlayerProfile(normalized);
-        if (cancelled) return;
-
-        if (!hasPlayerName(user)) {
-          clearCachedPlayerName();
-          const fresh = await fetchPlayerProfile(normalized);
-          if (fresh) user = fresh;
-        }
-        if (cancelled) return;
-
-        setProfile(user);
-
-        if (shouldShowNameModal(user)) {
-          nameCompleteRef.current = false;
-          setShowModal(true);
-        } else {
-          nameCompleteRef.current = syncNameCompletion(user);
-          setShowModal(false);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        nameCompleteRef.current = false;
-        setShowModal(true);
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Could not load your profile. Please try again."
-        );
-      } finally {
-        if (!cancelled) setIsReady(true);
-      }
-    }
-
-    loadConnectedProfile();
-    return () => {
-      cancelled = true;
-    };
-  }, [address, walletAddress, profile]);
-
-  const handleConnectWallet = useCallback(async () => {
-    setError("");
-
-    try {
-      const connector = connectors[0];
-      if (!connector) {
-        throw new Error(
-          "No wallet found. Install MetaMask or another Web3 wallet."
-        );
-      }
-      connect({ connector });
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not connect your wallet."
-      );
-    }
-  }, [connect, connectors]);
-
-  const needsWalletConnect =
-    isReady &&
-    !inMiniPay &&
-    !walletAddress &&
-    !(address && isWalletAddress(address)) &&
-    !getCachedWallet();
-
   const handleSubmit = useCallback(
     async (name: string) => {
       setSaving(true);
@@ -252,9 +164,6 @@ export default function PlayerProfileProvider({
       try {
         let wallet =
           walletAddress ||
-          (address && isWalletAddress(address)
-            ? normalizeWalletAddress(address)
-            : "") ||
           getCachedWallet() ||
           profile?.walletAddress ||
           readWalletImmediately();
@@ -265,9 +174,7 @@ export default function PlayerProfileProvider({
 
         if (!isWalletAddress(wallet)) {
           throw new Error(
-            inMiniPay
-              ? "Could not connect your wallet. Open ArcadeX in MiniPay and try again."
-              : "Connect your wallet to continue."
+            "Could not connect your wallet. Open ArcadeX in MiniPay and try again."
           );
         }
 
@@ -291,7 +198,7 @@ export default function PlayerProfileProvider({
         setSaving(false);
       }
     },
-    [walletAddress, profile?.walletAddress, inMiniPay, address]
+    [walletAddress, profile?.walletAddress]
   );
 
   const updateWalletAddress = useCallback(
@@ -328,9 +235,6 @@ export default function PlayerProfileProvider({
         saving={saving}
         error={error}
         defaultName=""
-        needsWalletConnect={needsWalletConnect}
-        connecting={isConnecting}
-        onConnectWallet={handleConnectWallet}
         onSubmit={handleSubmit}
       />
     </PlayerProfileContext.Provider>

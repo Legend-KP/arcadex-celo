@@ -9,9 +9,6 @@ interface PlayerNameModalProps {
   saving: boolean;
   error?: string;
   defaultName?: string;
-  needsWalletConnect?: boolean;
-  connecting?: boolean;
-  onConnectWallet?: () => void;
   onSubmit: (name: string) => void;
 }
 
@@ -20,9 +17,6 @@ export default function PlayerNameModal({
   saving,
   error,
   defaultName = "",
-  needsWalletConnect = false,
-  connecting = false,
-  onConnectWallet,
   onSubmit,
 }: PlayerNameModalProps) {
   const [name, setName] = useState(defaultName);
@@ -56,21 +50,8 @@ export default function PlayerNameModal({
           Choose your player name
         </h2>
         <p className="player-modal-hint">
-          {needsWalletConnect
-            ? "Connect your wallet to save your name and scores on the web."
-            : "This name appears on leaderboards across all games."}
+          This name appears on leaderboards across all games.
         </p>
-
-        {needsWalletConnect && (
-          <button
-            type="button"
-            className="player-modal-submit"
-            onClick={onConnectWallet}
-            disabled={connecting || saving}
-          >
-            {connecting ? "Connecting..." : "Connect wallet"}
-          </button>
-        )}
 
         <form onSubmit={handleSubmit} className="player-modal-form">
           <label className="form-label" htmlFor="player-name">
@@ -93,7 +74,7 @@ export default function PlayerNameModal({
           <button
             type="submit"
             className="player-modal-submit"
-            disabled={saving || !isValid || needsWalletConnect || connecting}
+            disabled={saving || !isValid}
           >
             {saving ? "Saving..." : "Continue"}
           </button>
