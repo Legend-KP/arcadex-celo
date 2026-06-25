@@ -71,11 +71,8 @@ export default function HomePage() {
     <div className="home">
       <div className="home-shell">
         <header className="topbar">
-          <div className="topbar-side topbar-side--left" aria-hidden />
           <Logo variant="header" />
-          <div className="topbar-side topbar-side--right">
-            <SparkBatteryBar />
-          </div>
+          <SparkBatteryBar />
         </header>
 
         {error ? (
