@@ -106,7 +106,7 @@ a { color: inherit; text-decoration: none; }
   animation: none;
 }
 
-/* Square app icon in the home topbar */
+/* Compact wordmark in the home topbar */
 .logo-wrap--header {
   width: auto;
   height: 36px;
@@ -114,7 +114,6 @@ a { color: inherit; text-decoration: none; }
 .logo-wrap--header .logo-img {
   width: auto;
   height: 36px;
-  max-width: 36px;
   object-fit: contain;
   margin-top: 0;
 }
@@ -670,6 +669,28 @@ a { color: inherit; text-decoration: none; }
   box-shadow:
     0 4px 14px rgba(34, 197, 94, 0.35),
     var(--gold-border-glow);
+}
+.game-menu-btn--start:disabled {
+  opacity: 0.65;
+  cursor: wait;
+  transform: none;
+}
+
+.game-menu-spark-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(127, 29, 29, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fecaca;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.game-menu-spark-error strong {
+  color: #fde68a;
 }
 .game-menu-btn--leaderboard {
   background:

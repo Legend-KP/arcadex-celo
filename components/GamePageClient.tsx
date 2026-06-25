@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Game, gameHasLeaderboard, gameIsLive } from "@/types";
 import GameClient from "@/components/GameClient";
@@ -11,27 +11,18 @@ import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { useSparks } from "@/components/SparkProvider";
 import { formatSparkDuration } from "@/lib/spark";
 
-type SparkGate = "pending" | "allowed" | "blocked";
-
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { walletAddress, isReady: profileReady } = usePlayerProfile();
-  const { sparks, loading: sparksLoading, spendForGame } = useSparks();
+  const { walletAddress } = usePlayerProfile();
+  const { sparks, spendForGame } = useSparks();
   const [game, setGame] = useState<Game | null>(null);
   const [started, setStarted] = useState(false);
   const [lbOpen, setLbOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
-  const [sparkGate, setSparkGate] = useState<SparkGate>("pending");
   const [sparkError, setSparkError] = useState("");
-  const spendAttemptedRef = useRef(false);
-
-  useEffect(() => {
-    spendAttemptedRef.current = false;
-    setSparkGate("pending");
-    setSparkError("");
-  }, [id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,46 +63,33 @@ export default function GamePageClient() {
     };
   }, [id]);
 
-  useEffect(() => {
-    if (!game || !gameIsLive(game) || !profileReady || sparksLoading) return;
+  const handleStart = useCallback(async () => {
+    setSparkError("");
 
-    let cancelled = false;
-
-    async function gateEntry() {
-      setSparkGate("pending");
-      setSparkError("");
-
-      if (!walletAddress) {
-        if (!cancelled) {
-          setSparkGate("blocked");
-          setSparkError("Connect your wallet in MiniPay to play.");
-        }
-        return;
-      }
-
-      if (spendAttemptedRef.current) return;
-      spendAttemptedRef.current = true;
-
-      try {
-        await spendForGame(game!.id);
-        if (!cancelled) setSparkGate("allowed");
-      } catch (err) {
-        if (!cancelled) {
-          setSparkGate("blocked");
-          setSparkError(
-            err instanceof Error ? err.message : "Could not use a Spark."
-          );
-        }
-      }
+    if (!walletAddress) {
+      setSparkError("Connect your wallet in MiniPay to play.");
+      return;
     }
 
-    gateEntry();
-    return () => {
-      cancelled = true;
-    };
-  }, [game, profileReady, sparksLoading, walletAddress, spendForGame]);
+    if (!sparks.hasInfinite && sparks.available === 0) {
+      setSparkError("No Sparks available. Wait for a refill.");
+      return;
+    }
 
-  if (loading || sparkGate === "pending") {
+    setStarting(true);
+    try {
+      await spendForGame();
+      setStarted(true);
+    } catch (err) {
+      setSparkError(
+        err instanceof Error ? err.message : "Could not use a Spark."
+      );
+    } finally {
+      setStarting(false);
+    }
+  }, [walletAddress, sparks.hasInfinite, sparks.available, spendForGame]);
+
+  if (loading) {
     return <LoadingScreen message="Loading game" />;
   }
 
@@ -139,41 +117,21 @@ export default function GamePageClient() {
     );
   }
 
-  if (sparkGate === "blocked") {
-    const waitLabel =
-      sparks.timeToFullMs > 0
-        ? formatSparkDuration(sparks.timeToFullMs)
-        : null;
-
-    return (
-      <div className="coming-soon-screen spark-gate-screen">
-        <p className="coming-soon-screen__title">No Sparks</p>
-        <p className="coming-soon-screen__subtitle">
-          {sparkError || "You need a Spark to enter this game."}
-        </p>
-        {!sparks.hasInfinite && waitLabel && (
-          <p className="spark-gate-screen__timer">
-            Full in <strong>{waitLabel}</strong>
-          </p>
-        )}
-        <button
-          type="button"
-          className="game-menu-btn game-menu-btn--back"
-          onClick={() => router.push("/")}
-        >
-          Back to Arcade
-        </button>
-      </div>
-    );
-  }
+  const sparkWaitLabel =
+    !sparks.hasInfinite && sparks.timeToFullMs > 0
+      ? formatSparkDuration(sparks.timeToFullMs)
+      : null;
 
   return (
     <>
       {!started ? (
         <GameMenu
           game={game}
-          onStart={() => setStarted(true)}
+          onStart={handleStart}
           onLeaderboard={() => setLbOpen(true)}
+          starting={starting}
+          sparkError={sparkError}
+          sparkWaitLabel={sparkWaitLabel}
         />
       ) : (
         <GameClient game={game} />
