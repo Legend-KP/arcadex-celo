@@ -4,7 +4,13 @@ import {
   LeaderboardEntry,
   PlayerProfile,
   StoredGameProgress,
+  StoredSparkState,
 } from "@/types";
+import {
+  computeSparkSnapshot,
+  defaultSparkState,
+  normalizeSparkState,
+} from "@/lib/spark";
 import { getDatabaseUrl } from "./firebase-admin";
 import {
   isWalletAddress,
@@ -38,6 +44,10 @@ function profilePath(walletAddress: string): string {
     throw new Error("User profile requires a valid wallet address.");
   }
   return `users/${normalizeWalletAddress(walletAddress)}`;
+}
+
+function sparksPath(walletAddress: string): string {
+  return `${profilePath(walletAddress)}/sparks`;
 }
 
 function resolveWalletField(
@@ -194,10 +204,49 @@ export async function bootstrapUserOnServer(
       updatedAt: now,
     };
     await writePath(`users/${wallet}`, stored);
+    await writePath(sparksPath(wallet), defaultSparkState());
     return toPlayerProfile(wallet, stored)!;
   }
 
+  await ensureSparkStateOnServer(wallet);
   return existing;
+}
+
+// ─── Sparks ───────────────────────────────────────────────────────────────────
+
+export async function fetchSparkStateFromServer(
+  walletAddress: string
+): Promise<StoredSparkState> {
+  if (!isWalletAddress(walletAddress)) {
+    throw new Error("A valid wallet address is required.");
+  }
+
+  return ensureSparkStateOnServer(walletAddress);
+}
+
+export async function ensureSparkStateOnServer(
+  walletAddress: string
+): Promise<StoredSparkState> {
+  const wallet = normalizeWalletAddress(walletAddress);
+  const existing = await readPath<StoredSparkState>(sparksPath(wallet));
+  if (existing) {
+    const normalized = normalizeSparkState(existing);
+    if (JSON.stringify(normalized) !== JSON.stringify(existing)) {
+      await writePath(sparksPath(wallet), normalized);
+    }
+    return normalized;
+  }
+
+  const initial = defaultSparkState();
+  await writePath(sparksPath(wallet), initial);
+  return initial;
+}
+
+export async function getSparkSnapshotFromServer(
+  walletAddress: string
+): Promise<ReturnType<typeof computeSparkSnapshot>> {
+  const state = await fetchSparkStateFromServer(walletAddress);
+  return computeSparkSnapshot(state);
 }
 
 // ─── Game play counts ──────────────────────────────────────────────────────────

@@ -55,3 +55,22 @@ export interface GameProgress {
   score?: number;
   level?: number;
 }
+
+/** Raw RTDB shape at `users/{wallet}/sparks`. */
+export interface StoredSparkState {
+  max: number;
+  regenMs: number;
+  /** `null` = ready; number = ms timestamp when this slot refills */
+  slots: (number | null)[];
+  infiniteUntil?: number;
+}
+
+/** Client-facing spark snapshot (computed each tick). */
+export interface SparkSnapshot {
+  max: number;
+  available: number;
+  fillPercent: number;
+  timeToFullMs: number;
+  hasInfinite: boolean;
+  infiniteUntil?: number;
+}

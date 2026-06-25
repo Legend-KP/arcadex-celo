@@ -5,6 +5,7 @@ import { Game } from "@/types";
 import GameCard from "@/components/GameCard";
 import LoadingScreen from "@/components/LoadingScreen";
 import Logo from "@/components/Logo";
+import SparkBatteryBar from "@/components/SparkBatteryBar";
 
 export default function HomePage() {
   const [games, setGames] = useState<Game[]>([]);
@@ -70,7 +71,11 @@ export default function HomePage() {
     <div className="home">
       <div className="home-shell">
         <header className="topbar">
+          <div className="topbar-side topbar-side--left" aria-hidden />
           <Logo variant="header" />
+          <div className="topbar-side topbar-side--right">
+            <SparkBatteryBar />
+          </div>
         </header>
 
         {error ? (
