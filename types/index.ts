@@ -65,6 +65,14 @@ export interface StoredSparkState {
   infiniteUntil?: number;
 }
 
+/** Per-slot view for UI (independent regen timers). */
+export interface SparkSlotView {
+  index: number;
+  status: "ready" | "regenerating";
+  fillPercent: number;
+  timeRemainingMs: number;
+}
+
 /** Client-facing spark snapshot (computed each tick). */
 export interface SparkSnapshot {
   max: number;
@@ -72,6 +80,8 @@ export interface SparkSnapshot {
   fillPercent: number;
   timeToFullMs: number;
   timeToNextMs: number;
+  slots: SparkSlotView[];
+  regeneratingCount: number;
   hasInfinite: boolean;
   infiniteUntil?: number;
 }

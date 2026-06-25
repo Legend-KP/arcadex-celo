@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSparks } from "@/components/SparkProvider";
-import { formatSparkCountdown, formatSparkDuration } from "@/lib/spark";
+import { formatSparkCountdown } from "@/lib/spark";
 
 export default function SparkBatteryBar() {
   const { sparks, loading } = useSparks();
@@ -34,15 +34,13 @@ export default function SparkBatteryBar() {
       ? "spark-battery__fill--empty"
       : "spark-battery__fill--partial";
 
-  const segmentFills = useMemo(() => {
-    const level = (sparks.fillPercent / 100) * sparks.max;
-    return Array.from({ length: sparks.max }, (_, index) => {
-      const filled = level - index;
-      if (filled >= 1) return 100;
-      if (filled > 0) return Math.round(filled * 100);
-      return 0;
-    });
-  }, [sparks.fillPercent, sparks.max]);
+  const regeneratingSlots = useMemo(
+    () =>
+      sparks.slots.filter(
+        (slot) => slot.status === "regenerating" && slot.timeRemainingMs > 0
+      ),
+    [sparks.slots]
+  );
 
   const panel = open ? (
     <div
@@ -107,19 +105,44 @@ export default function SparkBatteryBar() {
               </p>
             </div>
 
-            <div className="spark-panel__segments" aria-hidden>
-              {segmentFills.map((fill, index) => (
-                <div key={index} className="spark-panel__segment">
-                  <span
-                    className="spark-panel__segment-fill"
-                    style={{ width: `${fill}%` }}
-                  />
+            <div className="spark-panel__segments">
+              {sparks.slots.map((slot) => (
+                <div key={slot.index} className="spark-panel__segment-col">
+                  <div className="spark-panel__segment">
+                    <span
+                      className="spark-panel__segment-fill"
+                      style={{ width: `${slot.fillPercent}%` }}
+                    />
+                  </div>
+                  {slot.status === "regenerating" ? (
+                    <span className="spark-panel__segment-time">
+                      {formatSparkCountdown(slot.timeRemainingMs)}
+                    </span>
+                  ) : (
+                    <span className="spark-panel__segment-time spark-panel__segment-time--ready">
+                      Ready
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
 
             {isFull ? (
               <span className="spark-panel__badge">All Sparks are full! ✦</span>
+            ) : regeneratingSlots.length === 1 ? (
+              <div className="spark-panel__timer-box">
+                <div className="spark-panel__timer-row">
+                  <span className="spark-panel__timer-icon" aria-hidden>
+                    ⏱
+                  </span>
+                  <p className="spark-panel__timer-label">
+                    Refills in{" "}
+                    <strong>
+                      {formatSparkCountdown(regeneratingSlots[0].timeRemainingMs)}
+                    </strong>
+                  </p>
+                </div>
+              </div>
             ) : (
               <div className="spark-panel__timer-box">
                 <div className="spark-panel__timer-row">
@@ -133,7 +156,7 @@ export default function SparkBatteryBar() {
                 </div>
                 <p className="spark-panel__timer-sub">
                   All Sparks ready in{" "}
-                  <strong>{formatSparkDuration(sparks.timeToFullMs)}</strong>
+                  <strong>{formatSparkCountdown(sparks.timeToFullMs)}</strong>
                 </p>
               </div>
             )}

@@ -1,4 +1,4 @@
-import { SparkSnapshot, StoredSparkState } from "@/types";
+import { SparkSlotView, SparkSnapshot, StoredSparkState } from "@/types";
 
 export const SPARK_MAX = 3;
 export const SPARK_REGEN_MS = 180 * 60 * 1000;
@@ -113,13 +113,31 @@ export function computeSparkSnapshot(
   const fillLevel = fillSum / max;
   const fillPercent = Math.min(100, Math.max(0, fillLevel * 100));
 
-  const pending = slots.filter(
-    (slot): slot is number => slot !== null && slot > now
-  );
+  const pending = slots
+    .filter((slot): slot is number => slot !== null && slot > now)
+    .sort((a, b) => a - b);
   const timeToFullMs =
-    pending.length === 0 ? 0 : Math.max(...pending) - now;
+    pending.length === 0 ? 0 : pending[pending.length - 1] - now;
   const timeToNextMs =
-    pending.length === 0 ? 0 : Math.min(...pending) - now;
+    pending.length === 0 ? 0 : pending[0] - now;
+
+  const slotViews: SparkSlotView[] = slots.map((slot, index) => {
+    if (slot === null || slot <= now) {
+      return {
+        index,
+        status: "ready",
+        fillPercent: 100,
+        timeRemainingMs: 0,
+      };
+    }
+    const timeRemainingMs = slot - now;
+    return {
+      index,
+      status: "regenerating",
+      fillPercent: Math.round(slotFill(slot, now, regenMs) * 100),
+      timeRemainingMs,
+    };
+  });
 
   const hasInfinite = Boolean(
     state.infiniteUntil && state.infiniteUntil > now
@@ -131,6 +149,8 @@ export function computeSparkSnapshot(
     fillPercent,
     timeToFullMs,
     timeToNextMs,
+    slots: slotViews,
+    regeneratingCount: pending.length,
     hasInfinite,
     ...(hasInfinite ? { infiniteUntil: state.infiniteUntil } : {}),
   };
