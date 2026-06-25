@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { fetchSparkData, localSparkData, spendSparkForEntry } from "@/lib/spark-client";
-import { computeSparkSnapshot, normalizeSparkState } from "@/lib/spark";
+import { computeSparkSnapshot, normalizeSparkState, coerceSparkState } from "@/lib/spark";
 import { SparkSnapshot, StoredSparkState } from "@/types";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 
@@ -53,7 +53,7 @@ export default function SparkProvider({
     }
 
     const data = await fetchSparkData(walletAddress);
-    setState(data.state);
+    setState(coerceSparkState(data.state));
   }, [walletAddress]);
 
   const spendForGame = useCallback(
@@ -63,7 +63,7 @@ export default function SparkProvider({
       }
 
       const result = await spendSparkForEntry(walletAddress, gameId);
-      setState(result.state);
+      setState(coerceSparkState(result.state));
       return result.spent;
     },
     [walletAddress]
@@ -82,7 +82,7 @@ export default function SparkProvider({
           return;
         }
         const data = await fetchSparkData(walletAddress);
-        if (!cancelled) setState(data.state);
+        if (!cancelled) setState(coerceSparkState(data.state));
       } catch {
         if (!cancelled) setState(localSparkData().state);
       } finally {

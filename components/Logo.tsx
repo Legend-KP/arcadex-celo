@@ -1,4 +1,4 @@
-const LOGO_SRC = "/logo.png";
+const LOGO_SRC = "/thumbnails/arcadeX.webp";
 
 interface LogoProps {
   variant?: "header" | "loading" | "login";

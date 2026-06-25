@@ -11,11 +11,65 @@ export function defaultSparkState(): StoredSparkState {
   };
 }
 
+function coerceSlotValue(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return null;
+}
+
+/** RTDB may return arrays as `{0:…,1:…}` objects or omit fields entirely. */
+function coerceSlots(raw: unknown, max: number): (number | null)[] {
+  if (Array.isArray(raw)) {
+    const slots = raw.slice(0, max).map(coerceSlotValue);
+    while (slots.length < max) slots.push(null);
+    return slots;
+  }
+
+  if (raw && typeof raw === "object") {
+    const record = raw as Record<string, unknown>;
+    const slots: (number | null)[] = [];
+    for (let i = 0; i < max; i++) {
+      slots.push(coerceSlotValue(record[i] ?? record[String(i)]));
+    }
+    return slots;
+  }
+
+  return Array.from({ length: max }, () => null);
+}
+
+export function coerceSparkState(raw: unknown): StoredSparkState {
+  const defaults = defaultSparkState();
+  if (!raw || typeof raw !== "object") return defaults;
+
+  const data = raw as Partial<StoredSparkState>;
+  const max =
+    typeof data.max === "number" && data.max > 0
+      ? Math.floor(data.max)
+      : defaults.max;
+  const regenMs =
+    typeof data.regenMs === "number" && data.regenMs > 0
+      ? data.regenMs
+      : defaults.regenMs;
+  const slots = coerceSlots(data.slots, max);
+  const infiniteUntil =
+    typeof data.infiniteUntil === "number" && Number.isFinite(data.infiniteUntil)
+      ? data.infiniteUntil
+      : undefined;
+
+  return {
+    max,
+    regenMs,
+    slots,
+    ...(infiniteUntil ? { infiniteUntil } : {}),
+  };
+}
+
 /** Normalize expired regen timestamps back to ready (`null`). */
 export function normalizeSparkState(
-  state: StoredSparkState,
+  raw: StoredSparkState | unknown,
   now = Date.now()
 ): StoredSparkState {
+  const state = coerceSparkState(raw);
   const slots = state.slots.map((slot) =>
     slot !== null && slot <= now ? null : slot
   );

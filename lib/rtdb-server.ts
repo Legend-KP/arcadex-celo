@@ -8,6 +8,7 @@ import {
 } from "@/types";
 import {
   computeSparkSnapshot,
+  coerceSparkState,
   defaultSparkState,
   normalizeSparkState,
 } from "@/lib/spark";
@@ -228,10 +229,14 @@ export async function ensureSparkStateOnServer(
   walletAddress: string
 ): Promise<StoredSparkState> {
   const wallet = normalizeWalletAddress(walletAddress);
-  const existing = await readPath<StoredSparkState>(sparksPath(wallet));
+  const existing = await readPath<unknown>(sparksPath(wallet));
   if (existing) {
     const normalized = normalizeSparkState(existing);
-    if (JSON.stringify(normalized) !== JSON.stringify(existing)) {
+    const coerced = coerceSparkState(existing);
+    const needsRewrite =
+      JSON.stringify(normalized) !== JSON.stringify(existing) ||
+      JSON.stringify(coerced) !== JSON.stringify(existing);
+    if (needsRewrite) {
       await writePath(sparksPath(wallet), normalized);
     }
     return normalized;
