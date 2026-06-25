@@ -1,26 +1,45 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Game, gameHasLeaderboard, gameIsLive } from "@/types";
 import GameClient from "@/components/GameClient";
 import GameMenu from "@/components/GameMenu";
 import Leaderboard from "@/components/Leaderboard";
 import LoadingScreen from "@/components/LoadingScreen";
+import { usePlayerProfile } from "@/components/PlayerProfileProvider";
+import { useSparks } from "@/components/SparkProvider";
+import { formatSparkDuration } from "@/lib/spark";
+
+type SparkGate = "pending" | "allowed" | "blocked";
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { walletAddress, isReady: profileReady } = usePlayerProfile();
+  const { sparks, loading: sparksLoading, spendForGame } = useSparks();
   const [game, setGame] = useState<Game | null>(null);
   const [started, setStarted] = useState(false);
   const [lbOpen, setLbOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [sparkGate, setSparkGate] = useState<SparkGate>("pending");
+  const [sparkError, setSparkError] = useState("");
+  const spendAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    spendAttemptedRef.current = false;
+    setSparkGate("pending");
+    setSparkError("");
+  }, [id]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadGame() {
+      setLoading(true);
+      setError("");
+
       try {
         const res = await fetch(`/api/games/${id}`, { cache: "no-store" });
         const data = (await res.json()) as { game?: Game; error?: string };
@@ -53,7 +72,46 @@ export default function GamePageClient() {
     };
   }, [id]);
 
-  if (loading) {
+  useEffect(() => {
+    if (!game || !gameIsLive(game) || !profileReady || sparksLoading) return;
+
+    let cancelled = false;
+
+    async function gateEntry() {
+      setSparkGate("pending");
+      setSparkError("");
+
+      if (!walletAddress) {
+        if (!cancelled) {
+          setSparkGate("blocked");
+          setSparkError("Connect your wallet in MiniPay to play.");
+        }
+        return;
+      }
+
+      if (spendAttemptedRef.current) return;
+      spendAttemptedRef.current = true;
+
+      try {
+        await spendForGame(game!.id);
+        if (!cancelled) setSparkGate("allowed");
+      } catch (err) {
+        if (!cancelled) {
+          setSparkGate("blocked");
+          setSparkError(
+            err instanceof Error ? err.message : "Could not use a Spark."
+          );
+        }
+      }
+    }
+
+    gateEntry();
+    return () => {
+      cancelled = true;
+    };
+  }, [game, profileReady, sparksLoading, walletAddress, spendForGame]);
+
+  if (loading || sparkGate === "pending") {
     return <LoadingScreen message="Loading game" />;
   }
 
@@ -76,6 +134,34 @@ export default function GamePageClient() {
           onClick={() => router.push("/")}
         >
           Back
+        </button>
+      </div>
+    );
+  }
+
+  if (sparkGate === "blocked") {
+    const waitLabel =
+      sparks.timeToFullMs > 0
+        ? formatSparkDuration(sparks.timeToFullMs)
+        : null;
+
+    return (
+      <div className="coming-soon-screen spark-gate-screen">
+        <p className="coming-soon-screen__title">No Sparks</p>
+        <p className="coming-soon-screen__subtitle">
+          {sparkError || "You need a Spark to enter this game."}
+        </p>
+        {!sparks.hasInfinite && waitLabel && (
+          <p className="spark-gate-screen__timer">
+            Full in <strong>{waitLabel}</strong>
+          </p>
+        )}
+        <button
+          type="button"
+          className="game-menu-btn game-menu-btn--back"
+          onClick={() => router.push("/")}
+        >
+          Back to Arcade
         </button>
       </div>
     );

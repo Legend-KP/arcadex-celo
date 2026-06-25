@@ -443,6 +443,17 @@ a { color: inherit; text-decoration: none; }
   max-width: 320px;
 }
 
+.spark-gate-screen__timer {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 16px;
+}
+
+.spark-gate-screen__timer strong {
+  color: #d97706;
+}
+
 .thumb-wrap {
   position: relative;
   aspect-ratio: 2 / 3;

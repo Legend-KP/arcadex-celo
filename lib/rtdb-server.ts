@@ -249,6 +249,62 @@ export async function getSparkSnapshotFromServer(
   return computeSparkSnapshot(state);
 }
 
+export class SparkSpendError extends Error {
+  constructor(
+    message: string,
+    public readonly code: "NO_SPARKS" | "NO_WALLET"
+  ) {
+    super(message);
+    this.name = "SparkSpendError";
+  }
+}
+
+export async function spendSparkOnServer(
+  walletAddress: string
+): Promise<{
+  state: StoredSparkState;
+  sparks: ReturnType<typeof computeSparkSnapshot>;
+  spent: boolean;
+}> {
+  if (!isWalletAddress(walletAddress)) {
+    throw new SparkSpendError(
+      "A valid wallet address is required.",
+      "NO_WALLET"
+    );
+  }
+
+  const wallet = normalizeWalletAddress(walletAddress);
+  const now = Date.now();
+  let state = normalizeSparkState(await ensureSparkStateOnServer(wallet), now);
+
+  if (state.infiniteUntil && state.infiniteUntil > now) {
+    return { state, sparks: computeSparkSnapshot(state), spent: false };
+  }
+
+  const readyIndex = state.slots.findIndex(
+    (slot) => slot === null || slot <= now
+  );
+
+  if (readyIndex === -1) {
+    throw new SparkSpendError("No Sparks available.", "NO_SPARKS");
+  }
+
+  const slots = [...state.slots];
+  slots[readyIndex] = now + state.regenMs;
+
+  const nextState: StoredSparkState = {
+    ...state,
+    slots,
+  };
+
+  await writePath(sparksPath(wallet), nextState);
+  return {
+    state: nextState,
+    sparks: computeSparkSnapshot(nextState),
+    spent: true,
+  };
+}
+
 // ─── Game play counts ──────────────────────────────────────────────────────────
 
 export async function fetchAllGamePlayCounts(): Promise<Record<string, number>> {

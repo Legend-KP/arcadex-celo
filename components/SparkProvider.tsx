@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { fetchSparkData, localSparkData } from "@/lib/spark-client";
+import { fetchSparkData, localSparkData, spendSparkForEntry } from "@/lib/spark-client";
 import { computeSparkSnapshot, normalizeSparkState } from "@/lib/spark";
 import { SparkSnapshot, StoredSparkState } from "@/types";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
@@ -17,6 +17,7 @@ interface SparkContextValue {
   sparks: SparkSnapshot;
   loading: boolean;
   refresh: () => Promise<void>;
+  spendForGame: (gameId: string) => Promise<boolean>;
 }
 
 const SparkContext = createContext<SparkContextValue | null>(null);
@@ -54,6 +55,19 @@ export default function SparkProvider({
     const data = await fetchSparkData(walletAddress);
     setState(data.state);
   }, [walletAddress]);
+
+  const spendForGame = useCallback(
+    async (gameId: string): Promise<boolean> => {
+      if (!walletAddress) {
+        throw new Error("Connect your wallet in MiniPay to play.");
+      }
+
+      const result = await spendSparkForEntry(walletAddress, gameId);
+      setState(result.state);
+      return result.spent;
+    },
+    [walletAddress]
+  );
 
   useEffect(() => {
     if (!isReady) return;
@@ -97,8 +111,9 @@ export default function SparkProvider({
       sparks,
       loading,
       refresh,
+      spendForGame,
     }),
-    [sparks, loading, refresh]
+    [sparks, loading, refresh, spendForGame]
   );
 
   return (
