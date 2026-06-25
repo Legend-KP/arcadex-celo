@@ -118,6 +118,8 @@ export function computeSparkSnapshot(
   );
   const timeToFullMs =
     pending.length === 0 ? 0 : Math.max(...pending) - now;
+  const timeToNextMs =
+    pending.length === 0 ? 0 : Math.min(...pending) - now;
 
   const hasInfinite = Boolean(
     state.infiniteUntil && state.infiniteUntil > now
@@ -128,6 +130,7 @@ export function computeSparkSnapshot(
     available,
     fillPercent,
     timeToFullMs,
+    timeToNextMs,
     hasInfinite,
     ...(hasInfinite ? { infiniteUntil: state.infiniteUntil } : {}),
   };
@@ -143,4 +146,21 @@ export function formatSparkDuration(ms: number): string {
   if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
   if (hours > 0) return `${hours}h`;
   return `${minutes}m`;
+}
+
+export function formatSparkCountdown(ms: number): string {
+  if (ms <= 0) return "Ready now";
+
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes.toString().padStart(2, "0")}m ${seconds.toString().padStart(2, "0")}s`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+  }
+  return `${seconds}s`;
 }

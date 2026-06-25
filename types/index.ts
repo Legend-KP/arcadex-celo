@@ -71,6 +71,7 @@ export interface SparkSnapshot {
   available: number;
   fillPercent: number;
   timeToFullMs: number;
+  timeToNextMs: number;
   hasInfinite: boolean;
   infiniteUntil?: number;
 }
