@@ -27,12 +27,6 @@ export default function SparkBatteryBar() {
   }, [open]);
 
   const isFull = sparks.available >= sparks.max;
-  const isEmpty = sparks.available === 0 && !sparks.hasInfinite;
-  const fillClass = isFull
-    ? "spark-battery__fill--full"
-    : isEmpty
-      ? "spark-battery__fill--empty"
-      : "spark-battery__fill--partial";
 
   const regeneratingSlots = useMemo(
     () =>
@@ -237,10 +231,16 @@ export default function SparkBatteryBar() {
             ⚡
           </span>
           <span className="spark-battery__shell">
-            <span
-              className={`spark-battery__fill ${fillClass}`}
-              style={{ width: `${sparks.fillPercent}%` }}
-            />
+            {sparks.slots.map((slot) => (
+              <span
+                key={slot.index}
+                className={`spark-battery__cell${
+                  sparks.hasInfinite || slot.status === "ready"
+                    ? " spark-battery__cell--on"
+                    : " spark-battery__cell--off"
+                }`}
+              />
+            ))}
           </span>
           <span className="spark-battery__cap" aria-hidden />
         </button>
