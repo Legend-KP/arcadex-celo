@@ -12,6 +12,12 @@ import {
   defaultSparkState,
   normalizeSparkState,
 } from "@/lib/spark";
+import { INFINITE_SPARK_DURATION_MS } from "@/lib/infinite-spark";
+import {
+  verifyInfiniteSparkPaymentTx,
+} from "@/lib/infinite-spark-verify";
+import { verifySparkRefillPaymentTx } from "@/lib/spark-refill-verify";
+import type { Hash } from "viem";
 import { getDatabaseUrl } from "./firebase-admin";
 import {
   isWalletAddress,
@@ -264,6 +270,36 @@ export class SparkSpendError extends Error {
   }
 }
 
+export class InfiniteSparkActivationError extends Error {
+  constructor(
+    message: string,
+    public readonly code:
+      | "NO_WALLET"
+      | "INVALID_TX"
+      | "TX_ALREADY_USED"
+  ) {
+    super(message);
+    this.name = "InfiniteSparkActivationError";
+  }
+}
+
+export class SparkRefillActivationError extends Error {
+  constructor(
+    message: string,
+    public readonly code:
+      | "NO_WALLET"
+      | "INVALID_TX"
+      | "TX_ALREADY_USED"
+  ) {
+    super(message);
+    this.name = "SparkRefillActivationError";
+  }
+}
+
+function sparkPaymentPath(txHash: string): string {
+  return `sparkPayments/${txHash.toLowerCase()}`;
+}
+
 export async function spendSparkOnServer(
   walletAddress: string
 ): Promise<{
@@ -307,6 +343,148 @@ export async function spendSparkOnServer(
     state: nextState,
     sparks: computeSparkSnapshot(nextState),
     spent: true,
+  };
+}
+
+export async function activateInfiniteSparkOnServer(
+  walletAddress: string,
+  txHash: string
+): Promise<{
+  state: StoredSparkState;
+  sparks: ReturnType<typeof computeSparkSnapshot>;
+  activated: boolean;
+}> {
+  if (!isWalletAddress(walletAddress)) {
+    throw new InfiniteSparkActivationError(
+      "A valid wallet address is required.",
+      "NO_WALLET"
+    );
+  }
+
+  const wallet = normalizeWalletAddress(walletAddress);
+  const normalizedTxHash = txHash.trim().toLowerCase();
+
+  if (!/^0x[a-f0-9]{64}$/.test(normalizedTxHash)) {
+    throw new InfiniteSparkActivationError(
+      "A valid transaction hash is required.",
+      "INVALID_TX"
+    );
+  }
+
+  const existingPayment = await readPath<{ wallet?: string }>(
+    sparkPaymentPath(normalizedTxHash)
+  );
+
+  if (existingPayment?.wallet) {
+    const recordedWallet = normalizeWalletAddress(existingPayment.wallet);
+    if (recordedWallet !== wallet) {
+      throw new InfiniteSparkActivationError(
+        "This payment was already used by another wallet.",
+        "TX_ALREADY_USED"
+      );
+    }
+
+    const state = normalizeSparkState(await ensureSparkStateOnServer(wallet));
+    return {
+      state,
+      sparks: computeSparkSnapshot(state),
+      activated: false,
+    };
+  }
+
+  await verifyInfiniteSparkPaymentTx(wallet, normalizedTxHash as Hash);
+
+  const now = Date.now();
+  const state = normalizeSparkState(await ensureSparkStateOnServer(wallet), now);
+  const baseUntil =
+    state.infiniteUntil && state.infiniteUntil > now ? state.infiniteUntil : now;
+  const infiniteUntil = baseUntil + INFINITE_SPARK_DURATION_MS;
+
+  const nextState: StoredSparkState = {
+    ...state,
+    infiniteUntil,
+  };
+
+  await writePath(sparksPath(wallet), nextState);
+  await writePath(sparkPaymentPath(normalizedTxHash), {
+    wallet,
+    activatedAt: now,
+    infiniteUntil,
+  });
+
+  return {
+    state: nextState,
+    sparks: computeSparkSnapshot(nextState),
+    activated: true,
+  };
+}
+
+export async function activateSparkRefillOnServer(
+  walletAddress: string,
+  txHash: string
+): Promise<{
+  state: StoredSparkState;
+  sparks: ReturnType<typeof computeSparkSnapshot>;
+  refilled: boolean;
+}> {
+  if (!isWalletAddress(walletAddress)) {
+    throw new SparkRefillActivationError(
+      "A valid wallet address is required.",
+      "NO_WALLET"
+    );
+  }
+
+  const wallet = normalizeWalletAddress(walletAddress);
+  const normalizedTxHash = txHash.trim().toLowerCase();
+
+  if (!/^0x[a-f0-9]{64}$/.test(normalizedTxHash)) {
+    throw new SparkRefillActivationError(
+      "A valid transaction hash is required.",
+      "INVALID_TX"
+    );
+  }
+
+  const existingPayment = await readPath<{ wallet?: string; type?: string }>(
+    sparkPaymentPath(normalizedTxHash)
+  );
+
+  if (existingPayment?.wallet) {
+    const recordedWallet = normalizeWalletAddress(existingPayment.wallet);
+    if (recordedWallet !== wallet) {
+      throw new SparkRefillActivationError(
+        "This payment was already used by another wallet.",
+        "TX_ALREADY_USED"
+      );
+    }
+
+    const state = normalizeSparkState(await ensureSparkStateOnServer(wallet));
+    return {
+      state,
+      sparks: computeSparkSnapshot(state),
+      refilled: false,
+    };
+  }
+
+  await verifySparkRefillPaymentTx(wallet, normalizedTxHash as Hash);
+
+  const now = Date.now();
+  const state = normalizeSparkState(await ensureSparkStateOnServer(wallet), now);
+  const nextState: StoredSparkState = {
+    ...state,
+    slots: Array.from({ length: state.max }, () => null),
+  };
+
+  await writePath(sparksPath(wallet), nextState);
+  await writePath(sparkPaymentPath(normalizedTxHash), {
+    wallet,
+    type: "refill",
+    activatedAt: now,
+  });
+
+  return {
+    state: nextState,
+    sparks: computeSparkSnapshot(nextState),
+    refilled: true,
   };
 }
 

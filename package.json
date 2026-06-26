@@ -25,11 +25,14 @@
     "wagmi": "^3.6.16"
   },
   "devDependencies": {
-    "@types/node": "^22.15.0",
+    "@nomicfoundation/hardhat-toolbox": "^7.0.0",
+    "@types/node": "^22.20.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "dotenv": "^17.4.2",
     "eslint": "^9.28.0",
     "eslint-config-next": "^15.3.4",
+    "hardhat": "^3.9.0",
     "typescript": "^5.8.0",
     "wrangler": "^4.20.0"
   }

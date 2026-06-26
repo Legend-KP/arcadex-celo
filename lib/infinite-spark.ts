@@ -1,0 +1,15 @@
+export const INFINITE_SPARK_DURATION_MS = 24 * 60 * 60 * 1000;
+
+export {
+  CELO_USDC_ADDRESS,
+  CELO_USDC_FEE_CURRENCY,
+  CELO_USDT_ADDRESS,
+  CELO_USDT_FEE_CURRENCY,
+  ERC20_ABI,
+  SPARK_REFILL_ABI as INFINITE_SPARK_ABI,
+  SPARK_REFILL_CONTRACT_ADDRESS as INFINITE_SPARK_CONTRACT_ADDRESS,
+  STABLECOIN_DECIMALS,
+  tokenAddress,
+  tokenFeeCurrency,
+  type SparkRefillPaymentToken as InfiniteSparkPaymentToken,
+} from "@/lib/spark-refill";

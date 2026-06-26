@@ -8,8 +8,10 @@ import {
   useMemo,
   useState,
 } from "react";
-import { fetchSparkData, localSparkData, spendSpark } from "@/lib/spark-client";
+import { fetchSparkData, localSparkData, spendSpark, activateInfiniteSpark, activateSparkRefill } from "@/lib/spark-client";
 import { computeSparkSnapshot, normalizeSparkState, coerceSparkState } from "@/lib/spark";
+import { purchaseInfiniteSparkOnChain } from "@/lib/infinite-spark-purchase";
+import { purchaseSparkRefillOnChain } from "@/lib/spark-refill-purchase";
 import { SparkSnapshot, StoredSparkState } from "@/types";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 
@@ -18,6 +20,8 @@ interface SparkContextValue {
   loading: boolean;
   refresh: () => Promise<void>;
   spendForGame: () => Promise<boolean>;
+  purchaseInfiniteSpark: () => Promise<void>;
+  purchaseSparkRefill: () => Promise<void>;
 }
 
 const SparkContext = createContext<SparkContextValue | null>(null);
@@ -66,6 +70,26 @@ export default function SparkProvider({
     return result.spent;
   }, [walletAddress]);
 
+  const purchaseInfiniteSpark = useCallback(async (): Promise<void> => {
+    if (!walletAddress) {
+      throw new Error("Connect your wallet in MiniPay to purchase Infinite Spark.");
+    }
+
+    const { txHash } = await purchaseInfiniteSparkOnChain();
+    const result = await activateInfiniteSpark(walletAddress, txHash);
+    setState(coerceSparkState(result.state));
+  }, [walletAddress]);
+
+  const purchaseSparkRefill = useCallback(async (): Promise<void> => {
+    if (!walletAddress) {
+      throw new Error("Connect your wallet in MiniPay to purchase Spark Refill.");
+    }
+
+    const { txHash } = await purchaseSparkRefillOnChain();
+    const result = await activateSparkRefill(walletAddress, txHash);
+    setState(coerceSparkState(result.state));
+  }, [walletAddress]);
+
   useEffect(() => {
     if (!isReady) return;
 
@@ -109,8 +133,10 @@ export default function SparkProvider({
       loading,
       refresh,
       spendForGame,
+      purchaseInfiniteSpark,
+      purchaseSparkRefill,
     }),
-    [sparks, loading, refresh, spendForGame]
+    [sparks, loading, refresh, spendForGame, purchaseInfiniteSpark, purchaseSparkRefill]
   );
 
   return (

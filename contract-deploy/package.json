@@ -1,0 +1,16 @@
+{
+  "name": "infinite-spark-deploy",
+  "private": true,
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy-spark-refill.cjs --network celo",
+    "verify": "node scripts/verify-spark-refill.cjs"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/node": "^22.15.0",
+    "dotenv": "^16.6.1",
+    "hardhat": "^2.22.0",
+    "typescript": "^5.8.0"
+  }
+}

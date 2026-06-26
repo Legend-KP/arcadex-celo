@@ -3,11 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSparks } from "@/components/SparkProvider";
+import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { formatSparkCountdown } from "@/lib/spark";
 
 export default function SparkBatteryBar() {
-  const { sparks, loading } = useSparks();
+  const { sparks, loading, purchaseInfiniteSpark, purchaseSparkRefill } = useSparks();
+  const { walletAddress } = usePlayerProfile();
   const [open, setOpen] = useState(false);
+  const [purchasing, setPurchasing] = useState(false);
+  const [refilling, setRefilling] = useState(false);
+  const [purchaseError, setPurchaseError] = useState("");
+  const [refillError, setRefillError] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -35,6 +41,34 @@ export default function SparkBatteryBar() {
       ),
     [sparks.slots]
   );
+
+  async function handlePurchaseInfiniteSpark() {
+    setPurchaseError("");
+    setPurchasing(true);
+    try {
+      await purchaseInfiniteSpark();
+    } catch (err) {
+      setPurchaseError(
+        err instanceof Error ? err.message : "Could not purchase Infinite Spark."
+      );
+    } finally {
+      setPurchasing(false);
+    }
+  }
+
+  async function handlePurchaseSparkRefill() {
+    setRefillError("");
+    setRefilling(true);
+    try {
+      await purchaseSparkRefill();
+    } catch (err) {
+      setRefillError(
+        err instanceof Error ? err.message : "Could not purchase Spark Refill."
+      );
+    } finally {
+      setRefilling(false);
+    }
+  }
 
   const panel = open ? (
     <div
@@ -178,13 +212,23 @@ export default function SparkBatteryBar() {
                   Instantly refill your Spark bar to full.
                 </p>
               </div>
-              <button type="button" className="spark-shop-card__price" disabled>
-                $0.04
+              <button
+                type="button"
+                className="spark-shop-card__price"
+                disabled={refilling || loading || !walletAddress || sparks.available >= sparks.max}
+                onClick={handlePurchaseSparkRefill}
+              >
+                {refilling ? "…" : "$0.05"}
               </button>
             </div>
             <span className="spark-shop-card__tag spark-shop-card__tag--gold">
               Best for quick top-up
             </span>
+            {refillError && (
+              <p className="spark-panel__purchase-error" role="alert">
+                {refillError}
+              </p>
+            )}
           </div>
 
           <div className="spark-shop-card spark-shop-card--infinite">
@@ -198,13 +242,23 @@ export default function SparkBatteryBar() {
                   Unlimited game access for 24 hours.
                 </p>
               </div>
-              <button type="button" className="spark-shop-card__price" disabled>
-                $0.10
+              <button
+                type="button"
+                className="spark-shop-card__price"
+                disabled={purchasing || loading || !walletAddress}
+                onClick={handlePurchaseInfiniteSpark}
+              >
+                {purchasing ? "…" : "$0.10"}
               </button>
             </div>
             <span className="spark-shop-card__tag spark-shop-card__tag--purple">
               Play without limits
             </span>
+            {purchaseError && (
+              <p className="spark-panel__purchase-error" role="alert">
+                {purchaseError}
+              </p>
+            )}
           </div>
 
           <p className="spark-panel__shop-note">

@@ -52,3 +52,57 @@ export async function spendSpark(
 
   return data;
 }
+
+export interface InfiniteSparkActivateResponse extends SparkApiResponse {
+  activated: boolean;
+}
+
+export async function activateInfiniteSpark(
+  walletAddress: string,
+  txHash: string
+): Promise<InfiniteSparkActivateResponse> {
+  const res = await fetch("/api/sparks/infinite", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ walletAddress, txHash }),
+    cache: "no-store",
+  });
+
+  const data = (await res.json().catch(() => ({}))) as InfiniteSparkActivateResponse & {
+    error?: string;
+    code?: string;
+  };
+
+  if (!res.ok) {
+    throw new Error(data.error ?? "Could not activate Infinite Spark.");
+  }
+
+  return data;
+}
+
+export interface SparkRefillActivateResponse extends SparkApiResponse {
+  refilled: boolean;
+}
+
+export async function activateSparkRefill(
+  walletAddress: string,
+  txHash: string
+): Promise<SparkRefillActivateResponse> {
+  const res = await fetch("/api/sparks/refill", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ walletAddress, txHash }),
+    cache: "no-store",
+  });
+
+  const data = (await res.json().catch(() => ({}))) as SparkRefillActivateResponse & {
+    error?: string;
+    code?: string;
+  };
+
+  if (!res.ok) {
+    throw new Error(data.error ?? "Could not activate Spark Refill.");
+  }
+
+  return data;
+}

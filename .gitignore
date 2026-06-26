@@ -38,6 +38,11 @@ cloudflare-env.d.ts
 # wrangler
 .wrangler/
 
+# hardhat
+contract-deploy/cache/
+contract-deploy/artifacts/
+contract-deploy/node_modules/
+
 # vercel
 .vercel
 
