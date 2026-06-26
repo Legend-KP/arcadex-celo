@@ -2,7 +2,6 @@ import type { Address } from "viem";
 
 export const SPARK_REFILL_CONTRACT_ADDRESS =
   (process.env.NEXT_PUBLIC_SPARK_REFILL_CONTRACT ??
-    process.env.NEXT_PUBLIC_INFINITE_SPARK_CONTRACT ??
     "0xD7EA6F0212b5b54a9fA4fc2d805CE63426A48B18") as Address;
 
 export const CELO_USDT_ADDRESS =
