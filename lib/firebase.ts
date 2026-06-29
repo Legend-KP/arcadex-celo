@@ -15,6 +15,7 @@ import {
   orderBy,
   DocumentData,
 } from "firebase/firestore";
+import { sortGames } from "@/lib/game-sort";
 import { Game } from "@/types";
 import {
   assertFirebaseConfig,
@@ -50,14 +51,19 @@ export async function getGames(): Promise<Game[]> {
 
   try {
     const snap = await getDocs(
-      query(collection(db, "games"), orderBy("createdAt", "desc"))
+      query(collection(db, "games"), orderBy("sortOrder", "asc"))
     );
-    return mapDocs(snap.docs);
+    return sortGames(mapDocs(snap.docs));
   } catch {
-    const snap = await getDocs(collection(db, "games"));
-    return mapDocs(snap.docs).sort(
-      (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)
-    );
+    try {
+      const snap = await getDocs(
+        query(collection(db, "games"), orderBy("createdAt", "desc"))
+      );
+      return sortGames(mapDocs(snap.docs));
+    } catch {
+      const snap = await getDocs(collection(db, "games"));
+      return sortGames(mapDocs(snap.docs));
+    }
   }
 }
 

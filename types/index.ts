@@ -28,6 +28,8 @@ export interface Game {
   live?: boolean;
   /** When false, leaderboard UI, RTDB paths, and score APIs are disabled. Defaults to true. */
   hasLeaderboard?: boolean;
+  /** Display order on the home page (lower = earlier). Set via admin drag-and-drop. */
+  sortOrder?: number;
   createdAt: number;
 }
 

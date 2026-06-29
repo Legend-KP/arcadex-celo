@@ -8,9 +8,11 @@ import {
   fetchAdminGames,
   hasAdminSession,
   loginAdmin,
+  reorderAdminGames,
   saveAdminSession,
   updateAdminGame,
 } from "@/lib/admin-api";
+import { sortGames } from "@/lib/game-sort";
 import { Game, gameHasLeaderboard, gameIsLive } from "@/types";
 import Logo from "@/components/Logo";
 
@@ -46,6 +48,10 @@ export default function AdminPortal() {
   const [editLive, setEditLive] = useState(true);
   const [editSaving, setEditSaving] = useState(false);
 
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
+
   async function handleLogin() {
     setPwLoading(true);
     setPwError(false);
@@ -76,7 +82,7 @@ export default function AdminPortal() {
     setLoading(true);
     try {
       const g = await fetchAdminGames();
-      setGames(g);
+      setGames(sortGames(g));
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : "Could not load games."
@@ -204,6 +210,76 @@ export default function AdminPortal() {
     } finally {
       setEditSaving(false);
     }
+  }
+
+  function reorderLocalGames(fromId: string, toId: string) {
+    if (fromId === toId) return games;
+
+    const fromIndex = games.findIndex((g) => g.id === fromId);
+    const toIndex = games.findIndex((g) => g.id === toId);
+    if (fromIndex < 0 || toIndex < 0) return games;
+
+    const next = [...games];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    return next;
+  }
+
+  async function persistGameOrder(orderedGames: Game[]) {
+    setReordering(true);
+    try {
+      await reorderAdminGames(orderedGames.map((g) => g.id));
+      setGames(orderedGames);
+      showToast("Game order saved!");
+    } catch (err) {
+      await refresh();
+      showToast(
+        err instanceof Error ? err.message : "Failed to save game order."
+      );
+    } finally {
+      setReordering(false);
+    }
+  }
+
+  function handleDragStart(e: React.DragEvent, id: string) {
+    if (editingId || reordering) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", id);
+    setDragId(id);
+  }
+
+  function handleDragOver(e: React.DragEvent, id: string) {
+    if (!dragId || dragId === id || editingId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropTargetId(id);
+  }
+
+  function handleDragLeave(id: string) {
+    setDropTargetId((current) => (current === id ? null : current));
+  }
+
+  async function handleDrop(e: React.DragEvent, toId: string) {
+    e.preventDefault();
+    const fromId = e.dataTransfer.getData("text/plain") || dragId;
+    setDropTargetId(null);
+    setDragId(null);
+
+    if (!fromId || fromId === toId || editingId || reordering) return;
+
+    const next = reorderLocalGames(fromId, toId);
+    if (next === games) return;
+
+    setGames(next);
+    await persistGameOrder(next);
+  }
+
+  function handleDragEnd() {
+    setDragId(null);
+    setDropTargetId(null);
   }
 
   if (!authed) {
@@ -364,6 +440,12 @@ export default function AdminPortal() {
         </div>
 
         <h2 className="admin-section-title">Manage Games ({games.length})</h2>
+        {!loading && games.length > 1 && (
+          <p className="admin-reorder-hint">
+            Drag the handle on each row to change the order shown on the home page.
+            {reordering ? " Saving…" : ""}
+          </p>
+        )}
         {loading ? (
           <p className="admin-loading">Loading...</p>
         ) : (
@@ -472,8 +554,24 @@ export default function AdminPortal() {
               ) : (
                 <div
                   key={g.id}
-                  className={`admin-game-row ${!g.active ? "inactive" : ""}`}
+                  className={`admin-game-row ${!g.active ? "inactive" : ""} ${
+                    dragId === g.id ? "dragging" : ""
+                  } ${dropTargetId === g.id ? "drop-target" : ""}`}
+                  onDragOver={(e) => handleDragOver(e, g.id)}
+                  onDragLeave={() => handleDragLeave(g.id)}
+                  onDrop={(e) => handleDrop(e, g.id)}
                 >
+                  <button
+                    type="button"
+                    className="drag-handle"
+                    aria-label={`Drag to reorder ${g.name}`}
+                    draggable={!editingId && !reordering}
+                    disabled={!!editingId || reordering}
+                    onDragStart={(e) => handleDragStart(e, g.id)}
+                    onDragEnd={handleDragEnd}
+                  >
+                    ⠿
+                  </button>
                   <div className="admin-thumb">
                     {g.thumbnail ? (
                       // eslint-disable-next-line @next/next/no-img-element

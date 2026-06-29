@@ -1638,6 +1638,11 @@ a { color: inherit; text-decoration: none; }
 .admin-loading { color: var(--muted); padding: 24px 0; font-size: 14px; }
 
 .admin-game-list { display: flex; flex-direction: column; gap: 10px; }
+.admin-reorder-hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: -4px 0 12px;
+}
 .admin-game-row {
   background: var(--surface);
   border-radius: 12px;
@@ -1646,8 +1651,39 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: 12px;
   border: 1px solid var(--border);
-  transition: opacity 0.2s;
+  transition: opacity 0.2s, border-color 0.15s, box-shadow 0.15s;
   box-shadow: var(--shadow);
+}
+.admin-game-row.dragging { opacity: 0.45; }
+.admin-game-row.drop-target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+.drag-handle {
+  flex-shrink: 0;
+  width: 28px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+  transition: color 0.15s, background 0.15s;
+}
+.drag-handle:hover:not(:disabled) {
+  color: var(--accent);
+  background: rgba(59, 130, 246, 0.12);
+}
+.drag-handle:active:not(:disabled) { cursor: grabbing; }
+.drag-handle:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 .admin-game-row.inactive { opacity: 0.45; }
 
