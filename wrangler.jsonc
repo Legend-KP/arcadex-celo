@@ -2,7 +2,11 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",
   "name": "arcadex-celo",
+<<<<<<< HEAD
   "compatibility_date": "2026-01-01",
+=======
+  "compatibility_date": "2025-05-05",
+>>>>>>> b8129f25e74aab2e86969e173c24952c56aea7f3
   "compatibility_flags": [
     "nodejs_compat",
     "global_fetch_strictly_public"
