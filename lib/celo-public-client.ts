@@ -14,7 +14,14 @@ const publicClientConfig = {
   cacheTime: 0,
 } as const;
 
-type CeloPublicClient = ReturnType<typeof createPublicClient>;
+function createFornoClient() {
+  return createPublicClient({
+    ...publicClientConfig,
+    transport: http(CELO_RPC_URL),
+  });
+}
+
+type CeloPublicClient = ReturnType<typeof createFornoClient>;
 
 function createBrowserPublicClient(): CeloPublicClient {
   if (typeof window !== "undefined" && isMiniPay()) {
@@ -23,14 +30,11 @@ function createBrowserPublicClient(): CeloPublicClient {
       return createPublicClient({
         ...publicClientConfig,
         transport: custom(provider),
-      });
+      }) as unknown as CeloPublicClient;
     }
   }
 
-  return createPublicClient({
-    ...publicClientConfig,
-    transport: http(CELO_RPC_URL),
-  });
+  return createFornoClient();
 }
 
 let browserClient: CeloPublicClient | null = null;
@@ -42,10 +46,7 @@ export function getCeloPublicClient(): CeloPublicClient {
     return browserClient;
   }
 
-  return createPublicClient({
-    ...publicClientConfig,
-    transport: http(CELO_RPC_URL),
-  });
+  return createFornoClient();
 }
 
 /** Reset cached browser client (e.g. after RPC "block is out of range"). */
@@ -59,20 +60,22 @@ export function isBlockOutOfRangeError(error: unknown): boolean {
   return message.includes("block is out of range");
 }
 
+type ReadContractParams = Parameters<CeloPublicClient["readContract"]>[0];
+
 export async function readCeloContract(
-  params: Parameters<CeloPublicClient["readContract"]>[0]
-): Promise<Awaited<ReturnType<CeloPublicClient["readContract"]>>> {
-  try {
-    return await getCeloPublicClient().readContract({
+  params: ReadContractParams
+): Promise<bigint> {
+  const read = () =>
+    getCeloPublicClient().readContract({
       ...params,
       blockTag: "latest",
     });
+
+  try {
+    return (await read()) as bigint;
   } catch (error) {
     if (!isBlockOutOfRangeError(error)) throw error;
     resetCeloPublicClient();
-    return getCeloPublicClient().readContract({
-      ...params,
-      blockTag: "latest",
-    });
+    return (await read()) as bigint;
   }
 }
