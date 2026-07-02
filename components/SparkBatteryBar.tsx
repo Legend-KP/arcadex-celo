@@ -14,6 +14,17 @@ export default function SparkBatteryBar() {
   const [refilling, setRefilling] = useState(false);
   const [purchaseError, setPurchaseError] = useState("");
   const [refillError, setRefillError] = useState("");
+  const [successMessage, setSuccessMessage] = useState<{
+    title: string;
+    body: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!successMessage) return;
+
+    const id = window.setTimeout(() => setSuccessMessage(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [successMessage]);
 
   useEffect(() => {
     if (!open) return;
@@ -47,6 +58,10 @@ export default function SparkBatteryBar() {
     setPurchasing(true);
     try {
       await purchaseInfiniteSpark();
+      setSuccessMessage({
+        title: "Purchase successful!",
+        body: "Infinite Spark is active for 24 hours. Play any game freely!",
+      });
     } catch (err) {
       setPurchaseError(
         err instanceof Error ? err.message : "Could not purchase Infinite Spark."
@@ -61,6 +76,10 @@ export default function SparkBatteryBar() {
     setRefilling(true);
     try {
       await purchaseSparkRefill();
+      setSuccessMessage({
+        title: "Purchase successful!",
+        body: "Your Spark bar is full. You're ready to play!",
+      });
     } catch (err) {
       setRefillError(
         err instanceof Error ? err.message : "Could not purchase Spark Refill."
@@ -270,6 +289,41 @@ export default function SparkBatteryBar() {
     </div>
   ) : null;
 
+  const successPopup =
+    successMessage && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="spark-success-backdrop"
+            role="presentation"
+            onClick={() => setSuccessMessage(null)}
+          >
+            <div
+              className="spark-success-popup"
+              role="alertdialog"
+              aria-live="polite"
+              aria-labelledby="spark-success-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className="spark-success-popup__icon" aria-hidden>
+                ✓
+              </span>
+              <h3 id="spark-success-title" className="spark-success-popup__title">
+                {successMessage.title}
+              </h3>
+              <p className="spark-success-popup__body">{successMessage.body}</p>
+              <button
+                type="button"
+                className="spark-success-popup__btn"
+                onClick={() => setSuccessMessage(null)}
+              >
+                Great!
+              </button>
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
     <>
       <div className="spark-battery-wrap">
@@ -303,6 +357,8 @@ export default function SparkBatteryBar() {
       {typeof document !== "undefined" && panel
         ? createPortal(panel, document.body)
         : panel}
+
+      {successPopup}
     </>
   );
 }
