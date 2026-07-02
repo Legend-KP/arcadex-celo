@@ -85,7 +85,7 @@ export default function GameMenu({
             <img
               src={fallbackSrc}
               alt={game.name}
-              className="game-menu-logo"
+              className="game-menu-logo game-menu-logo--fallback"
               onError={() => setFallbackIdx((i) => i + 1)}
             />
           ) : (
