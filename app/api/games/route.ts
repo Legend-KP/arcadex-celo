@@ -16,17 +16,16 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    const games = await fetchGamesFromServer();
+    const [games, playCounts] = await Promise.all([
+      fetchGamesFromServer(),
+      fetchAllGamePlayCounts().catch(
+        () => ({}) as Record<string, number>
+      ),
+    ]);
+
     const visible = verifyAdminRequest(request)
       ? games
       : games.filter(isGameVisible);
-
-    let playCounts: Record<string, number> = {};
-    try {
-      playCounts = await fetchAllGamePlayCounts();
-    } catch {
-      // Play counts are optional; games still load without them.
-    }
 
     return NextResponse.json({ games: visible, playCounts });
   } catch (err) {

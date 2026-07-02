@@ -1,12 +1,4 @@
-"use client";
-
-import dynamic from "next/dynamic";
-import LoadingScreen from "@/components/LoadingScreen";
-
-const HomePage = dynamic(() => import("@/components/HomePage"), {
-  ssr: false,
-  loading: () => <LoadingScreen />,
-});
+import HomePage from "@/components/HomePage";
 
 export default function Page() {
   return <HomePage />;

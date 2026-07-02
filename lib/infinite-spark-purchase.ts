@@ -1,11 +1,9 @@
-import {
-  createPublicClient,
-  formatUnits,
-  http,
-  type Address,
-  type Hash,
-} from "viem";
+import { formatUnits, type Address, type Hash } from "viem";
 import { celo } from "viem/chains";
+import {
+  getCeloPublicClient,
+  readCeloContract,
+} from "@/lib/celo-public-client";
 import { createMiniPayWalletClient } from "@/lib/minipay";
 import {
   CELO_USDC_ADDRESS,
@@ -19,13 +17,8 @@ import {
   tokenFeeCurrency,
 } from "@/lib/infinite-spark";
 
-const publicClient = createPublicClient({
-  chain: celo,
-  transport: http("https://forno.celo.org"),
-});
-
 async function readBalance(token: Address, account: Address): Promise<bigint> {
-  return publicClient.readContract({
+  return readCeloContract({
     address: token,
     abi: ERC20_ABI,
     functionName: "balanceOf",
@@ -65,7 +58,7 @@ export async function purchaseInfiniteSparkOnChain(): Promise<{
     throw new Error("No wallet account available.");
   }
 
-  const fee = await publicClient.readContract({
+  const fee = await readCeloContract({
     address: INFINITE_SPARK_CONTRACT_ADDRESS,
     abi: INFINITE_SPARK_ABI,
     functionName: "fee",
@@ -75,12 +68,14 @@ export async function purchaseInfiniteSparkOnChain(): Promise<{
   const tokenAddr = tokenAddress(token);
   const feeCurrency = tokenFeeCurrency(token);
 
-  const allowance = await publicClient.readContract({
+  const allowance = await readCeloContract({
     address: tokenAddr,
     abi: ERC20_ABI,
     functionName: "allowance",
     args: [account, INFINITE_SPARK_CONTRACT_ADDRESS],
   });
+
+  const publicClient = getCeloPublicClient();
 
   if (allowance < fee) {
     const approveHash = await walletClient.writeContract({

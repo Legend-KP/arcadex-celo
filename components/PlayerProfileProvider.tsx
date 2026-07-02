@@ -12,7 +12,6 @@ import {
 import PlayerNameModal from "@/components/PlayerNameModal";
 import {
   bootstrapPlayerProfile,
-  fetchPlayerProfile,
   savePlayerProfile,
 } from "@/lib/player-profile-client";
 import {
@@ -26,7 +25,6 @@ import {
   readWalletImmediately,
   resolveWalletForSave,
   resolveWalletOnAppOpen,
-  retryResolveWallet,
 } from "@/lib/walletAuth";
 import {
   isWalletAddress,
@@ -76,7 +74,9 @@ export default function PlayerProfileProvider({
 }) {
   const [playerId, setPlayerId] = useState("");
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
-  const [walletAddress, setWalletAddress] = useState("");
+  const [walletAddress, setWalletAddress] = useState(
+    () => getCachedWallet() ?? ""
+  );
   const [isReady, setIsReady] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -90,11 +90,7 @@ export default function PlayerProfileProvider({
       const immediate = readWalletImmediately();
       if (immediate) return immediate;
 
-      let wallet = await resolveWalletOnAppOpen();
-      if (!wallet) {
-        wallet = await retryResolveWallet();
-      }
-      return wallet;
+      return resolveWalletOnAppOpen();
     }
 
     async function loadProfile() {
@@ -102,7 +98,14 @@ export default function PlayerProfileProvider({
       clearStaleGuestId();
       setError("");
 
-      const wallet = await resolveWallet();
+      const cached = getCachedWallet();
+      if (cached) {
+        setCachedWallet(cached);
+        setWalletAddress(cached);
+        setPlayerId(cached);
+      }
+
+      const wallet = (await resolveWallet()) ?? cached;
       if (cancelled) return;
 
       if (!wallet) {
@@ -117,14 +120,7 @@ export default function PlayerProfileProvider({
       setPlayerId(wallet);
 
       try {
-        let user = await bootstrapPlayerProfile(wallet);
-        if (cancelled) return;
-
-        if (!hasPlayerName(user)) {
-          clearCachedPlayerName();
-          const fresh = await fetchPlayerProfile(wallet);
-          if (fresh) user = fresh;
-        }
+        const user = await bootstrapPlayerProfile(wallet);
         if (cancelled) return;
 
         setProfile(user);

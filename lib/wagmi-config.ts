@@ -10,7 +10,7 @@ export const wagmiConfig = createConfig({
     }),
   ],
   transports: {
-    [celo.id]: http(),
+    [celo.id]: http("https://forno.celo.org"),
   },
   ssr: true,
 });

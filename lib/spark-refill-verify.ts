@@ -1,12 +1,9 @@
 import {
-  createPublicClient,
   decodeEventLog,
   getAddress,
-  http,
   type Address,
   type Hash,
 } from "viem";
-import { celo } from "viem/chains";
 import {
   CELO_USDC_ADDRESS,
   CELO_USDT_ADDRESS,
@@ -14,11 +11,9 @@ import {
   SPARK_REFILL_CONTRACT_ADDRESS,
   type SparkRefillPaymentToken,
 } from "@/lib/spark-refill";
+import { getCeloPublicClient } from "@/lib/celo-public-client";
 
-const publicClient = createPublicClient({
-  chain: celo,
-  transport: http("https://forno.celo.org"),
-});
+const publicClient = getCeloPublicClient();
 
 export interface VerifiedSparkRefillPayment {
   player: Address;

@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Game } from "@/types";
 import GameCard from "@/components/GameCard";
-import LoadingScreen from "@/components/LoadingScreen";
 import Logo from "@/components/Logo";
 import SparkBatteryBar from "@/components/SparkBatteryBar";
 
@@ -42,10 +41,8 @@ export default function HomePage() {
 
         if (cancelled) return;
 
-        const active = data.games ?? [];
-        setGames(active);
+        setGames(data.games ?? []);
         setPlayCounts(data.playCounts ?? {});
-        setLoading(false);
       } catch (err) {
         if (cancelled) return;
         setError(
@@ -53,7 +50,8 @@ export default function HomePage() {
             ? err.message
             : "Could not load games. Check your Firebase configuration."
         );
-        setLoading(false);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -62,10 +60,6 @@ export default function HomePage() {
       cancelled = true;
     };
   }, []);
-
-  if (loading) {
-    return <LoadingScreen />;
-  }
 
   return (
     <div className="home">
@@ -77,6 +71,12 @@ export default function HomePage() {
 
         {error ? (
           <p className="no-games">{error}</p>
+        ) : loading ? (
+          <div className="games-grid games-grid--loading" aria-busy="true" aria-label="Loading games">
+            {Array.from({ length: 4 }, (_, i) => (
+              <div key={i} className="game-card-skeleton" aria-hidden />
+            ))}
+          </div>
         ) : games.length === 0 ? (
           <p className="no-games">No games yet. Check back soon!</p>
         ) : (

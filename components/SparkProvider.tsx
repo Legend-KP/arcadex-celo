@@ -39,7 +39,7 @@ export default function SparkProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { walletAddress, isReady } = usePlayerProfile();
+  const { walletAddress } = usePlayerProfile();
   const [state, setState] = useState<StoredSparkState>(
     () => localSparkData().state
   );
@@ -91,17 +91,17 @@ export default function SparkProvider({
   }, [walletAddress]);
 
   useEffect(() => {
-    if (!isReady) return;
+    if (!walletAddress) {
+      setState(localSparkData().state);
+      setLoading(false);
+      return;
+    }
 
     let cancelled = false;
 
     async function load() {
       setLoading(true);
       try {
-        if (!walletAddress) {
-          if (!cancelled) setState(localSparkData().state);
-          return;
-        }
         const data = await fetchSparkData(walletAddress);
         if (!cancelled) setState(coerceSparkState(data.state));
       } catch {
@@ -115,17 +115,17 @@ export default function SparkProvider({
     return () => {
       cancelled = true;
     };
-  }, [isReady, walletAddress]);
+  }, [walletAddress]);
 
   useEffect(() => {
-    if (!isReady) return;
+    if (!walletAddress) return;
 
     const id = window.setInterval(() => {
       setState((prev) => normalizeSparkState(prev));
     }, 1000);
 
     return () => window.clearInterval(id);
-  }, [isReady]);
+  }, [walletAddress]);
 
   const value = useMemo(
     () => ({

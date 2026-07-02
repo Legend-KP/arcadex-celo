@@ -100,7 +100,7 @@ export async function resolveWalletOnAppOpen(): Promise<string | null> {
   const immediate = await readAddressFromProvider();
   if (immediate) return cacheWallet(immediate);
 
-  const fromProvider = await waitForProviderWallet(2000);
+    const fromProvider = await waitForProviderWallet(1200);
   if (fromProvider) return cacheWallet(fromProvider);
 
   return null;
@@ -114,7 +114,7 @@ export async function retryResolveWallet(): Promise<string | null> {
   const immediate = await readAddressFromProvider();
   if (immediate) return cacheWallet(immediate);
 
-  const fromProvider = await waitForProviderWallet(2000);
+    const fromProvider = await waitForProviderWallet(1200);
   return fromProvider ? cacheWallet(fromProvider) : null;
 }
 
