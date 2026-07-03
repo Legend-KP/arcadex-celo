@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSparks } from "@/components/SparkProvider";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
@@ -18,6 +18,13 @@ export default function SparkBatteryBar() {
     title: string;
     body: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (sessionStorage.getItem("openSparkPanel") === "1") {
+      sessionStorage.removeItem("openSparkPanel");
+      setOpen(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -44,14 +51,6 @@ export default function SparkBatteryBar() {
   }, [open]);
 
   const isFull = sparks.available >= sparks.max;
-
-  const regeneratingSlots = useMemo(
-    () =>
-      sparks.slots.filter(
-        (slot) => slot.status === "regenerating" && slot.timeRemainingMs > 0
-      ),
-    [sparks.slots]
-  );
 
   async function handlePurchaseInfiniteSpark() {
     setPurchaseError("");
@@ -174,38 +173,8 @@ export default function SparkBatteryBar() {
               ))}
             </div>
 
-            {isFull ? (
+            {isFull && (
               <span className="spark-panel__badge">All Sparks are full! ✦</span>
-            ) : regeneratingSlots.length === 1 ? (
-              <div className="spark-panel__timer-box">
-                <div className="spark-panel__timer-row">
-                  <span className="spark-panel__timer-icon" aria-hidden>
-                    ⏱
-                  </span>
-                  <p className="spark-panel__timer-label">
-                    Refills in{" "}
-                    <strong>
-                      {formatSparkCountdown(regeneratingSlots[0].timeRemainingMs)}
-                    </strong>
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="spark-panel__timer-box">
-                <div className="spark-panel__timer-row">
-                  <span className="spark-panel__timer-icon" aria-hidden>
-                    ⏱
-                  </span>
-                  <p className="spark-panel__timer-label">
-                    Next Spark in{" "}
-                    <strong>{formatSparkCountdown(sparks.timeToNextMs)}</strong>
-                  </p>
-                </div>
-                <p className="spark-panel__timer-sub">
-                  All Sparks ready in{" "}
-                  <strong>{formatSparkCountdown(sparks.timeToFullMs)}</strong>
-                </p>
-              </div>
             )}
 
             <p className="spark-panel__info">

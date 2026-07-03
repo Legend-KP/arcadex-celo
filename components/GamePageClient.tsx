@@ -7,9 +7,9 @@ import GameClient from "@/components/GameClient";
 import GameMenu from "@/components/GameMenu";
 import Leaderboard from "@/components/Leaderboard";
 import LoadingScreen from "@/components/LoadingScreen";
+import NoSparksModal from "@/components/NoSparksModal";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { useSparks } from "@/components/SparkProvider";
-import { formatSparkDuration } from "@/lib/spark";
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +23,7 @@ export default function GamePageClient() {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
   const [sparkError, setSparkError] = useState("");
+  const [noSparksOpen, setNoSparksOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +73,7 @@ export default function GamePageClient() {
     }
 
     if (!sparks.hasInfinite && sparks.available === 0) {
-      setSparkError("No Sparks available. Wait for a refill.");
+      setNoSparksOpen(true);
       return;
     }
 
@@ -117,10 +118,11 @@ export default function GamePageClient() {
     );
   }
 
-  const sparkWaitLabel =
-    !sparks.hasInfinite && sparks.timeToFullMs > 0
-      ? formatSparkDuration(sparks.timeToFullMs)
-      : null;
+  function handleGetSpark() {
+    setNoSparksOpen(false);
+    sessionStorage.setItem("openSparkPanel", "1");
+    router.push("/");
+  }
 
   return (
     <>
@@ -131,7 +133,6 @@ export default function GamePageClient() {
           onLeaderboard={() => setLbOpen(true)}
           starting={starting}
           sparkError={sparkError}
-          sparkWaitLabel={sparkWaitLabel}
         />
       ) : (
         <GameClient game={game} />
@@ -144,6 +145,11 @@ export default function GamePageClient() {
           onClose={() => setLbOpen(false)}
         />
       )}
+      <NoSparksModal
+        open={noSparksOpen}
+        onClose={() => setNoSparksOpen(false)}
+        onGetSpark={handleGetSpark}
+      />
     </>
   );
 }

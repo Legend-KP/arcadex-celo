@@ -11,7 +11,6 @@ interface GameMenuProps {
   onLeaderboard: () => void;
   starting?: boolean;
   sparkError?: string;
-  sparkWaitLabel?: string | null;
 }
 
 export default function GameMenu({
@@ -20,7 +19,6 @@ export default function GameMenu({
   onLeaderboard,
   starting = false,
   sparkError,
-  sparkWaitLabel,
 }: GameMenuProps) {
   const router = useRouter();
 
@@ -107,12 +105,6 @@ export default function GameMenu({
           {sparkError && (
             <p className="game-menu-spark-error" role="alert">
               {sparkError}
-              {sparkWaitLabel && (
-                <>
-                  {" "}
-                  Full in <strong>{sparkWaitLabel}</strong>
-                </>
-              )}
             </p>
           )}
           {gameHasLeaderboard(game) && (
