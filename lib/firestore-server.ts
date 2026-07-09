@@ -39,6 +39,7 @@ function docToGame(doc: FirestoreDocument): Game {
     active: parseField(fields.active) !== false,
     live: parseField(fields.live) !== false,
     hasLeaderboard: parseField(fields.hasLeaderboard) !== false,
+    contestLive: parseField(fields.contestLive) === true,
     sortOrder: parseField(fields.sortOrder) as number | undefined,
     createdAt: Number(parseField(fields.createdAt) ?? 0),
   };

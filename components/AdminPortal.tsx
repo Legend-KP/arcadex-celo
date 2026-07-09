@@ -172,8 +172,10 @@ export default function AdminPortal() {
 
   async function handleToggleContest(game: Game) {
     try {
-      await updateAdminGame(game.id, { contestLive: !gameContestLive(game) });
+      const next = !gameContestLive(game);
+      await updateAdminGame(game.id, { contestLive: next });
       await refresh();
+      showToast(next ? "Contest started! 🔥" : "Contest ended.");
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : "Failed to update game."
