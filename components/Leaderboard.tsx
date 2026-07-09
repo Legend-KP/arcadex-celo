@@ -7,6 +7,7 @@ import {
   submitPaidScore,
 } from "@/lib/leaderboard-client";
 import { purchaseScoreSubmitOnChain } from "@/lib/score-submit-purchase";
+import { useResolvedWallet } from "@/lib/use-resolved-wallet";
 
 interface LeaderboardProps {
   gameId: string;
@@ -32,6 +33,7 @@ export default function Leaderboard({
   onClose,
   onSubmitted,
 }: LeaderboardProps) {
+  const resolvedWallet = useResolvedWallet(walletAddress);
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [personalBest, setPersonalBest] = useState(0);
   const [submittedBest, setSubmittedBest] = useState(0);
@@ -47,7 +49,7 @@ export default function Leaderboard({
     setSubmitError("");
     try {
       const status = await getLeaderboardStatus(gameId, {
-        walletAddress: walletAddress || undefined,
+        walletAddress: resolvedWallet || undefined,
         playerName: playerName || undefined,
       });
       setEntries(status.entries.slice(0, LEADERBOARD_MAX_ENTRIES));
@@ -60,7 +62,7 @@ export default function Leaderboard({
     } finally {
       setLoading(false);
     }
-  }, [gameId, walletAddress, playerName]);
+  }, [gameId, resolvedWallet, playerName]);
 
   useEffect(() => {
     if (!open) return;
@@ -69,7 +71,7 @@ export default function Leaderboard({
   }, [open, loadLeaderboard]);
 
   const handleSubmitScore = async () => {
-    if (!walletAddress || submitting || !canSubmit) return;
+    if (!resolvedWallet || submitting || !canSubmit) return;
 
     if (!playerName.trim()) {
       setSubmitError("Set your player name before submitting.");
@@ -83,7 +85,7 @@ export default function Leaderboard({
     try {
       const { txHash } = await purchaseScoreSubmitOnChain();
       const result = await submitPaidScore(gameId, {
-        walletAddress,
+        walletAddress: resolvedWallet,
         txHash,
         playerName: playerName.trim(),
       });
@@ -150,7 +152,7 @@ export default function Leaderboard({
           </button>
         </div>
 
-        {walletAddress && canSubmit && (
+        {resolvedWallet && canSubmit && (
           <div className="lb-submit-wrap">
             <button
               type="button"
@@ -195,7 +197,7 @@ export default function Leaderboard({
             ))}
         </div>
 
-        {walletAddress && personalBest > 0 && (
+        {resolvedWallet && personalBest > 0 && (
           <p className="lb-personal-note">
             Your best: {personalBest.toLocaleString()}
             {submittedBest > 0 && submittedBest !== personalBest
