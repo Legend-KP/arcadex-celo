@@ -28,6 +28,8 @@ export interface Game {
   live?: boolean;
   /** When false, leaderboard UI, RTDB paths, and score APIs are disabled. Defaults to true. */
   hasLeaderboard?: boolean;
+  /** When true, shows contest badge on home page and banner on leaderboard. */
+  contestLive?: boolean;
   /** Display order on the home page (lower = earlier). Set via admin drag-and-drop. */
   sortOrder?: number;
   createdAt: number;
@@ -39,6 +41,10 @@ export function gameHasLeaderboard(game: Pick<Game, "hasLeaderboard">): boolean 
 
 export function gameIsLive(game: Pick<Game, "live">): boolean {
   return game.live !== false;
+}
+
+export function gameContestLive(game: Pick<Game, "contestLive">): boolean {
+  return game.contestLive === true;
 }
 
 /**

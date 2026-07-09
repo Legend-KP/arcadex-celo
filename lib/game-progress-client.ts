@@ -34,7 +34,9 @@ export async function saveGameProgress(
   walletAddress: string,
   value: number,
   opts?: { playerName?: string }
-): Promise<GameProgressResponse & { success: boolean }> {
+): Promise<
+  GameProgressResponse & { success: boolean; newPersonalBest?: boolean }
+> {
   const res = await fetch(`/api/games/${gameId}/progress`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -50,6 +52,7 @@ export async function saveGameProgress(
 
   const data = (await res.json()) as GameProgressResponse & {
     success?: boolean;
+    newPersonalBest?: boolean;
     error?: string;
   };
 
@@ -61,5 +64,6 @@ export async function saveGameProgress(
     success: data.success ?? true,
     progress: data.progress ?? {},
     hasLeaderboard: data.hasLeaderboard ?? true,
+    newPersonalBest: data.newPersonalBest === true,
   };
 }

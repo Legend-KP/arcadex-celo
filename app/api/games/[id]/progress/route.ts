@@ -114,7 +114,12 @@ export async function POST(
       { playerName: body.playerName ?? body.name }
     );
 
-    return corsJsonResponse(request, { success: true, progress, hasLeaderboard });
+    return corsJsonResponse(request, {
+      success: true,
+      progress,
+      hasLeaderboard,
+      newPersonalBest: progress.newPersonalBest === true,
+    });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to save game progress.";

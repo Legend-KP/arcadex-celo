@@ -251,7 +251,7 @@ export default function SparkBatteryBar() {
 
           <p className="spark-panel__shop-note">
             <span aria-hidden>🛡</span> Infinite Spark removes the entry gate
-            only. Weekly leaderboard attempt limits still apply.
+            only.
           </p>
         </section>
       </div>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import ExitGameModal from "@/components/ExitGameModal";
 import LoadingScreen from "@/components/LoadingScreen";
 import { sendToUnity, UnityMessage } from "@/lib/bridge";
-import { getLeaderboard, submitScore } from "@/lib/firebase";
+import { getLeaderboard } from "@/lib/firebase";
 import { getGameProgress, saveGameProgress } from "@/lib/game-progress-client";
 import { buildGameIframeUrl, getShellOrigin } from "@/lib/game-iframe-url";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
@@ -15,12 +15,13 @@ import { Game, gameHasLeaderboard } from "@/types";
 
 interface GameClientProps {
   game: Game;
+  onNewHighScore?: () => void;
 }
 
 const GAME_LOAD_FALLBACK_MS = 12000;
 const PROGRESS_RETRY_DELAYS_MS = [0, 600, 1500, 3000] as const;
 
-export default function GameClient({ game }: GameClientProps) {
+export default function GameClient({ game, onNewHighScore }: GameClientProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const loadFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
@@ -184,27 +185,41 @@ export default function GameClient({ game }: GameClientProps) {
           };
           const resolvedWallet =
             walletAddress || payloadWallet || profile?.walletAddress;
+          if (!resolvedWallet) {
+            sendToUnity(iframeRef, "OnScoreSubmitted", {
+              success: false,
+              error: "No wallet address available.",
+            });
+            break;
+          }
           if (payloadWallet && payloadWallet !== profile?.walletAddress) {
             updateWalletAddress(payloadWallet).catch(() => {
               // Wallet sync is best-effort
             });
           }
-          const personalBest = await submitScore(game.id, {
-            name: playerName || name,
-            score,
-            walletAddress: resolvedWallet,
-          });
-          if (resolvedWallet) {
-            saveGameProgress(game.id, resolvedWallet, score, {
-              playerName: playerName || name,
-            }).catch(() => {
-              // User-node sync is best-effort
+          try {
+            const result = await saveGameProgress(
+              game.id,
+              resolvedWallet,
+              score,
+              { playerName: playerName || name }
+            );
+            if (result.newPersonalBest) {
+              onNewHighScore?.();
+            }
+            sendToUnity(iframeRef, "OnScoreSubmitted", {
+              success: true,
+              highScore: result.progress.score ?? score,
+            });
+          } catch (err) {
+            sendToUnity(iframeRef, "OnScoreSubmitted", {
+              success: false,
+              error:
+                err instanceof Error
+                  ? err.message
+                  : "Could not save score.",
             });
           }
-          sendToUnity(iframeRef, "OnScoreSubmitted", {
-            success: true,
-            highScore: personalBest,
-          });
           break;
         }
 
@@ -277,6 +292,9 @@ export default function GameClient({ game }: GameClientProps) {
             const result = await saveGameProgress(game.id, wallet, progressValue, {
               playerName: playerName || profile?.name || undefined,
             });
+            if (leaderboardEnabled && result.newPersonalBest) {
+              onNewHighScore?.();
+            }
             sendToUnity(iframeRef, "OnProgressSaved", {
               success: true,
               ...(leaderboardEnabled
@@ -311,6 +329,7 @@ export default function GameClient({ game }: GameClientProps) {
       updateWalletAddress,
       markGameReady,
       scheduleProgressRetries,
+      onNewHighScore,
     ]
   );
 

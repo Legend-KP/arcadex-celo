@@ -17,6 +17,7 @@ import {
   verifyInfiniteSparkPaymentTx,
 } from "@/lib/infinite-spark-verify";
 import { verifySparkRefillPaymentTx } from "@/lib/spark-refill-verify";
+import { verifyScoreSubmitPaymentTx } from "@/lib/score-submit-verify";
 import type { Hash } from "viem";
 import { getDatabaseUrl } from "./firebase-admin";
 import {
@@ -296,8 +297,27 @@ export class SparkRefillActivationError extends Error {
   }
 }
 
+export class ScoreSubmitActivationError extends Error {
+  constructor(
+    message: string,
+    public readonly code:
+      | "NO_WALLET"
+      | "INVALID_TX"
+      | "TX_ALREADY_USED"
+      | "SCORE_NOT_ELIGIBLE"
+      | "NO_NAME"
+  ) {
+    super(message);
+    this.name = "ScoreSubmitActivationError";
+  }
+}
+
 function sparkPaymentPath(txHash: string): string {
   return `sparkPayments/${txHash.toLowerCase()}`;
+}
+
+function scorePaymentPath(txHash: string): string {
+  return `scorePayments/${txHash.toLowerCase()}`;
 }
 
 export async function spendSparkOnServer(
@@ -525,7 +545,7 @@ export async function fetchLeaderboardFromServer(
     .slice(0, limit);
 }
 
-export async function fetchUserBestScoreFromServer(
+export async function fetchUserSubmittedScoreFromServer(
   gameId: string,
   opts: { walletAddress?: string; playerName?: string }
 ): Promise<number> {
@@ -549,6 +569,23 @@ export async function fetchUserBestScoreFromServer(
   }
 
   return best;
+}
+
+/** @deprecated Use fetchUserSubmittedScoreFromServer */
+export async function fetchUserBestScoreFromServer(
+  gameId: string,
+  opts: { walletAddress?: string; playerName?: string }
+): Promise<number> {
+  return fetchUserSubmittedScoreFromServer(gameId, opts);
+}
+
+export async function fetchPersonalBestFromServer(
+  walletAddress: string,
+  gameId: string
+): Promise<number> {
+  if (!isWalletAddress(walletAddress)) return 0;
+  const stored = await fetchGameProgressFromServer(walletAddress, gameId);
+  return stored?.s ?? 0;
 }
 
 export async function submitLeaderboardEntryOnServer(
@@ -602,73 +639,18 @@ export async function fetchGameProgressFromServer(
 }
 
 /**
- * Resolves progress for API / bootstrap. Score games use max(user `s`, leaderboard best)
- * and sync leaderboard → user node when the leaderboard is ahead.
+ * Resolves personal progress for API / bootstrap. Does not sync to the public leaderboard.
  */
 export async function resolveGameProgressFromServer(
   walletAddress: string,
   gameId: string,
   hasLeaderboard: boolean,
-  opts?: { playerName?: string }
+  _opts?: { playerName?: string }
 ): Promise<GameProgress> {
   if (!isWalletAddress(walletAddress)) return {};
 
   const stored = await fetchGameProgressFromServer(walletAddress, gameId);
-
-  if (!hasLeaderboard) {
-    return storedProgressToGameProgress(stored, false);
-  }
-
-  const userScore = stored?.s ?? 0;
-  const wallet = normalizeWalletAddress(walletAddress);
-  const leaderboardBest = await fetchUserBestScoreFromServer(gameId, {
-    walletAddress: wallet,
-    playerName: opts?.playerName,
-  });
-
-  if (userScore > leaderboardBest) {
-    await syncLeaderboardFromScoreOnServer(gameId, wallet, userScore, {
-      playerName: opts?.playerName,
-    });
-  }
-
-  const score = Math.max(userScore, leaderboardBest);
-
-  if (score > userScore) {
-    await saveGameProgressOnServer(wallet, gameId, score, true, {
-      playerName: opts?.playerName,
-    });
-  }
-
-  return score > 0 ? { score } : storedProgressToGameProgress(stored, true);
-}
-
-function resolveLeaderboardPlayerName(
-  wallet: string,
-  playerName?: string,
-  profileName?: string
-): string {
-  const trimmed = playerName?.trim() || profileName?.trim();
-  if (trimmed) return trimmed;
-  return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
-}
-
-async function syncLeaderboardFromScoreOnServer(
-  gameId: string,
-  wallet: string,
-  score: number,
-  opts?: { playerName?: string }
-): Promise<void> {
-  const profile = await fetchUserFromServer(wallet);
-  await submitLeaderboardEntryOnServer(gameId, {
-    name: resolveLeaderboardPlayerName(
-      wallet,
-      opts?.playerName,
-      profile?.name
-    ),
-    score,
-    walletAddress: wallet,
-  });
+  return storedProgressToGameProgress(stored, hasLeaderboard);
 }
 
 export async function saveGameProgressOnServer(
@@ -676,8 +658,8 @@ export async function saveGameProgressOnServer(
   gameId: string,
   value: number,
   hasLeaderboard: boolean,
-  opts?: { playerName?: string }
-): Promise<GameProgress> {
+  _opts?: { playerName?: string }
+): Promise<GameProgress & { newPersonalBest?: boolean }> {
   if (!isWalletAddress(walletAddress)) {
     throw new Error("A valid wallet address is required.");
   }
@@ -689,17 +671,132 @@ export async function saveGameProgressOnServer(
   const current = await fetchGameProgressFromServer(wallet, gameId);
   const field: "s" | "l" = hasLeaderboard ? "s" : "l";
   const currentValue = hasLeaderboard ? (current?.s ?? 0) : (current?.l ?? 0);
-
-  if (hasLeaderboard) {
-    await syncLeaderboardFromScoreOnServer(gameId, wallet, value, opts);
-  }
+  const newPersonalBest = hasLeaderboard && value > currentValue;
 
   if (value <= currentValue) {
-    return storedProgressToGameProgress(current, hasLeaderboard);
+    return {
+      ...storedProgressToGameProgress(current, hasLeaderboard),
+      newPersonalBest: false,
+    };
   }
 
   await patchPath(gameProgressPath(wallet, gameId), { [field]: value });
 
   const updated: StoredGameProgress = { ...current, [field]: value };
-  return storedProgressToGameProgress(updated, hasLeaderboard);
+  return {
+    ...storedProgressToGameProgress(updated, hasLeaderboard),
+    newPersonalBest,
+  };
+}
+
+export async function activateScoreSubmitOnServer(
+  walletAddress: string,
+  gameId: string,
+  txHash: string,
+  opts?: { playerName?: string }
+): Promise<{
+  submitted: boolean;
+  score: number;
+  submittedBest: number;
+}> {
+  if (!isWalletAddress(walletAddress)) {
+    throw new ScoreSubmitActivationError(
+      "A valid wallet address is required.",
+      "NO_WALLET"
+    );
+  }
+
+  const wallet = normalizeWalletAddress(walletAddress);
+  const normalizedTxHash = txHash.trim().toLowerCase();
+
+  if (!/^0x[a-f0-9]{64}$/.test(normalizedTxHash)) {
+    throw new ScoreSubmitActivationError(
+      "A valid transaction hash is required.",
+      "INVALID_TX"
+    );
+  }
+
+  const personalBest = await fetchPersonalBestFromServer(wallet, gameId);
+  const submittedBest = await fetchUserSubmittedScoreFromServer(gameId, {
+    walletAddress: wallet,
+    playerName: opts?.playerName,
+  });
+
+  if (personalBest <= submittedBest) {
+    throw new ScoreSubmitActivationError(
+      "Your personal best is not higher than your submitted score.",
+      "SCORE_NOT_ELIGIBLE"
+    );
+  }
+
+  const profile = await fetchUserFromServer(wallet);
+  const playerName =
+    profile?.name?.trim() || opts?.playerName?.trim() || "";
+
+  if (!playerName) {
+    throw new ScoreSubmitActivationError(
+      "Set your player name before submitting a score.",
+      "NO_NAME"
+    );
+  }
+
+  const existingPayment = await readPath<{
+    wallet?: string;
+    gameId?: string;
+  }>(scorePaymentPath(normalizedTxHash));
+
+  if (existingPayment?.wallet) {
+    const recordedWallet = normalizeWalletAddress(existingPayment.wallet);
+    if (recordedWallet !== wallet) {
+      throw new ScoreSubmitActivationError(
+        "This payment was already used by another wallet.",
+        "TX_ALREADY_USED"
+      );
+    }
+
+    if (existingPayment.gameId && existingPayment.gameId !== gameId) {
+      throw new ScoreSubmitActivationError(
+        "This payment was already used for another game.",
+        "TX_ALREADY_USED"
+      );
+    }
+
+    return {
+      submitted: false,
+      score: personalBest,
+      submittedBest: await fetchUserSubmittedScoreFromServer(gameId, {
+        walletAddress: wallet,
+        playerName: opts?.playerName,
+      }),
+    };
+  }
+
+  try {
+    await verifyScoreSubmitPaymentTx(wallet, normalizedTxHash as Hash);
+  } catch (err) {
+    throw new ScoreSubmitActivationError(
+      err instanceof Error ? err.message : "Invalid payment transaction.",
+      "INVALID_TX"
+    );
+  }
+
+  await submitLeaderboardEntryOnServer(gameId, {
+    name: playerName,
+    score: personalBest,
+    walletAddress: wallet,
+  });
+
+  const now = Date.now();
+  await writePath(scorePaymentPath(normalizedTxHash), {
+    wallet,
+    gameId,
+    score: personalBest,
+    activatedAt: now,
+  });
+
+  return {
+    submitted: true,
+    score: personalBest,
+    submittedBest: personalBest,
+  };
 }

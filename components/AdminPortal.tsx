@@ -13,7 +13,7 @@ import {
   updateAdminGame,
 } from "@/lib/admin-api";
 import { sortGames } from "@/lib/game-sort";
-import { Game, gameHasLeaderboard, gameIsLive } from "@/types";
+import { Game, gameContestLive, gameHasLeaderboard, gameIsLive } from "@/types";
 import Logo from "@/components/Logo";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "/";
@@ -36,6 +36,7 @@ export default function AdminPortal() {
   const [plays, setPlays] = useState("");
   const [fallbackImage, setFallbackImage] = useState("");
   const [hasLeaderboard, setHasLeaderboard] = useState(true);
+  const [contestLive, setContestLive] = useState(false);
   const [live, setLive] = useState(true);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -45,6 +46,7 @@ export default function AdminPortal() {
   const [editPlays, setEditPlays] = useState("");
   const [editFallbackImage, setEditFallbackImage] = useState("");
   const [editHasLeaderboard, setEditHasLeaderboard] = useState(true);
+  const [editContestLive, setEditContestLive] = useState(false);
   const [editLive, setEditLive] = useState(true);
   const [editSaving, setEditSaving] = useState(false);
 
@@ -112,6 +114,7 @@ export default function AdminPortal() {
         active: true,
         live,
         hasLeaderboard,
+        contestLive,
       });
       setName("");
       setThumbnail("");
@@ -119,6 +122,7 @@ export default function AdminPortal() {
       setPlays("");
       setFallbackImage("");
       setHasLeaderboard(true);
+      setContestLive(false);
       setLive(true);
       await refresh();
       showToast("Game added! 🎮");
@@ -166,6 +170,17 @@ export default function AdminPortal() {
     }
   }
 
+  async function handleToggleContest(game: Game) {
+    try {
+      await updateAdminGame(game.id, { contestLive: !gameContestLive(game) });
+      await refresh();
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Failed to update game."
+      );
+    }
+  }
+
   function startEdit(game: Game) {
     setEditingId(game.id);
     setEditName(game.name);
@@ -174,6 +189,7 @@ export default function AdminPortal() {
     setEditPlays(game.plays);
     setEditFallbackImage(game.fallbackImage || "");
     setEditHasLeaderboard(gameHasLeaderboard(game));
+    setEditContestLive(gameContestLive(game));
     setEditLive(gameIsLive(game));
   }
 
@@ -198,6 +214,7 @@ export default function AdminPortal() {
         plays: editPlays.trim() || "0",
         fallbackImage: editFallbackImage.trim(),
         hasLeaderboard: editHasLeaderboard,
+        contestLive: editContestLive,
         live: editLive,
       });
       cancelEdit();
@@ -430,6 +447,17 @@ export default function AdminPortal() {
               Unchecked: level-based — stores current level (l) only, no leaderboard.
             </span>
           </label>
+          <label className="form-checkbox">
+            <input
+              type="checkbox"
+              checked={contestLive}
+              onChange={(e) => setContestLive(e.target.checked)}
+            />
+            <span>Contest live</span>
+            <span className="form-checkbox-hint">
+              Checked: shows &quot;CONTEST LIVE&quot; on the home page card and leaderboard.
+            </span>
+          </label>
           <button
             className="add-submit-btn"
             onClick={handleAdd}
@@ -542,6 +570,17 @@ export default function AdminPortal() {
                       Unchecked: level-based — stores current level (l) only, no leaderboard.
                     </span>
                   </label>
+                  <label className="form-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={editContestLive}
+                      onChange={(e) => setEditContestLive(e.target.checked)}
+                    />
+                    <span>Contest live</span>
+                    <span className="form-checkbox-hint">
+                      Checked: shows &quot;CONTEST LIVE&quot; on the home page card and leaderboard.
+                    </span>
+                  </label>
                   <button
                     className="add-submit-btn edit-save-btn"
                     type="button"
@@ -590,6 +629,7 @@ export default function AdminPortal() {
                       {g.plays} plays · {g.active ? "🟢 Visible" : "⚫ Hidden"} ·{" "}
                       {gameIsLive(g) ? "✅ Live" : "🔜 Coming Soon"} ·{" "}
                       {gameHasLeaderboard(g) ? "🏆 Leaderboard" : "📊 Level-based"}
+                      {gameHasLeaderboard(g) && gameContestLive(g) ? " · 🔥 Contest" : ""}
                     </p>
                   </div>
                   <div className="admin-actions">
@@ -600,6 +640,15 @@ export default function AdminPortal() {
                     >
                       Edit
                     </button>
+                    {gameHasLeaderboard(g) && (
+                      <button
+                        className="toggle-btn"
+                        type="button"
+                        onClick={() => handleToggleContest(g)}
+                      >
+                        {gameContestLive(g) ? "End Contest" : "Start Contest"}
+                      </button>
+                    )}
                     <button
                       className="toggle-btn"
                       type="button"
