@@ -171,9 +171,15 @@ export default function AdminPortal() {
   }
 
   async function handleToggleContest(game: Game) {
+    if (!gameHasLeaderboard(game)) {
+      showToast("Enable Leaderboard for this game first.");
+      return;
+    }
     try {
-      await updateAdminGame(game.id, { contestLive: !gameHasContestLive(game) });
+      const next = !gameHasContestLive(game);
+      await updateAdminGame(game.id, { contestLive: next });
       await refresh();
+      showToast(next ? "Contest is live! 🔥" : "Contest ended.");
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : "Failed to update contest."
@@ -646,7 +652,6 @@ export default function AdminPortal() {
                       className="toggle-btn"
                       type="button"
                       onClick={() => handleToggleContest(g)}
-                      disabled={!gameHasLeaderboard(g)}
                     >
                       {gameHasContestLive(g) ? "End Contest" : "Start Contest"}
                     </button>

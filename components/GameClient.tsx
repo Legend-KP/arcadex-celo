@@ -16,13 +16,13 @@ import { Game, gameHasLeaderboard } from "@/types";
 
 interface GameClientProps {
   game: Game;
-  onOpenLeaderboard?: () => void;
+  onOpenSubmitScore?: (score: number) => void;
 }
 
 const GAME_LOAD_FALLBACK_MS = 12000;
 const PROGRESS_RETRY_DELAYS_MS = [0, 600, 1500, 3000] as const;
 
-export default function GameClient({ game, onOpenLeaderboard }: GameClientProps) {
+export default function GameClient({ game, onOpenSubmitScore }: GameClientProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const loadFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
@@ -405,8 +405,9 @@ export default function GameClient({ game, onOpenLeaderboard }: GameClientProps)
         <NewHighScoreBanner
           score={newHighScore}
           onTap={() => {
+            const score = newHighScore;
             setNewHighScore(null);
-            onOpenLeaderboard?.();
+            if (score !== null) onOpenSubmitScore?.(score);
           }}
           onDismiss={() => setNewHighScore(null)}
         />

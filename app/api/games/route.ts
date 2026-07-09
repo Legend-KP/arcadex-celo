@@ -63,6 +63,7 @@ export async function POST(request: Request) {
       active: body.active ?? true,
       live: body.live !== false,
       hasLeaderboard: body.hasLeaderboard !== false,
+      contestLive: body.contestLive === true,
     });
 
     return NextResponse.json({ id }, { status: 201 });
