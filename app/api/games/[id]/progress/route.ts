@@ -1,5 +1,7 @@
 import { fetchGameFromServer } from "@/lib/firestore-server";
 import {
+  fetchPersonalBestFromServer,
+  fetchUserSubmittedScoreFromServer,
   resolveGameProgressFromServer,
   saveGameProgressOnServer,
 } from "@/lib/rtdb-server";
@@ -106,6 +108,31 @@ export async function POST(
     }
 
     const hasLeaderboard = gameHasLeaderboard(game);
+
+    if (hasLeaderboard) {
+      const submittedBest = await fetchUserSubmittedScoreFromServer(id, {
+        walletAddress: body.walletAddress,
+        playerName: body.playerName ?? body.name,
+      });
+      const storedBest = await fetchPersonalBestFromServer(
+        body.walletAddress,
+        id
+      );
+      const previousBest = Math.max(submittedBest, storedBest);
+
+      return corsJsonResponse(request, {
+        success: true,
+        saved: false,
+        requiresSubmit: true,
+        progress: { score: previousBest },
+        hasLeaderboard: true,
+        submittedBest,
+        previousBest,
+        newPersonalBest: scoreValue > previousBest,
+        pendingScore: scoreValue > previousBest ? scoreValue : undefined,
+      });
+    }
+
     const progress = await saveGameProgressOnServer(
       body.walletAddress,
       id,

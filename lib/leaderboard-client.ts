@@ -1,9 +1,12 @@
 import { LeaderboardEntry } from "@/types";
 
+import { getPendingScore } from "@/lib/pending-score";
+
 export interface LeaderboardStatus {
   entries: LeaderboardEntry[];
   personalBest: number;
   submittedBest: number;
+  pendingScore: number;
   canSubmit: boolean;
 }
 
@@ -48,12 +51,15 @@ export async function getLeaderboardStatus(
 
   const personalBest = data.personalBest ?? 0;
   const submittedBest = data.submittedBest ?? 0;
+  const pendingScore = getPendingScore(gameId);
+  const effectiveBest = Math.max(personalBest, pendingScore);
 
   return {
     entries: data.entries ?? [],
     personalBest,
     submittedBest,
-    canSubmit: personalBest > submittedBest,
+    pendingScore,
+    canSubmit: effectiveBest > submittedBest,
   };
 }
 
@@ -68,7 +74,12 @@ export async function getUserBestScore(
 
 export async function submitPaidScore(
   gameId: string,
-  payload: { walletAddress: string; txHash: string; playerName?: string }
+  payload: {
+    walletAddress: string;
+    txHash: string;
+    score: number;
+    playerName?: string;
+  }
 ): Promise<{ submitted: boolean; score: number; submittedBest: number }> {
   const res = await fetch(`/api/games/${gameId}/leaderboard/submit`, {
     method: "POST",

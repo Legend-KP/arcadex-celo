@@ -35,10 +35,15 @@ export async function POST(
       walletAddress?: string;
       txHash?: string;
       playerName?: string;
+      score?: number;
     };
 
     const rawWallet = body.walletAddress?.trim() ?? "";
     const txHash = body.txHash?.trim() ?? "";
+    const score =
+      typeof body.score === "number" && Number.isFinite(body.score)
+        ? body.score
+        : undefined;
 
     if (!rawWallet || !isWalletAddress(rawWallet)) {
       return corsJsonResponse(
@@ -56,8 +61,16 @@ export async function POST(
       );
     }
 
+    if (score === undefined) {
+      return corsJsonResponse(
+        request,
+        { error: "score is required.", code: "SCORE_NOT_ELIGIBLE" },
+        { status: 400 }
+      );
+    }
+
     const wallet = normalizeWalletAddress(rawWallet);
-    const result = await activateScoreSubmitOnServer(wallet, id, txHash, {
+    const result = await activateScoreSubmitOnServer(wallet, id, txHash, score, {
       playerName: body.playerName,
     });
 

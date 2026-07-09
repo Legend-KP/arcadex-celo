@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { LEADERBOARD_MAX_ENTRIES, LeaderboardEntry } from "@/types";
 import {
   getLeaderboardStatus,
-  submitPaidScore,
 } from "@/lib/leaderboard-client";
-import { purchaseScoreSubmitOnChain } from "@/lib/score-submit-purchase";
+import { getPendingScore, clearPendingScore } from "@/lib/pending-score";
+import { executePaidScoreSubmit } from "@/lib/submit-score-flow";
+import { useResolvedWallet } from "@/lib/use-resolved-wallet";
 
 interface LeaderboardProps {
   gameId: string;
@@ -35,24 +36,30 @@ export default function Leaderboard({
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [personalBest, setPersonalBest] = useState(0);
   const [submittedBest, setSubmittedBest] = useState(0);
+  const [pendingScore, setPendingScoreState] = useState(0);
   const [canSubmit, setCanSubmit] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const touchStartY = useRef<number | null>(null);
+  const resolvedWallet = useResolvedWallet(walletAddress);
 
   const loadLeaderboard = useCallback(async () => {
     setLoading(true);
     setSubmitError("");
     try {
+      const pending = getPendingScore(gameId);
+      setPendingScoreState(pending);
+
       const status = await getLeaderboardStatus(gameId, {
-        walletAddress: walletAddress || undefined,
+        walletAddress: resolvedWallet || undefined,
         playerName: playerName || undefined,
       });
       setEntries(status.entries.slice(0, LEADERBOARD_MAX_ENTRIES));
       setPersonalBest(status.personalBest);
       setSubmittedBest(status.submittedBest);
+      setPendingScoreState(status.pendingScore);
       setCanSubmit(status.canSubmit);
     } catch {
       setEntries([]);
@@ -60,7 +67,7 @@ export default function Leaderboard({
     } finally {
       setLoading(false);
     }
-  }, [gameId, walletAddress, playerName]);
+  }, [gameId, resolvedWallet, playerName]);
 
   useEffect(() => {
     if (!open) return;
@@ -68,8 +75,12 @@ export default function Leaderboard({
     void loadLeaderboard();
   }, [open, loadLeaderboard]);
 
+  const submitScoreValue = Math.max(personalBest, pendingScore);
+
   const handleSubmitScore = async () => {
-    if (!walletAddress || submitting || !canSubmit) return;
+    if (!resolvedWallet || submitting || !canSubmit || submitScoreValue <= 0) {
+      return;
+    }
 
     if (!playerName.trim()) {
       setSubmitError("Set your player name before submitting.");
@@ -81,13 +92,14 @@ export default function Leaderboard({
     setSubmitSuccess(false);
 
     try {
-      const { txHash } = await purchaseScoreSubmitOnChain();
-      const result = await submitPaidScore(gameId, {
-        walletAddress,
-        txHash,
+      const result = await executePaidScoreSubmit(gameId, {
+        walletAddress: resolvedWallet,
         playerName: playerName.trim(),
+        score: submitScoreValue,
       });
 
+      clearPendingScore(gameId);
+      setPendingScoreState(0);
       setPersonalBest(result.score);
       setSubmittedBest(result.submittedBest);
       setCanSubmit(result.score > result.submittedBest);
@@ -150,7 +162,7 @@ export default function Leaderboard({
           </button>
         </div>
 
-        {walletAddress && canSubmit && (
+        {resolvedWallet && canSubmit && (
           <div className="lb-submit-wrap">
             <button
               type="button"
@@ -160,6 +172,11 @@ export default function Leaderboard({
             >
               {submitting ? "Submitting…" : "Submit Score"}
             </button>
+            {pendingScore > submittedBest && (
+              <p className="lb-submit-pending">
+                Pending score: {pendingScore.toLocaleString()}
+              </p>
+            )}
             {submitError && (
               <p className="lb-submit-error" role="alert">
                 {submitError}
@@ -195,11 +212,15 @@ export default function Leaderboard({
             ))}
         </div>
 
-        {walletAddress && personalBest > 0 && (
+        {resolvedWallet && submitScoreValue > 0 && (
           <p className="lb-personal-note">
-            Your best: {personalBest.toLocaleString()}
-            {submittedBest > 0 && submittedBest !== personalBest
-              ? ` · Submitted: ${submittedBest.toLocaleString()}`
+            {pendingScore > personalBest
+              ? `Ready to submit: ${pendingScore.toLocaleString()}`
+              : personalBest > 0
+                ? `Your best: ${personalBest.toLocaleString()}`
+                : ""}
+            {submittedBest > 0
+              ? ` · On leaderboard: ${submittedBest.toLocaleString()}`
               : ""}
           </p>
         )}

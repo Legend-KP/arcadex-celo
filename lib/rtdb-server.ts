@@ -693,6 +693,7 @@ export async function activateScoreSubmitOnServer(
   walletAddress: string,
   gameId: string,
   txHash: string,
+  score: number,
   opts?: { playerName?: string }
 ): Promise<{
   submitted: boolean;
@@ -706,6 +707,13 @@ export async function activateScoreSubmitOnServer(
     );
   }
 
+  if (typeof score !== "number" || !Number.isFinite(score) || score < 0) {
+    throw new ScoreSubmitActivationError(
+      "A valid score is required.",
+      "SCORE_NOT_ELIGIBLE"
+    );
+  }
+
   const wallet = normalizeWalletAddress(walletAddress);
   const normalizedTxHash = txHash.trim().toLowerCase();
 
@@ -716,15 +724,14 @@ export async function activateScoreSubmitOnServer(
     );
   }
 
-  const personalBest = await fetchPersonalBestFromServer(wallet, gameId);
   const submittedBest = await fetchUserSubmittedScoreFromServer(gameId, {
     walletAddress: wallet,
     playerName: opts?.playerName,
   });
 
-  if (personalBest <= submittedBest) {
+  if (score <= submittedBest) {
     throw new ScoreSubmitActivationError(
-      "Your personal best is not higher than your submitted score.",
+      "This score is not higher than your submitted best.",
       "SCORE_NOT_ELIGIBLE"
     );
   }
@@ -743,6 +750,7 @@ export async function activateScoreSubmitOnServer(
   const existingPayment = await readPath<{
     wallet?: string;
     gameId?: string;
+    score?: number;
   }>(scorePaymentPath(normalizedTxHash));
 
   if (existingPayment?.wallet) {
@@ -763,7 +771,7 @@ export async function activateScoreSubmitOnServer(
 
     return {
       submitted: false,
-      score: personalBest,
+      score: existingPayment.score ?? score,
       submittedBest: await fetchUserSubmittedScoreFromServer(gameId, {
         walletAddress: wallet,
         playerName: opts?.playerName,
@@ -780,9 +788,11 @@ export async function activateScoreSubmitOnServer(
     );
   }
 
+  await patchPath(gameProgressPath(wallet, gameId), { s: score });
+
   await submitLeaderboardEntryOnServer(gameId, {
     name: playerName,
-    score: personalBest,
+    score,
     walletAddress: wallet,
   });
 
@@ -790,13 +800,13 @@ export async function activateScoreSubmitOnServer(
   await writePath(scorePaymentPath(normalizedTxHash), {
     wallet,
     gameId,
-    score: personalBest,
+    score,
     activatedAt: now,
   });
 
   return {
     submitted: true,
-    score: personalBest,
-    submittedBest: personalBest,
+    score,
+    submittedBest: score,
   };
 }
