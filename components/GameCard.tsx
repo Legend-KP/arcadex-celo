@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { gameAssetCandidates, gameFallbackCandidates } from "@/lib/game-assets";
 import { formatPlayCount } from "@/lib/format-play-count";
-import { Game, gameContestLive, gameIsLive } from "@/types";
+import { Game, gameHasContestLive, gameIsLive } from "@/types";
 
 interface GameCardProps {
   game: Game;
@@ -13,7 +13,7 @@ interface GameCardProps {
 
 export default function GameCard({ game, playCount = 0 }: GameCardProps) {
   const isLive = gameIsLive(game);
-  const contestLive = gameContestLive(game);
+  const contestLive = gameHasContestLive(game);
 
   const thumbCandidates = useMemo(
     () => gameAssetCandidates(game, "thumbnail"),
@@ -68,10 +68,10 @@ export default function GameCard({ game, playCount = 0 }: GameCardProps) {
     <>
       <div className="thumb-wrap">
         {thumbContent}
-        {contestLive && isLive && (
-          <div className="contest-live-badge" aria-label="Contest live">
+        {contestLive && (
+          <span className="game-card-contest-badge" aria-label="Contest live">
             CONTEST LIVE
-          </div>
+          </span>
         )}
         {!isLive && (
           <div className="coming-soon-overlay" aria-hidden>

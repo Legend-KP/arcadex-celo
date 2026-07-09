@@ -4,50 +4,36 @@ import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import ExitGameModal from "@/components/ExitGameModal";
 import LoadingScreen from "@/components/LoadingScreen";
-import SubmitScorePopup from "@/components/SubmitScorePopup";
-import { sendToUnity } from "@/lib/bridge";
+import NewHighScoreBanner from "@/components/NewHighScoreBanner";
+import { sendToUnity, UnityMessage } from "@/lib/bridge";
 import { getLeaderboard } from "@/lib/firebase";
-import { getGameProgress } from "@/lib/game-progress-client";
-import { getLeaderboardStatus } from "@/lib/leaderboard-client";
+import { getGameProgress, saveGameProgress } from "@/lib/game-progress-client";
 import { buildGameIframeUrl, getShellOrigin } from "@/lib/game-iframe-url";
-import {
-  clearPendingScore,
-  setPendingScore,
-} from "@/lib/pending-score";
-import { executePaidScoreSubmit } from "@/lib/submit-score-flow";
-import {
-  parseIncomingUnityMessage,
-  parseProgressPayload,
-} from "@/lib/unity-message";
-import { useResolvedWallet } from "@/lib/use-resolved-wallet";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { resolveWalletOnAppOpen } from "@/lib/walletAuth";
 import { getGameTheme } from "@/lib/game-themes";
-import { Game, gameContestLive, gameHasLeaderboard } from "@/types";
+import { Game, gameHasLeaderboard } from "@/types";
 
 interface GameClientProps {
   game: Game;
-  onScoreSubmitted?: () => void;
+  onOpenLeaderboard?: () => void;
 }
 
 const GAME_LOAD_FALLBACK_MS = 12000;
 const PROGRESS_RETRY_DELAYS_MS = [0, 600, 1500, 3000] as const;
 
-export default function GameClient({ game, onScoreSubmitted }: GameClientProps) {
+export default function GameClient({ game, onOpenLeaderboard }: GameClientProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const loadFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const [exitOpen, setExitOpen] = useState(false);
   const [gameReady, setGameReady] = useState(false);
-  const [submitPopupOpen, setSubmitPopupOpen] = useState(false);
-  const [pendingScore, setPendingScoreState] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState("");
+  const [newHighScore, setNewHighScore] = useState<number | null>(null);
+  const personalBestRef = useRef(0);
   const leaderboardEnabled = gameHasLeaderboard(game);
   const theme = getGameTheme(game);
   const shellOrigin = getShellOrigin();
   const progressRetryRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const previousBestRef = useRef(0);
   const {
     playerName,
     profile,
@@ -55,9 +41,9 @@ export default function GameClient({ game, onScoreSubmitted }: GameClientProps) 
     isReady,
     updateWalletAddress,
   } = usePlayerProfile();
-  const resolvedWallet = useResolvedWallet(walletAddress);
 
   const resolvedName = playerName || profile?.name || "";
+  const resolvedWallet = walletAddress || profile?.walletAddress || "";
 
   const iframeSrc = useMemo(() => {
     if (!isReady) return null;
@@ -115,182 +101,49 @@ export default function GameClient({ game, onScoreSubmitted }: GameClientProps) 
     loadFallbackRef.current = setTimeout(markGameReady, GAME_LOAD_FALLBACK_MS);
   }, [markGameReady]);
 
+  const maybeCelebrateHighScore = useCallback(
+    (previousBest: number, nextBest: number) => {
+      if (!leaderboardEnabled) return;
+      if (nextBest > previousBest) {
+        setNewHighScore(nextBest);
+      }
+    },
+    [leaderboardEnabled]
+  );
+
+  const persistScore = useCallback(
+    async (score: number, name: string, resolvedWallet: string) => {
+      const previousBest = personalBestRef.current;
+      const result = await saveGameProgress(game.id, resolvedWallet, score, {
+        playerName: name,
+      });
+      const nextBest = result.progress.score ?? score;
+      if (nextBest > previousBest) {
+        personalBestRef.current = nextBest;
+      }
+      maybeCelebrateHighScore(previousBest, nextBest);
+      return nextBest;
+    },
+    [game.id, maybeCelebrateHighScore]
+  );
+
   useEffect(() => {
     setGameReady(false);
-    setSubmitPopupOpen(false);
-    setPendingScoreState(0);
-    setSubmitError("");
-    previousBestRef.current = 0;
     return () => {
       if (loadFallbackRef.current) clearTimeout(loadFallbackRef.current);
       clearProgressRetries();
     };
   }, [game.url, clearProgressRetries]);
 
-  const loadPreviousBest = useCallback(async (wallet: string) => {
-    if (!leaderboardEnabled) {
-      try {
-        const { progress } = await getGameProgress(game.id, wallet, {
-          playerName: resolvedName || undefined,
-        });
-        previousBestRef.current = progress.score ?? 0;
-      } catch {
-        previousBestRef.current = 0;
-      }
-      return;
-    }
-
-    try {
-      const status = await getLeaderboardStatus(game.id, {
-        walletAddress: wallet,
-        playerName: resolvedName || undefined,
-      });
-      previousBestRef.current = Math.max(
-        status.submittedBest,
-        status.personalBest
-      );
-    } catch {
-      previousBestRef.current = 0;
-    }
-  }, [game.id, leaderboardEnabled, resolvedName]);
-
-  const offerScoreSubmit = useCallback(
-    (score: number) => {
-      if (!leaderboardEnabled || score <= previousBestRef.current) {
-        return false;
-      }
-
-      setPendingScoreState(score);
-      setPendingScore(game.id, score);
-      setSubmitError("");
-      setSubmitPopupOpen(true);
-      return true;
-    },
-    [game.id, leaderboardEnabled]
-  );
-
-  const handleIncomingScore = useCallback(
-    async (score: number, opts?: { name?: string; wallet?: string }) => {
-      const wallet =
-        opts?.wallet ||
-        resolvedWallet ||
-        walletAddress ||
-        profile?.walletAddress ||
-        (await resolveWalletOnAppOpen()) ||
-        "";
-
-      if (opts?.wallet && opts.wallet !== profile?.walletAddress) {
-        updateWalletAddress(opts.wallet).catch(() => {
-          // Wallet sync is best-effort
-        });
-      }
-
-      if (!leaderboardEnabled) {
-        return {
-          success: false,
-          error: "Leaderboard disabled for this game.",
-        };
-      }
-
-      if (!wallet) {
-        return {
-          success: false,
-          error: "No wallet address available.",
-        };
-      }
-
-      if (previousBestRef.current === 0) {
-        await loadPreviousBest(wallet);
-      }
-
-      const shouldPrompt = offerScoreSubmit(score);
-      const displayBest = Math.max(previousBestRef.current, score);
-
-      return {
-        success: true,
-        saved: false,
-        requiresSubmit: shouldPrompt,
-        highScore: displayBest,
-        pendingScore: shouldPrompt ? score : undefined,
-        playerName: opts?.name || resolvedName,
-      };
-    },
-    [
-      leaderboardEnabled,
-      loadPreviousBest,
-      offerScoreSubmit,
-      profile?.walletAddress,
-      resolvedName,
-      resolvedWallet,
-      updateWalletAddress,
-      walletAddress,
-    ]
-  );
-
-  const handlePopupDismiss = useCallback(() => {
-    setSubmitPopupOpen(false);
-    setPendingScoreState(0);
-    setSubmitError("");
-    clearPendingScore(game.id);
-  }, [game.id]);
-
-  const handlePopupSubmit = useCallback(async () => {
-    if (!pendingScore || !resolvedWallet) return;
-
-    if (!resolvedName.trim()) {
-      setSubmitError("Set your player name before submitting.");
-      return;
-    }
-
-    setSubmitting(true);
-    setSubmitError("");
-
-    try {
-      const result = await executePaidScoreSubmit(game.id, {
-        walletAddress: resolvedWallet,
-        playerName: resolvedName.trim(),
-        score: pendingScore,
-      });
-
-      previousBestRef.current = result.submittedBest;
-      clearPendingScore(game.id);
-      setSubmitPopupOpen(false);
-      setPendingScoreState(0);
-
-      sendToUnity(iframeRef, "OnScoreSubmitted", {
-        success: true,
-        saved: true,
-        highScore: result.score,
-      });
-
-      onScoreSubmitted?.();
-    } catch (err) {
-      setSubmitError(
-        err instanceof Error ? err.message : "Could not submit score."
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }, [
-    game.id,
-    onScoreSubmitted,
-    pendingScore,
-    resolvedName,
-    resolvedWallet,
-  ]);
-
   const handleMessage = useCallback(
     async (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow) return;
-
-      const msg = parseIncomingUnityMessage(event.data);
+      const msg = event.data as UnityMessage;
       if (!msg?.type?.startsWith("MINIPAY_")) return;
 
       switch (msg.type) {
         case "MINIPAY_BOOTSTRAP": {
           markGameReady();
           const wallet =
-            resolvedWallet ||
             walletAddress ||
             profile?.walletAddress ||
             (await resolveWalletOnAppOpen()) ||
@@ -298,21 +151,19 @@ export default function GameClient({ game, onScoreSubmitted }: GameClientProps) 
 
           if (wallet) {
             sendToUnity(iframeRef, "OnWalletAddressResolved", wallet);
-            await loadPreviousBest(wallet);
           }
 
-          const bootstrapName = resolvedName;
-          let highScore = previousBestRef.current;
+          const bootstrapName = playerName || profile?.name || "";
+          let highScore = 0;
           let level = 0;
-
-          if (wallet && !leaderboardEnabled) {
+          if (wallet) {
             try {
               const { progress } = await getGameProgress(game.id, wallet, {
                 playerName: bootstrapName || undefined,
               });
               highScore = progress.score ?? 0;
               level = progress.level ?? 0;
-              previousBestRef.current = highScore;
+              personalBestRef.current = highScore;
             } catch {
               // Progress is optional during bootstrap
             }
@@ -344,35 +195,63 @@ export default function GameClient({ game, onScoreSubmitted }: GameClientProps) 
             sendToUnity(iframeRef, "OnLeaderboardReceived", []);
             break;
           }
-          const entries = await getLeaderboard(game.id);
+          const { entries } = await getLeaderboard(game.id);
           sendToUnity(iframeRef, "OnLeaderboardReceived", entries);
           break;
         }
 
         case "MINIPAY_SUBMIT_SCORE": {
-          const parsed = parseProgressPayload(msg.payload);
-          if (typeof parsed.score !== "number") {
+          if (!leaderboardEnabled) {
             sendToUnity(iframeRef, "OnScoreSubmitted", {
               success: false,
-              error: "score is required.",
+              error: "Leaderboard disabled for this game.",
             });
             break;
           }
-
-          const result = await handleIncomingScore(parsed.score, {
-            name: parsed.name,
-            wallet: parsed.walletAddress,
-          });
-          sendToUnity(iframeRef, "OnScoreSubmitted", result);
+          const { name, score, walletAddress: payloadWallet } = msg.payload as {
+            name: string;
+            score: number;
+            walletAddress?: string;
+          };
+          const resolvedWallet =
+            walletAddress || payloadWallet || profile?.walletAddress || "";
+          if (!resolvedWallet) {
+            sendToUnity(iframeRef, "OnScoreSubmitted", {
+              success: false,
+              error: "No wallet address available.",
+            });
+            break;
+          }
+          if (payloadWallet && payloadWallet !== profile?.walletAddress) {
+            updateWalletAddress(payloadWallet).catch(() => {
+              // Wallet sync is best-effort
+            });
+          }
+          try {
+            const highScore = await persistScore(
+              score,
+              playerName || name,
+              resolvedWallet
+            );
+            sendToUnity(iframeRef, "OnScoreSubmitted", {
+              success: true,
+              highScore,
+            });
+          } catch (err) {
+            sendToUnity(iframeRef, "OnScoreSubmitted", {
+              success: false,
+              error:
+                err instanceof Error
+                  ? err.message
+                  : "Could not save score.",
+            });
+          }
           break;
         }
 
         case "MINIPAY_GET_PROGRESS": {
           const wallet =
-            resolvedWallet ||
-            walletAddress ||
-            profile?.walletAddress ||
-            "";
+            walletAddress || profile?.walletAddress || "";
           if (!wallet) {
             sendToUnity(iframeRef, "OnProgressReceived", {
               success: false,
@@ -381,25 +260,10 @@ export default function GameClient({ game, onScoreSubmitted }: GameClientProps) 
             break;
           }
           try {
-            if (leaderboardEnabled) {
-              await loadPreviousBest(wallet);
-              const payload = {
-                highScore: previousBestRef.current,
-                level: 0,
-                hasLeaderboard: true,
-              };
-              sendToUnity(iframeRef, "OnProgressReceived", {
-                success: true,
-                ...payload,
-              });
-              scheduleProgressRetries(payload);
-              break;
-            }
-
             const { progress, hasLeaderboard } = await getGameProgress(
               game.id,
               wallet,
-              { playerName: resolvedName || undefined }
+              { playerName: playerName || profile?.name || undefined }
             );
             const payload = {
               highScore: progress.score ?? 0,
@@ -424,32 +288,25 @@ export default function GameClient({ game, onScoreSubmitted }: GameClientProps) 
         }
 
         case "MINIPAY_SAVE_PROGRESS": {
-          const parsed = parseProgressPayload(msg.payload);
-          if (typeof parsed.score !== "number") {
+          const { value, score } = (msg.payload ?? {}) as {
+            value?: number;
+            score?: number;
+          };
+          const progressValue =
+            typeof value === "number"
+              ? value
+              : typeof score === "number"
+                ? score
+                : undefined;
+          if (typeof progressValue !== "number") {
             sendToUnity(iframeRef, "OnProgressSaved", {
               success: false,
               error: "value or score is required.",
             });
             break;
           }
-
-          if (leaderboardEnabled) {
-            const result = await handleIncomingScore(parsed.score, {
-              name: parsed.name,
-              wallet: parsed.walletAddress,
-            });
-            sendToUnity(iframeRef, "OnProgressSaved", {
-              ...result,
-              hasLeaderboard: true,
-            });
-            break;
-          }
-
           const wallet =
-            resolvedWallet ||
-            walletAddress ||
-            profile?.walletAddress ||
-            "";
+            walletAddress || profile?.walletAddress || "";
           if (!wallet) {
             sendToUnity(iframeRef, "OnProgressSaved", {
               success: false,
@@ -457,16 +314,25 @@ export default function GameClient({ game, onScoreSubmitted }: GameClientProps) 
             });
             break;
           }
-
           try {
-            const { saveGameProgress } = await import("@/lib/game-progress-client");
-            const result = await saveGameProgress(game.id, wallet, parsed.score, {
-              playerName: resolvedName || parsed.name || undefined,
+            const result = await saveGameProgress(game.id, wallet, progressValue, {
+              playerName: playerName || profile?.name || undefined,
             });
+            const nextBest = leaderboardEnabled
+              ? (result.progress.score ?? progressValue)
+              : progressValue;
+            if (leaderboardEnabled) {
+              maybeCelebrateHighScore(personalBestRef.current, nextBest);
+              if (nextBest > personalBestRef.current) {
+                personalBestRef.current = nextBest;
+              }
+            }
             sendToUnity(iframeRef, "OnProgressSaved", {
               success: true,
-              level: result.progress.level ?? parsed.score,
-              hasLeaderboard: false,
+              ...(leaderboardEnabled
+                ? { highScore: nextBest }
+                : { level: result.progress.level ?? progressValue }),
+              hasLeaderboard: result.hasLeaderboard,
             });
           } catch (err) {
             sendToUnity(iframeRef, "OnProgressSaved", {
@@ -486,16 +352,17 @@ export default function GameClient({ game, onScoreSubmitted }: GameClientProps) 
     },
     [
       game.id,
-      handleIncomingScore,
       leaderboardEnabled,
-      loadPreviousBest,
-      markGameReady,
+      playerName,
+      profile?.name,
       profile?.walletAddress,
-      resolvedName,
-      resolvedWallet,
-      scheduleProgressRetries,
-      shellOrigin,
       walletAddress,
+      shellOrigin,
+      updateWalletAddress,
+      markGameReady,
+      scheduleProgressRetries,
+      maybeCelebrateHighScore,
+      persistScore,
     ]
   );
 
@@ -534,6 +401,17 @@ export default function GameClient({ game, onScoreSubmitted }: GameClientProps) 
         <div className="game-topbar-spacer" aria-hidden="true" />
       </div>
 
+      {newHighScore !== null && (
+        <NewHighScoreBanner
+          score={newHighScore}
+          onTap={() => {
+            setNewHighScore(null);
+            onOpenLeaderboard?.();
+          }}
+          onDismiss={() => setNewHighScore(null)}
+        />
+      )}
+
       <div className="iframe-wrap">
         {!isReady || !iframeSrc ? (
           <LoadingScreen message="Connecting wallet" />
@@ -549,18 +427,6 @@ export default function GameClient({ game, onScoreSubmitted }: GameClientProps) 
           />
         )}
       </div>
-
-      {leaderboardEnabled && (
-        <SubmitScorePopup
-          open={submitPopupOpen}
-          score={pendingScore}
-          submitting={submitting}
-          error={submitError}
-          contestLive={gameContestLive(game)}
-          onSubmit={handlePopupSubmit}
-          onDismiss={handlePopupDismiss}
-        />
-      )}
 
       <ExitGameModal
         open={exitOpen}

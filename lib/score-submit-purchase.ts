@@ -6,14 +6,14 @@ import {
 } from "@/lib/celo-public-client";
 import { createMiniPayWalletClient } from "@/lib/minipay";
 import {
-  CELO_USDC_ADDRESS,
-  CELO_USDT_ADDRESS,
   ERC20_ABI,
   SCORE_SUBMIT_ABI,
   SCORE_SUBMIT_CONTRACT_ADDRESS,
   STABLECOIN_DECIMALS,
   tokenAddress,
   tokenFeeCurrency,
+  CELO_USDC_ADDRESS,
+  CELO_USDT_ADDRESS,
   type ScoreSubmitPaymentToken,
 } from "@/lib/score-submit";
 

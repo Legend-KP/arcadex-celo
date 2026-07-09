@@ -1,23 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LEADERBOARD_MAX_ENTRIES, LeaderboardEntry } from "@/types";
+import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import {
-  getLeaderboardStatus,
+  getLeaderboard,
+  submitScoreToLeaderboard,
 } from "@/lib/leaderboard-client";
-import { getPendingScore, clearPendingScore } from "@/lib/pending-score";
-import { executePaidScoreSubmit } from "@/lib/submit-score-flow";
-import { useResolvedWallet } from "@/lib/use-resolved-wallet";
+import { purchaseScoreSubmitOnChain } from "@/lib/score-submit-purchase";
 
 interface LeaderboardProps {
   gameId: string;
   gameName: string;
-  open: boolean;
   contestLive?: boolean;
-  walletAddress?: string;
-  playerName?: string;
+  open: boolean;
   onClose: () => void;
-  onSubmitted?: () => void;
 }
 
 const MEDALS = ["🥇", "🥈", "🥉"];
@@ -26,86 +23,67 @@ const SWIPE_THRESHOLD = 60;
 export default function Leaderboard({
   gameId,
   gameName,
-  open,
   contestLive = false,
-  walletAddress = "",
-  playerName = "",
+  open,
   onClose,
-  onSubmitted,
 }: LeaderboardProps) {
+  const { walletAddress, playerName } = usePlayerProfile();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [personalBest, setPersonalBest] = useState(0);
   const [submittedBest, setSubmittedBest] = useState(0);
-  const [pendingScore, setPendingScoreState] = useState(0);
   const [canSubmit, setCanSubmit] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const touchStartY = useRef<number | null>(null);
-  const resolvedWallet = useResolvedWallet(walletAddress);
 
-  const loadLeaderboard = useCallback(async () => {
+  async function loadLeaderboard() {
     setLoading(true);
     setSubmitError("");
     try {
-      const pending = getPendingScore(gameId);
-      setPendingScoreState(pending);
-
-      const status = await getLeaderboardStatus(gameId, {
-        walletAddress: resolvedWallet || undefined,
+      const data = await getLeaderboard(gameId, {
+        walletAddress: walletAddress || undefined,
         playerName: playerName || undefined,
       });
-      setEntries(status.entries.slice(0, LEADERBOARD_MAX_ENTRIES));
-      setPersonalBest(status.personalBest);
-      setSubmittedBest(status.submittedBest);
-      setPendingScoreState(status.pendingScore);
-      setCanSubmit(status.canSubmit);
+      setEntries((data.entries ?? []).slice(0, LEADERBOARD_MAX_ENTRIES));
+      setPersonalBest(data.personalBest ?? 0);
+      setSubmittedBest(data.submittedBest ?? 0);
+      setCanSubmit(Boolean(data.canSubmit));
     } catch {
       setEntries([]);
+      setPersonalBest(0);
+      setSubmittedBest(0);
       setCanSubmit(false);
     } finally {
       setLoading(false);
     }
-  }, [gameId, resolvedWallet, playerName]);
+  }
 
   useEffect(() => {
     if (!open) return;
     setSubmitSuccess(false);
     void loadLeaderboard();
-  }, [open, loadLeaderboard]);
+  }, [open, gameId, walletAddress, playerName]);
 
-  const submitScoreValue = Math.max(personalBest, pendingScore);
-
-  const handleSubmitScore = async () => {
-    if (!resolvedWallet || submitting || !canSubmit || submitScoreValue <= 0) {
-      return;
-    }
-
-    if (!playerName.trim()) {
-      setSubmitError("Set your player name before submitting.");
-      return;
-    }
+  async function handleSubmitScore() {
+    if (!walletAddress || submitting) return;
 
     setSubmitting(true);
     setSubmitError("");
     setSubmitSuccess(false);
 
     try {
-      const result = await executePaidScoreSubmit(gameId, {
-        walletAddress: resolvedWallet,
-        playerName: playerName.trim(),
-        score: submitScoreValue,
+      const { txHash } = await purchaseScoreSubmitOnChain();
+      const result = await submitScoreToLeaderboard(gameId, {
+        walletAddress,
+        txHash,
       });
-
-      clearPendingScore(gameId);
-      setPendingScoreState(0);
-      setPersonalBest(result.score);
+      setPersonalBest(result.personalBest);
       setSubmittedBest(result.submittedBest);
-      setCanSubmit(result.score > result.submittedBest);
+      setCanSubmit(result.canSubmit);
       setSubmitSuccess(true);
       await loadLeaderboard();
-      onSubmitted?.();
     } catch (err) {
       setSubmitError(
         err instanceof Error ? err.message : "Could not submit score."
@@ -113,7 +91,7 @@ export default function Leaderboard({
     } finally {
       setSubmitting(false);
     }
-  };
+  }
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
@@ -139,44 +117,32 @@ export default function Leaderboard({
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
+        <div className="lb-header">
+          <div className="lb-title-wrap">
+            <span className="lb-trophy" aria-hidden="true">🏆</span>
+            <span className="lb-title">{gameName}</span>
+          </div>
+          <button type="button" className="lb-close" onClick={onClose} aria-label="Close leaderboard">
+            ✕
+          </button>
+        </div>
+
         {contestLive && (
           <div className="lb-contest-banner" role="status">
             CONTEST LIVE
           </div>
         )}
 
-        <div className="lb-header">
-          <div className="lb-title-wrap">
-            <span className="lb-trophy" aria-hidden="true">
-              🏆
-            </span>
-            <span className="lb-title">{gameName}</span>
-          </div>
-          <button
-            type="button"
-            className="lb-close"
-            onClick={onClose}
-            aria-label="Close leaderboard"
-          >
-            ✕
-          </button>
-        </div>
-
-        {resolvedWallet && canSubmit && (
+        {canSubmit && (
           <div className="lb-submit-wrap">
             <button
               type="button"
               className="lb-submit-btn"
-              onClick={handleSubmitScore}
+              onClick={() => void handleSubmitScore()}
               disabled={submitting}
             >
               {submitting ? "Submitting…" : "Submit Score"}
             </button>
-            {pendingScore > submittedBest && (
-              <p className="lb-submit-pending">
-                Pending score: {pendingScore.toLocaleString()}
-              </p>
-            )}
             {submitError && (
               <p className="lb-submit-error" role="alert">
                 {submitError}
@@ -188,6 +154,12 @@ export default function Leaderboard({
               </p>
             )}
           </div>
+        )}
+
+        {!canSubmit && personalBest > 0 && submittedBest > 0 && (
+          <p className="lb-submit-hint">
+            Your best submitted score: {submittedBest.toLocaleString()}
+          </p>
         )}
 
         <div className="lb-list">
@@ -211,19 +183,6 @@ export default function Leaderboard({
               </div>
             ))}
         </div>
-
-        {resolvedWallet && submitScoreValue > 0 && (
-          <p className="lb-personal-note">
-            {pendingScore > personalBest
-              ? `Ready to submit: ${pendingScore.toLocaleString()}`
-              : personalBest > 0
-                ? `Your best: ${personalBest.toLocaleString()}`
-                : ""}
-            {submittedBest > 0
-              ? ` · On leaderboard: ${submittedBest.toLocaleString()}`
-              : ""}
-          </p>
-        )}
       </div>
     </div>
   );

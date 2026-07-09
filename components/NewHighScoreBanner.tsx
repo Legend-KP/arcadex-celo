@@ -1,41 +1,35 @@
 "use client";
 
 interface NewHighScoreBannerProps {
-  visible: boolean;
-  onOpenLeaderboard: () => void;
+  score: number;
+  onTap: () => void;
   onDismiss: () => void;
 }
 
 export default function NewHighScoreBanner({
-  visible,
-  onOpenLeaderboard,
+  score,
+  onTap,
   onDismiss,
 }: NewHighScoreBannerProps) {
-  if (!visible) return null;
-
   return (
-    <div className="high-score-banner-wrap" role="presentation">
+    <div className="high-score-banner-wrap">
       <button
         type="button"
         className="high-score-banner"
-        onClick={onOpenLeaderboard}
-        aria-label="New high score — open leaderboard"
+        onClick={onTap}
+        aria-label={`New high score ${score.toLocaleString()}. Tap to open leaderboard.`}
       >
-        <span className="high-score-banner__icon" aria-hidden="true">
-          🏆
+        <span className="high-score-banner__icon" aria-hidden="true">🏆</span>
+        <span className="high-score-banner__text">
+          <strong>New High Score!</strong>
+          <span className="high-score-banner__score">{score.toLocaleString()}</span>
         </span>
-        <span className="high-score-banner__text">New High Score!</span>
-        <span className="high-score-banner__chevron" aria-hidden="true">
-          ›
-        </span>
+        <span className="high-score-banner__cta">View →</span>
       </button>
       <button
         type="button"
         className="high-score-banner__dismiss"
-        onClick={(e) => {
-          e.stopPropagation();
-          onDismiss();
-        }}
+        onClick={onDismiss}
         aria-label="Dismiss"
       >
         ✕

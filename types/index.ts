@@ -43,7 +43,9 @@ export function gameIsLive(game: Pick<Game, "live">): boolean {
   return game.live !== false;
 }
 
-export function gameContestLive(game: Pick<Game, "contestLive">): boolean {
+export function gameHasContestLive(
+  game: Pick<Game, "contestLive">
+): boolean {
   return game.contestLive === true;
 }
 

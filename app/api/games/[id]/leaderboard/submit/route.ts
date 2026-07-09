@@ -34,16 +34,10 @@ export async function POST(
     const body = (await request.json()) as {
       walletAddress?: string;
       txHash?: string;
-      playerName?: string;
-      score?: number;
     };
 
     const rawWallet = body.walletAddress?.trim() ?? "";
     const txHash = body.txHash?.trim() ?? "";
-    const score =
-      typeof body.score === "number" && Number.isFinite(body.score)
-        ? body.score
-        : undefined;
 
     if (!rawWallet || !isWalletAddress(rawWallet)) {
       return corsJsonResponse(
@@ -61,28 +55,26 @@ export async function POST(
       );
     }
 
-    if (score === undefined) {
-      return corsJsonResponse(
-        request,
-        { error: "score is required.", code: "SCORE_NOT_ELIGIBLE" },
-        { status: 400 }
-      );
-    }
-
     const wallet = normalizeWalletAddress(rawWallet);
-    const result = await activateScoreSubmitOnServer(wallet, id, txHash, score, {
-      playerName: body.playerName,
-    });
+    const result = await activateScoreSubmitOnServer(wallet, id, txHash);
 
-    return corsJsonResponse(request, { success: true, ...result });
+    return corsJsonResponse(request, {
+      success: true,
+      ...result,
+      canSubmit: result.personalBest > result.submittedBest,
+    });
   } catch (err) {
     if (err instanceof ScoreSubmitActivationError) {
       const status =
         err.code === "TX_ALREADY_USED"
           ? 409
-          : err.code === "SCORE_NOT_ELIGIBLE" || err.code === "NO_NAME"
+          : err.code === "NO_IMPROVEMENT" || err.code === "NO_SCORE"
             ? 400
-            : 400;
+            : err.code === "NO_NAME"
+              ? 400
+              : err.code === "INVALID_TX"
+                ? 400
+                : 400;
       return corsJsonResponse(
         request,
         { error: err.message, code: err.code },

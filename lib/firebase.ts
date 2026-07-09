@@ -24,10 +24,8 @@ import {
 
 export {
   getLeaderboard,
-  getLeaderboardStatus,
   getUserBestScore,
-  savePersonalBest,
-  submitPaidScore,
+  submitScore,
 } from "@/lib/leaderboard-client";
 
 let app: FirebaseApp;

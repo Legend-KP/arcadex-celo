@@ -4,6 +4,7 @@ import {
   type Address,
   type Hash,
 } from "viem";
+import { getCeloPublicClient } from "@/lib/celo-public-client";
 import {
   CELO_USDC_ADDRESS,
   CELO_USDT_ADDRESS,
@@ -11,7 +12,6 @@ import {
   SCORE_SUBMIT_CONTRACT_ADDRESS,
   type ScoreSubmitPaymentToken,
 } from "@/lib/score-submit";
-import { getCeloPublicClient } from "@/lib/celo-public-client";
 
 const publicClient = getCeloPublicClient();
 
@@ -33,7 +33,9 @@ export async function verifyScoreSubmitPaymentTx(
     throw new Error("Transaction did not succeed.");
   }
 
-  if (receipt.to?.toLowerCase() !== SCORE_SUBMIT_CONTRACT_ADDRESS.toLowerCase()) {
+  if (
+    receipt.to?.toLowerCase() !== SCORE_SUBMIT_CONTRACT_ADDRESS.toLowerCase()
+  ) {
     throw new Error("Transaction was not sent to ScoreSubmit.");
   }
 
@@ -45,7 +47,9 @@ export async function verifyScoreSubmitPaymentTx(
   });
 
   for (const log of receipt.logs) {
-    if (log.address.toLowerCase() !== SCORE_SUBMIT_CONTRACT_ADDRESS.toLowerCase()) {
+    if (
+      log.address.toLowerCase() !== SCORE_SUBMIT_CONTRACT_ADDRESS.toLowerCase()
+    ) {
       continue;
     }
 

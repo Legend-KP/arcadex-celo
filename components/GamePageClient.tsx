@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Game, gameContestLive, gameHasLeaderboard, gameIsLive } from "@/types";
+import { Game, gameHasLeaderboard, gameHasContestLive, gameIsLive } from "@/types";
 import GameClient from "@/components/GameClient";
 import GameMenu from "@/components/GameMenu";
 import Leaderboard from "@/components/Leaderboard";
@@ -10,13 +10,11 @@ import LoadingScreen from "@/components/LoadingScreen";
 import NoSparksModal from "@/components/NoSparksModal";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { useSparks } from "@/components/SparkProvider";
-import { useResolvedWallet } from "@/lib/use-resolved-wallet";
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { walletAddress, playerName } = usePlayerProfile();
-  const resolvedWallet = useResolvedWallet(walletAddress);
+  const { walletAddress } = usePlayerProfile();
   const { sparks, spendForGame } = useSparks();
   const [game, setGame] = useState<Game | null>(null);
   const [started, setStarted] = useState(false);
@@ -139,17 +137,15 @@ export default function GamePageClient() {
       ) : (
         <GameClient
           game={game}
-          onScoreSubmitted={() => setLbOpen(true)}
+          onOpenLeaderboard={() => setLbOpen(true)}
         />
       )}
       {gameHasLeaderboard(game) && (
         <Leaderboard
           gameId={game.id}
           gameName={game.name}
+          contestLive={gameHasContestLive(game)}
           open={lbOpen}
-          contestLive={gameContestLive(game)}
-          walletAddress={resolvedWallet}
-          playerName={playerName}
           onClose={() => setLbOpen(false)}
         />
       )}

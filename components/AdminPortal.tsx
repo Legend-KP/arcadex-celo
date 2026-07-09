@@ -13,7 +13,7 @@ import {
   updateAdminGame,
 } from "@/lib/admin-api";
 import { sortGames } from "@/lib/game-sort";
-import { Game, gameContestLive, gameHasLeaderboard, gameIsLive } from "@/types";
+import { Game, gameHasLeaderboard, gameHasContestLive, gameIsLive } from "@/types";
 import Logo from "@/components/Logo";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "/";
@@ -172,13 +172,11 @@ export default function AdminPortal() {
 
   async function handleToggleContest(game: Game) {
     try {
-      const next = !gameContestLive(game);
-      await updateAdminGame(game.id, { contestLive: next });
+      await updateAdminGame(game.id, { contestLive: !gameHasContestLive(game) });
       await refresh();
-      showToast(next ? "Contest started! 🔥" : "Contest ended.");
     } catch (err) {
       showToast(
-        err instanceof Error ? err.message : "Failed to update game."
+        err instanceof Error ? err.message : "Failed to update contest."
       );
     }
   }
@@ -191,7 +189,7 @@ export default function AdminPortal() {
     setEditPlays(game.plays);
     setEditFallbackImage(game.fallbackImage || "");
     setEditHasLeaderboard(gameHasLeaderboard(game));
-    setEditContestLive(gameContestLive(game));
+    setEditContestLive(gameHasContestLive(game));
     setEditLive(gameIsLive(game));
   }
 
@@ -454,10 +452,11 @@ export default function AdminPortal() {
               type="checkbox"
               checked={contestLive}
               onChange={(e) => setContestLive(e.target.checked)}
+              disabled={!hasLeaderboard}
             />
-            <span>Contest live</span>
+            <span>Contest Live</span>
             <span className="form-checkbox-hint">
-              Checked: shows &quot;CONTEST LIVE&quot; on the home page card and leaderboard.
+              When on, shows a contest badge on the home page and a banner on the leaderboard.
             </span>
           </label>
           <button
@@ -577,10 +576,11 @@ export default function AdminPortal() {
                       type="checkbox"
                       checked={editContestLive}
                       onChange={(e) => setEditContestLive(e.target.checked)}
+                      disabled={!editHasLeaderboard}
                     />
-                    <span>Contest live</span>
+                    <span>Contest Live</span>
                     <span className="form-checkbox-hint">
-                      Checked: shows &quot;CONTEST LIVE&quot; on the home page card and leaderboard.
+                      When on, shows a contest badge on the home page and a banner on the leaderboard.
                     </span>
                   </label>
                   <button
@@ -630,8 +630,8 @@ export default function AdminPortal() {
                     <p className="admin-game-plays">
                       {g.plays} plays · {g.active ? "🟢 Visible" : "⚫ Hidden"} ·{" "}
                       {gameIsLive(g) ? "✅ Live" : "🔜 Coming Soon"} ·{" "}
-                      {gameHasLeaderboard(g) ? "🏆 Leaderboard" : "📊 Level-based"}
-                      {gameHasLeaderboard(g) && gameContestLive(g) ? " · 🔥 Contest" : ""}
+                      {gameHasLeaderboard(g) ? "🏆 Leaderboard" : "📊 Level-based"} ·{" "}
+                      {gameHasContestLive(g) ? "🔥 Contest Live" : "No contest"}
                     </p>
                   </div>
                   <div className="admin-actions">
@@ -642,15 +642,14 @@ export default function AdminPortal() {
                     >
                       Edit
                     </button>
-                    {gameHasLeaderboard(g) && (
-                      <button
-                        className="toggle-btn"
-                        type="button"
-                        onClick={() => handleToggleContest(g)}
-                      >
-                        {gameContestLive(g) ? "End Contest" : "Start Contest"}
-                      </button>
-                    )}
+                    <button
+                      className="toggle-btn"
+                      type="button"
+                      onClick={() => handleToggleContest(g)}
+                      disabled={!gameHasLeaderboard(g)}
+                    >
+                      {gameHasContestLive(g) ? "End Contest" : "Start Contest"}
+                    </button>
                     <button
                       className="toggle-btn"
                       type="button"
