@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { gameAssetCandidates, gameFallbackCandidates } from "@/lib/game-assets";
-import { Game, gameHasLeaderboard } from "@/types";
+import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
 
 interface GameMenuProps {
   game: Game;
@@ -21,6 +21,7 @@ export default function GameMenu({
   sparkError,
 }: GameMenuProps) {
   const router = useRouter();
+  const contestLive = gameHasContestLive(game);
 
   const thumbCandidates = useMemo(
     () => gameAssetCandidates(game, "thumbnail"),
@@ -69,6 +70,17 @@ export default function GameMenu({
       <div className="game-menu-grid" aria-hidden />
 
       <div className="game-menu-card">
+        {contestLive && (
+          <div className="game-menu-contest-stripe" aria-label="Contest is live">
+            <div className="game-menu-contest-stripe-track">
+              {Array.from({ length: 6 }, (_, i) => (
+                <span key={i} aria-hidden={i > 0}>
+                  Contest is Live
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="game-menu-logo-wrap">
           {logoSrc ? (
             // eslint-disable-next-line @next/next/no-img-element

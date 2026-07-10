@@ -87,16 +87,24 @@ export default function GameCard({ game, playCount = 0 }: GameCardProps) {
     </>
   );
 
+  const cardClass = [
+    "game-card",
+    !isLive && "game-card--coming-soon",
+    contestLive && "game-card--contest-live",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   if (!isLive) {
     return (
-      <div className="game-card game-card--coming-soon" aria-label={`${game.name} — coming soon`}>
+      <div className={cardClass} aria-label={`${game.name} — coming soon`}>
         {cardBody}
       </div>
     );
   }
 
   return (
-    <Link href={`/game/${game.id}`} className="game-card">
+    <Link href={`/game/${game.id}`} className={cardClass}>
       {cardBody}
     </Link>
   );
