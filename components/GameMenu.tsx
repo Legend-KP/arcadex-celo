@@ -69,11 +69,11 @@ export default function GameMenu({
 
       <div className="game-menu-grid" aria-hidden />
 
-      <div className="game-menu-card">
+      <div className="game-menu-stack">
         {contestLive && (
           <div className="game-menu-contest-stripe" aria-label="Contest is live">
             <div className="game-menu-contest-stripe-track">
-              {Array.from({ length: 6 }, (_, i) => (
+              {Array.from({ length: 8 }, (_, i) => (
                 <span key={i} aria-hidden={i > 0}>
                   Contest is Live
                 </span>
@@ -81,6 +81,8 @@ export default function GameMenu({
             </div>
           </div>
         )}
+
+        <div className="game-menu-card">
         <div className="game-menu-logo-wrap">
           {logoSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -136,6 +138,7 @@ export default function GameMenu({
             Back
           </button>
         </div>
+      </div>
       </div>
     </div>
   );
