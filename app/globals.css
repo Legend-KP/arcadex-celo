@@ -1008,8 +1008,8 @@ a { color: inherit; text-decoration: none; }
 }
 
 .game-menu-logo-wrap {
-  width: 210px;
-  height: 210px;
+  width: 230px;
+  height: 230px;
   border-radius: 24px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.8);
@@ -1029,17 +1029,8 @@ a { color: inherit; text-decoration: none; }
   display: block;
 }
 .game-menu-logo-fallback {
-  font-size: 72px;
+  font-size: 80px;
   line-height: 1;
-}
-
-.game-menu-title {
-  font-family: var(--font-head);
-  font-size: 24px;
-  color: #1a1a2e;
-  text-align: center;
-  letter-spacing: 0.5px;
-  margin-bottom: 0;
 }
 
 .game-menu-actions {

@@ -113,8 +113,6 @@ export default function GameMenu({
               <span className="game-menu-logo-fallback">🎮</span>
             )}
           </div>
-
-          <h1 className="game-menu-title">{game.name}</h1>
         </div>
 
         <div className="game-menu-actions">
