@@ -65,6 +65,16 @@ function queueUnityCallback(method, value) {
   }
 }
 
+function onPageVisibleAgain() {
+  flushPendingUnityCallbacks();
+}
+
+window.__arcadeXDeliverCallback = function (method, value) {
+  if (!deliverToUnity(method, value)) {
+    queueUnityCallback(method, value);
+  }
+};
+
 mergeInto(LibraryManager.library, {
   ArcadeX_Init: function (gameObjectNamePtr) {
     arcadeXGameObjectName = UTF8ToString(gameObjectNamePtr);
@@ -82,6 +92,14 @@ mergeInto(LibraryManager.library, {
         queueUnityCallback(data.method, value);
       }
     });
+
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) {
+        onPageVisibleAgain();
+      }
+    });
+    window.addEventListener("pageshow", onPageVisibleAgain);
+    window.addEventListener("focus", onPageVisibleAgain);
 
     flushPendingUnityCallbacks();
   },

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSparks } from "@/components/SparkProvider";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
+import { formatChainError } from "@/lib/celo-public-client";
 import { formatSparkCountdown } from "@/lib/spark";
 
 export default function SparkBatteryBar() {
@@ -62,9 +63,7 @@ export default function SparkBatteryBar() {
         body: "Infinite Spark is active for 24 hours. Play any game freely!",
       });
     } catch (err) {
-      setPurchaseError(
-        err instanceof Error ? err.message : "Could not purchase Infinite Spark."
-      );
+      setPurchaseError(formatChainError(err));
     } finally {
       setPurchasing(false);
     }
@@ -80,9 +79,7 @@ export default function SparkBatteryBar() {
         body: "Your Spark bar is full. You're ready to play!",
       });
     } catch (err) {
-      setRefillError(
-        err instanceof Error ? err.message : "Could not purchase Spark Refill."
-      );
+      setRefillError(formatChainError(err));
     } finally {
       setRefilling(false);
     }

@@ -1,12 +1,19 @@
-import {
-  createPublicClient,
-  custom,
-  http,
-} from "viem";
+import { createPublicClient, http } from "viem";
 import { celo } from "viem/chains";
-import { getInjectedProvider, isMiniPay } from "@/lib/minipay";
 
-const CELO_RPC_URL = "https://forno.celo.org";
+const DEFAULT_RPC_URLS = [
+  "https://forno.celo.org",
+  "https://rpc.ankr.com/celo",
+  "https://1rpc.io/celo",
+] as const;
+
+function getRpcUrls(): string[] {
+  const primary = process.env.NEXT_PUBLIC_CELO_RPC_URL?.trim();
+  const urls = primary
+    ? [primary, ...DEFAULT_RPC_URLS.filter((url) => url !== primary)]
+    : [...DEFAULT_RPC_URLS];
+  return [...new Set(urls)];
+}
 
 const publicClientConfig = {
   chain: celo,
@@ -14,30 +21,23 @@ const publicClientConfig = {
   cacheTime: 0,
 } as const;
 
-function createFornoClient() {
+function createHttpClient(rpcUrl: string) {
   return createPublicClient({
     ...publicClientConfig,
-    transport: http(CELO_RPC_URL),
+    transport: http(rpcUrl, { timeout: 12_000 }),
   });
 }
 
-type CeloPublicClient = ReturnType<typeof createFornoClient>;
-
-function createBrowserPublicClient(): CeloPublicClient {
-  if (typeof window !== "undefined" && isMiniPay()) {
-    const provider = getInjectedProvider();
-    if (provider) {
-      return createPublicClient({
-        ...publicClientConfig,
-        transport: custom(provider),
-      }) as unknown as CeloPublicClient;
-    }
-  }
-
-  return createFornoClient();
-}
+type CeloPublicClient = ReturnType<typeof createHttpClient>;
 
 let browserClient: CeloPublicClient | null = null;
+let browserClientIndex = 0;
+
+function createBrowserPublicClient(): CeloPublicClient {
+  const urls = getRpcUrls();
+  const url = urls[browserClientIndex % urls.length] ?? urls[0]!;
+  return createHttpClient(url);
+}
 
 /** Public client for browser-side chain reads (payments, balances). */
 export function getCeloPublicClient(): CeloPublicClient {
@@ -46,36 +46,122 @@ export function getCeloPublicClient(): CeloPublicClient {
     return browserClient;
   }
 
-  return createFornoClient();
+  return createHttpClient(getRpcUrls()[0]!);
 }
 
-/** Reset cached browser client (e.g. after RPC "block is out of range"). */
+/** Reset cached browser client and rotate to the next RPC URL. */
 export function resetCeloPublicClient(): void {
   browserClient = null;
+  const urls = getRpcUrls();
+  if (urls.length > 0) {
+    browserClientIndex = (browserClientIndex + 1) % urls.length;
+  }
+}
+
+function collectErrorText(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+
+  const parts: string[] = [error.message];
+  let cause: unknown = error.cause;
+  while (cause instanceof Error) {
+    parts.push(cause.message);
+    cause = cause.cause;
+  }
+  return parts.join(" ");
 }
 
 export function isBlockOutOfRangeError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const message = error.message.toLowerCase();
-  return message.includes("block is out of range");
+  const message = collectErrorText(error).toLowerCase();
+  return (
+    message.includes("block is out of range") ||
+    message.includes("header not found") ||
+    message.includes("invalid block tag")
+  );
+}
+
+function isTransientRpcError(error: unknown): boolean {
+  const message = collectErrorText(error).toLowerCase();
+  return (
+    isBlockOutOfRangeError(error) ||
+    message.includes("timeout") ||
+    message.includes("fetch failed") ||
+    message.includes("network") ||
+    message.includes("429") ||
+    message.includes("rate limit") ||
+    message.includes("503") ||
+    message.includes("502")
+  );
+}
+
+/** Map low-level RPC errors to short user-facing messages. */
+export function formatChainError(error: unknown): string {
+  if (error instanceof Error) {
+    if (
+      error.message.includes("Insufficient balance") ||
+      error.message.includes("Connect your wallet") ||
+      error.message.includes("No wallet") ||
+      error.message.includes("approval failed") ||
+      error.message.includes("payment failed")
+    ) {
+      return error.message;
+    }
+  }
+
+  if (isTransientRpcError(error)) {
+    return "The network is temporarily unavailable. Please wait a moment and try again.";
+  }
+
+  if (error instanceof Error) {
+    if (
+      error.message.includes("RPC Request failed") ||
+      error.message.includes("Request body") ||
+      error.message.length > 160
+    ) {
+      return "Could not reach the Celo network. Please try again.";
+    }
+    return error.message;
+  }
+
+  return "Something went wrong. Please try again.";
 }
 
 type ReadContractParams = Parameters<CeloPublicClient["readContract"]>[0];
 
+const RETRY_DELAYS_MS = [0, 400, 900];
+
 export async function readCeloContract(
   params: ReadContractParams
 ): Promise<bigint> {
-  const read = () =>
-    getCeloPublicClient().readContract({
-      ...params,
-      blockTag: "latest",
-    });
+  let lastError: unknown;
 
-  try {
-    return (await read()) as bigint;
-  } catch (error) {
-    if (!isBlockOutOfRangeError(error)) throw error;
-    resetCeloPublicClient();
-    return (await read()) as bigint;
+  for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+      resetCeloPublicClient();
+    }
+
+    try {
+      return (await getCeloPublicClient().readContract({
+        ...params,
+        blockTag: "latest",
+      })) as bigint;
+    } catch (error) {
+      lastError = error;
+      if (!isTransientRpcError(error)) throw error;
+    }
   }
+
+  for (const rpcUrl of getRpcUrls()) {
+    try {
+      return (await createHttpClient(rpcUrl).readContract({
+        ...params,
+        blockTag: "latest",
+      })) as bigint;
+    } catch (error) {
+      lastError = error;
+      if (!isTransientRpcError(error)) throw error;
+    }
+  }
+
+  throw lastError;
 }

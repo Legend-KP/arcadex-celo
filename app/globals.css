@@ -1558,6 +1558,84 @@ a { color: inherit; text-decoration: none; }
   text-align: center;
 }
 
+.lb-submit-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(92vw, 420px);
+  padding: 12px 14px;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  animation: lb-submit-toast-in 0.25s ease-out;
+}
+
+.lb-submit-toast--success {
+  background: #ecfdf5;
+  border: 1px solid #6ee7b7;
+  color: #065f46;
+}
+
+.lb-submit-toast--error {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+}
+
+.lb-submit-toast__icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.lb-submit-toast--success .lb-submit-toast__icon {
+  background: #10b981;
+  color: #fff;
+}
+
+.lb-submit-toast--error .lb-submit-toast__icon {
+  background: #ef4444;
+  color: #fff;
+}
+
+.lb-submit-toast__text {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.lb-submit-toast__close {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.65;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+@keyframes lb-submit-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
 /* ── Submit score panel (new high score flow) ─────────── */
 .submit-panel-backdrop {
   position: fixed;

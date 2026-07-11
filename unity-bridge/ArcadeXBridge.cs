@@ -130,6 +130,14 @@ public class ArcadeXBridge : MonoBehaviour
         SendMessageToParent(new ArcadeXBridgeMessage { type = "GAME_PROGRESS_GET" });
     }
 
+    /// <summary>
+    /// Ask the shell to re-send the last paid submit result (after wallet / reload).
+    /// </summary>
+    public void PollSubmitResult()
+    {
+        SendMessageToParent(new ArcadeXBridgeMessage { type = "GAME_LEADERBOARD_SUBMIT_POLL" });
+    }
+
     private void SendMessageToParent(ArcadeXBridgeMessage message)
     {
         string json = JsonUtility.ToJson(message);

@@ -4,11 +4,16 @@ import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import ExitGameModal from "@/components/ExitGameModal";
 import LoadingScreen from "@/components/LoadingScreen";
+import LeaderboardSubmitToast, {
+  type LeaderboardSubmitToastState,
+} from "@/components/LeaderboardSubmitToast";
 import {
   normalizeUnityMessageType,
   notifyUnityLeaderboardSubmit,
+  replayLeaderboardSubmitToUnity,
   sendToUnity,
   UnityMessage,
+  type LeaderboardSubmitUnityResult,
 } from "@/lib/bridge";
 import { getLeaderboard } from "@/lib/firebase";
 import { getGameProgress, saveGameProgress } from "@/lib/game-progress-client";
@@ -18,6 +23,11 @@ import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { resolveWalletOnAppOpen } from "@/lib/walletAuth";
 import { getGameTheme } from "@/lib/game-themes";
 import { purchaseScoreSubmitOnChain } from "@/lib/score-submit-purchase";
+import {
+  clearPendingLeaderboardSubmit,
+  getLeaderboardSubmitResult,
+  setPendingLeaderboardSubmit,
+} from "@/lib/leaderboard-submit-result";
 import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
 
 interface GameClientProps {
@@ -33,6 +43,9 @@ export default function GameClient({ game }: GameClientProps) {
   const router = useRouter();
   const [exitOpen, setExitOpen] = useState(false);
   const [gameReady, setGameReady] = useState(false);
+  const [submitToast, setSubmitToast] = useState<LeaderboardSubmitToastState | null>(
+    null
+  );
   const personalBestRef = useRef(0);
   const leaderboardEnabled = gameHasLeaderboard(game);
   const contestLive = gameHasContestLive(game);
@@ -121,6 +134,48 @@ export default function GameClient({ game }: GameClientProps) {
     [game.id]
   );
 
+  const showSubmitFeedback = useCallback((result: LeaderboardSubmitUnityResult) => {
+    if (result.success) {
+      setSubmitToast({
+        success: true,
+        message: "Score submitted to the leaderboard!",
+      });
+      return;
+    }
+
+    const error = result.error?.trim();
+    if (
+      !error ||
+      error.toLowerCase().includes("user rejected") ||
+      error.toLowerCase().includes("denied")
+    ) {
+      setSubmitToast({
+        success: false,
+        message: "Payment cancelled.",
+      });
+      return;
+    }
+
+    setSubmitToast({
+      success: false,
+      message: error,
+    });
+  }, []);
+
+  const deliverLeaderboardSubmitResult = useCallback(
+    (result: LeaderboardSubmitUnityResult) => {
+      notifyUnityLeaderboardSubmit(iframeRef, result, { gameId: game.id });
+      showSubmitFeedback(result);
+    },
+    [game.id, showSubmitFeedback]
+  );
+
+  const replayStoredSubmitResult = useCallback(() => {
+    const stored = getLeaderboardSubmitResult(game.id);
+    if (!stored) return;
+    replayLeaderboardSubmitToUnity(iframeRef, game.id, stored);
+  }, [game.id]);
+
   useEffect(() => {
     setGameReady(false);
     return () => {
@@ -128,6 +183,11 @@ export default function GameClient({ game }: GameClientProps) {
       clearProgressRetries();
     };
   }, [game.url, clearProgressRetries]);
+
+  useEffect(() => {
+    if (!gameReady) return;
+    replayStoredSubmitResult();
+  }, [gameReady, replayStoredSubmitResult]);
 
   const handleMessage = useCallback(
     async (event: MessageEvent) => {
@@ -188,6 +248,7 @@ export default function GameClient({ game }: GameClientProps) {
           });
 
           scheduleProgressRetries(progressPayload);
+          replayStoredSubmitResult();
           break;
         }
 
@@ -313,7 +374,7 @@ export default function GameClient({ game }: GameClientProps) {
 
         case "GAME_LEADERBOARD_SUBMIT": {
           const notifyFailure = (error: string) => {
-            notifyUnityLeaderboardSubmit(iframeRef, {
+            deliverLeaderboardSubmitResult({
               success: false,
               highScore: personalBestRef.current,
               error,
@@ -335,6 +396,7 @@ export default function GameClient({ game }: GameClientProps) {
             notifyFailure("score is required.");
             break;
           }
+          setPendingLeaderboardSubmit(game.id, score);
           try {
             const { txHash } = await purchaseScoreSubmitOnChain();
             const result = await submitScoreToLeaderboard(game.id, {
@@ -342,16 +404,36 @@ export default function GameClient({ game }: GameClientProps) {
               txHash,
               score,
             });
-            notifyUnityLeaderboardSubmit(iframeRef, {
+            clearPendingLeaderboardSubmit(game.id);
+            deliverLeaderboardSubmitResult({
               success: true,
               highScore: result.highScore,
               leaderboardScore: result.leaderboardScore,
             });
           } catch (err) {
+            clearPendingLeaderboardSubmit(game.id);
             notifyFailure(
               err instanceof Error
                 ? err.message
                 : "Could not submit score."
+            );
+          }
+          break;
+        }
+
+        case "GAME_LEADERBOARD_SUBMIT_POLL": {
+          const stored = getLeaderboardSubmitResult(game.id);
+          if (stored) {
+            replayLeaderboardSubmitToUnity(iframeRef, game.id, stored);
+          } else {
+            notifyUnityLeaderboardSubmit(
+              iframeRef,
+              {
+                success: false,
+                highScore: personalBestRef.current,
+                error: "No submit result available yet.",
+              },
+              { persist: false }
             );
           }
           break;
@@ -374,6 +456,8 @@ export default function GameClient({ game }: GameClientProps) {
       markGameReady,
       scheduleProgressRetries,
       persistScore,
+      deliverLeaderboardSubmitResult,
+      replayStoredSubmitResult,
     ]
   );
 
@@ -433,6 +517,11 @@ export default function GameClient({ game }: GameClientProps) {
         onCancel={() => setExitOpen(false)}
         onExit={() => router.push("/")}
         onPlayMore={() => router.push("/")}
+      />
+
+      <LeaderboardSubmitToast
+        toast={submitToast}
+        onDismiss={() => setSubmitToast(null)}
       />
     </div>
   );

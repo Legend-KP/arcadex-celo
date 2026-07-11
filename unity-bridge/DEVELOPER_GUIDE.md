@@ -39,6 +39,7 @@ SubmitToLeaderboard()  ───────►   GAME_LEADERBOARD_SUBMIT → Mi
 | `GAME_PROGRESS_GET` | Refresh personal best / level |
 | `GAME_LEADERBOARD_GET` | Fetch public leaderboard rows |
 | `GAME_LEADERBOARD_SUBMIT` | Paid submit — posts score to leaderboard |
+| `GAME_LEADERBOARD_SUBMIT_POLL` | Re-fetch last submit result from shell (after wallet) |
 
 ### Legacy aliases (still accepted)
 
@@ -154,7 +155,24 @@ Use the **session score** (this run's score), not necessarily the all-time perso
 
 ### Receive: `OnLeaderboardSubmitComplete`
 
-The shell may retry delivery for a few seconds after the wallet closes (MiniPay).
+The shell may retry delivery for up to **60 seconds** after the wallet closes (MiniPay).
+It also stores the result in session storage and replays it on the next bootstrap.
+
+If your game still misses the callback, call **`PollSubmitResult()`** when the user
+returns from the wallet (e.g. on `Application.focusChanged` or a Submit button re-enable):
+
+```csharp
+void OnApplicationFocus(bool hasFocus)
+{
+    if (hasFocus && waitingForSubmitResult)
+    {
+        ArcadeXBridge.Instance.PollSubmitResult();
+    }
+}
+```
+
+The shell also shows a brief **toast** (success or error) so the player gets feedback even
+if Unity UI is not wired yet.
 
 Success:
 
@@ -205,6 +223,7 @@ A legacy **`OnScoreSubmitComplete`** bool event fires alongside `LeaderboardSubm
 ArcadeXBridge.Instance.SaveProgress(int score);
 ArcadeXBridge.Instance.SubmitToLeaderboard(int score);
 ArcadeXBridge.Instance.SubmitScore(int score); // alias
+ArcadeXBridge.Instance.PollSubmitResult();
 ArcadeXBridge.Instance.RequestLeaderboard();
 ArcadeXBridge.Instance.RequestProgress();
 ArcadeXBridge.Instance.SendBootstrap();

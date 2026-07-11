@@ -1,11 +1,14 @@
 import type { RefObject } from "react";
+import { storeLeaderboardSubmitResult } from "@/lib/leaderboard-submit-result";
 
 /**
  * bridge.ts
  * Sends messages from the Next.js shell into the Unity WebGL iframe.
  */
 
-const UNITY_CALLBACK_RETRIES_MS = [0, 100, 300, 800, 1500, 3000] as const;
+const UNITY_CALLBACK_RETRIES_MS = [
+  0, 100, 300, 800, 1500, 3000, 5000, 8000, 12000, 20000, 30000, 45000, 60000,
+] as const;
 
 export function sendToUnity(
   iframeRef: RefObject<HTMLIFrameElement | null>,
@@ -33,6 +36,7 @@ function postUnityCallback(
   const target = iframeRef.current?.contentWindow;
   if (target) {
     target.postMessage(message, "*");
+    tryDeliverDirectBridgeCallback(target, message.method, message.value);
     return;
   }
 
@@ -48,17 +52,37 @@ function postUnityCallback(
   }
 }
 
-export interface LeaderboardSubmitUnityResult {
-  success: boolean;
-  highScore?: number;
-  leaderboardScore?: number;
-  error?: string;
+function tryDeliverDirectBridgeCallback(
+  target: Window,
+  method: string,
+  value: string
+): void {
+  try {
+    const deliver = (
+      target as Window & {
+        __arcadeXDeliverCallback?: (method: string, value: string) => void;
+      }
+    ).__arcadeXDeliverCallback;
+    deliver?.(method, value);
+  } catch {
+    // Cross-origin or unavailable — postMessage path still used.
+  }
+}
+
+/** Re-send the last stored submit result (e.g. after iframe reload or bootstrap). */
+export function replayLeaderboardSubmitToUnity(
+  iframeRef: RefObject<HTMLIFrameElement | null>,
+  gameId: string,
+  result: LeaderboardSubmitUnityResult
+): void {
+  notifyUnityLeaderboardSubmit(iframeRef, result, { persist: false });
 }
 
 /** Notify Unity of paid leaderboard submit — primary + legacy callbacks. */
 export function notifyUnityLeaderboardSubmit(
   iframeRef: RefObject<HTMLIFrameElement | null>,
-  result: LeaderboardSubmitUnityResult
+  result: LeaderboardSubmitUnityResult,
+  opts?: { gameId?: string; persist?: boolean }
 ): void {
   const payload = {
     success: result.success,
@@ -67,10 +91,21 @@ export function notifyUnityLeaderboardSubmit(
     error: result.error ?? "",
   };
 
+  if (opts?.persist !== false && opts?.gameId) {
+    storeLeaderboardSubmitResult(opts.gameId, result);
+  }
+
   sendToUnity(iframeRef, "OnLeaderboardSubmitComplete", payload);
 
   // Legacy games may still listen on OnScoreSubmitted (not OnProgressSaved).
   sendToUnity(iframeRef, "OnScoreSubmitted", payload);
+}
+
+export interface LeaderboardSubmitUnityResult {
+  success: boolean;
+  highScore?: number;
+  leaderboardScore?: number;
+  error?: string;
 }
 
 /** Unity → shell message types (wallet-agnostic naming). */
@@ -79,7 +114,8 @@ export type GameBridgeMessageType =
   | "GAME_PROGRESS_SAVE"
   | "GAME_PROGRESS_GET"
   | "GAME_LEADERBOARD_GET"
-  | "GAME_LEADERBOARD_SUBMIT";
+  | "GAME_LEADERBOARD_SUBMIT"
+  | "GAME_LEADERBOARD_SUBMIT_POLL";
 
 /** @deprecated Legacy MiniPay-prefixed aliases — still accepted inbound. */
 export type LegacyUnityMessageType =
@@ -117,6 +153,7 @@ const HANDLED_GAME_MESSAGES = new Set<GameBridgeMessageType>([
   "GAME_PROGRESS_GET",
   "GAME_LEADERBOARD_GET",
   "GAME_LEADERBOARD_SUBMIT",
+  "GAME_LEADERBOARD_SUBMIT_POLL",
 ]);
 
 export function normalizeUnityMessageType(
