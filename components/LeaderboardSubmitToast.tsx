@@ -2,8 +2,10 @@
 
 import { useEffect } from "react";
 
+export type LeaderboardSubmitToastPhase = "submitting" | "success" | "error";
+
 export interface LeaderboardSubmitToastState {
-  success: boolean;
+  phase: LeaderboardSubmitToastPhase;
   message: string;
 }
 
@@ -12,14 +14,14 @@ interface LeaderboardSubmitToastProps {
   onDismiss: () => void;
 }
 
-const AUTO_DISMISS_MS = 5000;
+const AUTO_DISMISS_MS = 4500;
 
 export default function LeaderboardSubmitToast({
   toast,
   onDismiss,
 }: LeaderboardSubmitToastProps) {
   useEffect(() => {
-    if (!toast) return;
+    if (!toast || toast.phase === "submitting") return;
     const id = setTimeout(onDismiss, AUTO_DISMISS_MS);
     return () => clearTimeout(id);
   }, [toast, onDismiss]);
@@ -28,22 +30,30 @@ export default function LeaderboardSubmitToast({
 
   return (
     <div
-      className={`lb-submit-toast lb-submit-toast--${toast.success ? "success" : "error"}`}
+      className={`lb-submit-banner lb-submit-banner--${toast.phase}`}
       role="status"
       aria-live="polite"
     >
-      <span className="lb-submit-toast__icon" aria-hidden="true">
-        {toast.success ? "✓" : "!"}
-      </span>
-      <span className="lb-submit-toast__text">{toast.message}</span>
-      <button
-        type="button"
-        className="lb-submit-toast__close"
-        onClick={onDismiss}
-        aria-label="Dismiss"
-      >
-        ✕
-      </button>
+      <div className="lb-submit-banner__inner">
+        <span className="lb-submit-banner__icon" aria-hidden="true">
+          {toast.phase === "submitting" && (
+            <span className="lb-submit-banner__spinner" />
+          )}
+          {toast.phase === "success" && "🏆"}
+          {toast.phase === "error" && "!"}
+        </span>
+        <span className="lb-submit-banner__text">{toast.message}</span>
+        {toast.phase !== "submitting" && (
+          <button
+            type="button"
+            className="lb-submit-banner__close"
+            onClick={onDismiss}
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+        )}
+      </div>
     </div>
   );
 }

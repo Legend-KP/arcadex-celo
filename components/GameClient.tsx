@@ -137,7 +137,7 @@ export default function GameClient({ game }: GameClientProps) {
   const showSubmitFeedback = useCallback((result: LeaderboardSubmitUnityResult) => {
     if (result.success) {
       setSubmitToast({
-        success: true,
+        phase: "success",
         message: "Score submitted to the leaderboard!",
       });
       return;
@@ -150,14 +150,14 @@ export default function GameClient({ game }: GameClientProps) {
       error.toLowerCase().includes("denied")
     ) {
       setSubmitToast({
-        success: false,
+        phase: "error",
         message: "Payment cancelled.",
       });
       return;
     }
 
     setSubmitToast({
-      success: false,
+      phase: "error",
       message: error,
     });
   }, []);
@@ -396,6 +396,10 @@ export default function GameClient({ game }: GameClientProps) {
             notifyFailure("score is required.");
             break;
           }
+          setSubmitToast({
+            phase: "submitting",
+            message: "Submitting score… Please approve the payment.",
+          });
           setPendingLeaderboardSubmit(game.id, score);
           try {
             const { txHash } = await purchaseScoreSubmitOnChain();
@@ -510,6 +514,11 @@ export default function GameClient({ game }: GameClientProps) {
             onLoad={scheduleLoadFallback}
           />
         )}
+
+        <LeaderboardSubmitToast
+          toast={submitToast}
+          onDismiss={() => setSubmitToast(null)}
+        />
       </div>
 
       <ExitGameModal
@@ -517,11 +526,6 @@ export default function GameClient({ game }: GameClientProps) {
         onCancel={() => setExitOpen(false)}
         onExit={() => router.push("/")}
         onPlayMore={() => router.push("/")}
-      />
-
-      <LeaderboardSubmitToast
-        toast={submitToast}
-        onDismiss={() => setSubmitToast(null)}
       />
     </div>
   );

@@ -171,8 +171,12 @@ void OnApplicationFocus(bool hasFocus)
 }
 ```
 
-The shell also shows a brief **toast** (success or error) so the player gets feedback even
-if Unity UI is not wired yet.
+The shell shows a **top-of-game banner** for the full submit flow:
+- **Submitting** — “Submitting score… Please approve the payment.” (with spinner)
+- **Success / error** — styled result message (auto-dismisses after ~4.5s)
+
+Unity does not need its own submitting popup; optional in-game success UI can still
+subscribe to `LeaderboardSubmitCompleted`.
 
 Success:
 
