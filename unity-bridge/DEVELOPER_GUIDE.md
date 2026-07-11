@@ -153,13 +153,16 @@ Use the **session score** (this run's score), not necessarily the all-time perso
 
 ### Receive: `OnLeaderboardSubmitComplete`
 
+The shell may retry delivery for a few seconds after the wallet closes (MiniPay).
+
 Success:
 
 ```json
 {
   "success": true,
   "highScore": 600,
-  "leaderboardScore": 550
+  "leaderboardScore": 550,
+  "error": ""
 }
 ```
 
@@ -168,9 +171,13 @@ Failure:
 ```json
 {
   "success": false,
+  "highScore": 600,
+  "leaderboardScore": 0,
   "error": "Insufficient balance. You need $0.05 in USDT or USDC."
 }
 ```
+
+A legacy **`OnScoreSubmitted`** callback is also fired with `{ success, highScore, error }` for older game code.
 
 ### Receive: `OnBootstrapDataReceived`
 

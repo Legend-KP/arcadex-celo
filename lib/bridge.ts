@@ -5,6 +5,8 @@ import type { RefObject } from "react";
  * Sends messages from the Next.js shell into the Unity WebGL iframe.
  */
 
+const UNITY_CALLBACK_RETRIES_MS = [0, 100, 300, 800, 1500, 3000] as const;
+
 export function sendToUnity(
   iframeRef: RefObject<HTMLIFrameElement | null>,
   method: string,
@@ -13,11 +15,24 @@ export function sendToUnity(
   const value =
     typeof payload === "string" ? payload : JSON.stringify(payload);
 
-  if (iframeRef.current?.contentWindow) {
-    iframeRef.current.contentWindow.postMessage(
-      { type: "UNITY_CALLBACK", method, value },
-      "*"
-    );
+  const message = { type: "UNITY_CALLBACK", method, value };
+
+  for (const delay of UNITY_CALLBACK_RETRIES_MS) {
+    if (delay === 0) {
+      postUnityCallback(iframeRef, message);
+      continue;
+    }
+    setTimeout(() => postUnityCallback(iframeRef, message), delay);
+  }
+}
+
+function postUnityCallback(
+  iframeRef: RefObject<HTMLIFrameElement | null>,
+  message: { type: string; method: string; value: string }
+): void {
+  const target = iframeRef.current?.contentWindow;
+  if (target) {
+    target.postMessage(message, "*");
     return;
   }
 
@@ -29,8 +44,37 @@ export function sendToUnity(
     }
   ).unityInstance;
   if (unityInstance?.SendMessage) {
-    unityInstance.SendMessage("ArcadeXBridge", method, value);
+    unityInstance.SendMessage("ArcadeXBridge", message.method, message.value);
   }
+}
+
+export interface LeaderboardSubmitUnityResult {
+  success: boolean;
+  highScore?: number;
+  leaderboardScore?: number;
+  error?: string;
+}
+
+/** Notify Unity of paid leaderboard submit — primary + legacy callbacks. */
+export function notifyUnityLeaderboardSubmit(
+  iframeRef: RefObject<HTMLIFrameElement | null>,
+  result: LeaderboardSubmitUnityResult
+): void {
+  const payload = {
+    success: result.success,
+    highScore: result.highScore ?? 0,
+    leaderboardScore: result.leaderboardScore ?? 0,
+    error: result.error ?? "",
+  };
+
+  sendToUnity(iframeRef, "OnLeaderboardSubmitComplete", payload);
+
+  // Legacy games may still listen on OnScoreSubmitted / ProgressSaved.
+  sendToUnity(iframeRef, "OnScoreSubmitted", {
+    success: result.success,
+    highScore: result.leaderboardScore ?? result.highScore ?? 0,
+    error: result.error ?? "",
+  });
 }
 
 /** Unity → shell message types (wallet-agnostic naming). */

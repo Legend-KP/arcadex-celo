@@ -6,6 +6,7 @@ import ExitGameModal from "@/components/ExitGameModal";
 import LoadingScreen from "@/components/LoadingScreen";
 import {
   normalizeUnityMessageType,
+  notifyUnityLeaderboardSubmit,
   sendToUnity,
   UnityMessage,
 } from "@/lib/bridge";
@@ -311,28 +312,27 @@ export default function GameClient({ game }: GameClientProps) {
         }
 
         case "GAME_LEADERBOARD_SUBMIT": {
-          if (!leaderboardEnabled) {
-            sendToUnity(iframeRef, "OnLeaderboardSubmitComplete", {
+          const notifyFailure = (error: string) => {
+            notifyUnityLeaderboardSubmit(iframeRef, {
               success: false,
-              error: "Leaderboard disabled for this game.",
+              highScore: personalBestRef.current,
+              error,
             });
+          };
+
+          if (!leaderboardEnabled) {
+            notifyFailure("Leaderboard disabled for this game.");
             break;
           }
           const { score } = (msg.payload ?? {}) as { score?: number };
           const wallet =
             walletAddress || profile?.walletAddress || "";
           if (!wallet) {
-            sendToUnity(iframeRef, "OnLeaderboardSubmitComplete", {
-              success: false,
-              error: "No wallet address available.",
-            });
+            notifyFailure("No wallet address available.");
             break;
           }
           if (typeof score !== "number" || score <= 0) {
-            sendToUnity(iframeRef, "OnLeaderboardSubmitComplete", {
-              success: false,
-              error: "score is required.",
-            });
+            notifyFailure("score is required.");
             break;
           }
           try {
@@ -342,19 +342,17 @@ export default function GameClient({ game }: GameClientProps) {
               txHash,
               score,
             });
-            sendToUnity(iframeRef, "OnLeaderboardSubmitComplete", {
+            notifyUnityLeaderboardSubmit(iframeRef, {
               success: true,
               highScore: result.highScore,
               leaderboardScore: result.leaderboardScore,
             });
           } catch (err) {
-            sendToUnity(iframeRef, "OnLeaderboardSubmitComplete", {
-              success: false,
-              error:
-                err instanceof Error
-                  ? err.message
-                  : "Could not submit score.",
-            });
+            notifyFailure(
+              err instanceof Error
+                ? err.message
+                : "Could not submit score."
+            );
           }
           break;
         }

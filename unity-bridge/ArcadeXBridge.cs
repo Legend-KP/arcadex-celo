@@ -182,6 +182,7 @@ public class ArcadeXBridge : MonoBehaviour
 
     public void OnLeaderboardSubmitComplete(string json)
     {
+        Debug.Log("[ArcadeXBridge] OnLeaderboardSubmitComplete: " + json);
         ArcadeXLeaderboardSubmitResult result =
             JsonUtility.FromJson<ArcadeXLeaderboardSubmitResult>(json);
         LeaderboardSubmitCompleted?.Invoke(result);
