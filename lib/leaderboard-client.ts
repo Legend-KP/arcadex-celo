@@ -74,11 +74,10 @@ export async function submitScore(
 
 export async function submitScoreToLeaderboard(
   gameId: string,
-  opts: { walletAddress: string; txHash: string }
+  opts: { walletAddress: string; txHash: string; score: number }
 ): Promise<{
-  personalBest: number;
-  submittedBest: number;
-  canSubmit: boolean;
+  highScore: number;
+  leaderboardScore: number;
 }> {
   const res = await fetch(`/api/games/${gameId}/leaderboard/submit`, {
     method: "POST",
@@ -87,9 +86,8 @@ export async function submitScoreToLeaderboard(
   });
 
   const data = (await res.json()) as {
-    personalBest?: number;
-    submittedBest?: number;
-    canSubmit?: boolean;
+    highScore?: number;
+    leaderboardScore?: number;
     error?: string;
     code?: string;
   };
@@ -99,8 +97,7 @@ export async function submitScoreToLeaderboard(
   }
 
   return {
-    personalBest: data.personalBest ?? 0,
-    submittedBest: data.submittedBest ?? 0,
-    canSubmit: data.canSubmit ?? false,
+    highScore: data.highScore ?? 0,
+    leaderboardScore: data.leaderboardScore ?? 0,
   };
 }

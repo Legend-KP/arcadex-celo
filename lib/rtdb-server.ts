@@ -305,7 +305,6 @@ export class ScoreSubmitActivationError extends Error {
       | "NO_NAME"
       | "INVALID_TX"
       | "TX_ALREADY_USED"
-      | "NO_IMPROVEMENT"
       | "NO_SCORE"
   ) {
     super(message);
@@ -654,16 +653,24 @@ export async function resolveGameProgressFromServer(
 export async function activateScoreSubmitOnServer(
   walletAddress: string,
   gameId: string,
-  txHash: string
+  txHash: string,
+  score: number
 ): Promise<{
-  personalBest: number;
-  submittedBest: number;
+  highScore: number;
+  leaderboardScore: number;
   submitted: boolean;
 }> {
   if (!isWalletAddress(walletAddress)) {
     throw new ScoreSubmitActivationError(
       "A valid wallet address is required.",
       "NO_WALLET"
+    );
+  }
+
+  if (typeof score !== "number" || !Number.isFinite(score) || score <= 0) {
+    throw new ScoreSubmitActivationError(
+      "A valid score greater than zero is required.",
+      "NO_SCORE"
     );
   }
 
@@ -686,29 +693,12 @@ export async function activateScoreSubmitOnServer(
     );
   }
 
-  const personalBest = await fetchPersonalBestFromServer(wallet, gameId);
-  if (personalBest <= 0) {
-    throw new ScoreSubmitActivationError(
-      "No score to submit. Play the game first.",
-      "NO_SCORE"
-    );
-  }
-
-  const submittedBest = await fetchUserSubmittedScoreFromServer(gameId, {
-    walletAddress: wallet,
-    playerName,
-  });
-
-  if (personalBest <= submittedBest) {
-    throw new ScoreSubmitActivationError(
-      "Your personal best is not higher than your submitted score.",
-      "NO_IMPROVEMENT"
-    );
-  }
+  const highScore = await fetchPersonalBestFromServer(wallet, gameId);
 
   const existingPayment = await readPath<{
     wallet?: string;
     gameId?: string;
+    score?: number;
   }>(scorePaymentPath(normalizedTxHash));
 
   if (existingPayment?.wallet) {
@@ -720,12 +710,14 @@ export async function activateScoreSubmitOnServer(
       );
     }
 
+    const leaderboardScore = await fetchUserSubmittedScoreFromServer(gameId, {
+      walletAddress: wallet,
+      playerName,
+    });
+
     return {
-      personalBest,
-      submittedBest: await fetchUserSubmittedScoreFromServer(gameId, {
-        walletAddress: wallet,
-        playerName,
-      }),
+      highScore,
+      leaderboardScore,
       submitted: false,
     };
   }
@@ -734,21 +726,26 @@ export async function activateScoreSubmitOnServer(
 
   await submitLeaderboardEntryOnServer(gameId, {
     name: playerName,
-    score: personalBest,
+    score,
     walletAddress: wallet,
+  });
+
+  const leaderboardScore = await fetchUserSubmittedScoreFromServer(gameId, {
+    walletAddress: wallet,
+    playerName,
   });
 
   const now = Date.now();
   await writePath(scorePaymentPath(normalizedTxHash), {
     wallet,
     gameId,
-    score: personalBest,
+    score,
     activatedAt: now,
   });
 
   return {
-    personalBest,
-    submittedBest: personalBest,
+    highScore,
+    leaderboardScore,
     submitted: true,
   };
 }

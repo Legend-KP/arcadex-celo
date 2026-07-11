@@ -69,6 +69,15 @@ export default function GameMenu({
 
       <div className="game-menu-grid" aria-hidden />
 
+      <button
+        type="button"
+        className="game-menu-back"
+        onClick={() => router.push("/")}
+        aria-label="Back to home"
+      >
+        ←
+      </button>
+
       <div className="game-menu-stack">
         {contestLive && (
           <div className="game-menu-contest-stripe" aria-label="Contest is live">
@@ -83,29 +92,30 @@ export default function GameMenu({
         )}
 
         <div className="game-menu-card">
-        <div className="game-menu-logo-wrap">
-          {logoSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={logoSrc}
-              alt={game.name}
-              className="game-menu-logo"
-              onError={() => setLogoIdx((i) => i + 1)}
-            />
-          ) : fallbackSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={fallbackSrc}
-              alt={game.name}
-              className="game-menu-logo"
-              onError={() => setFallbackIdx((i) => i + 1)}
-            />
-          ) : (
-            <span className="game-menu-logo-fallback">🎮</span>
-          )}
-        </div>
+          <div className="game-menu-logo-wrap">
+            {logoSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoSrc}
+                alt={game.name}
+                className="game-menu-logo"
+                onError={() => setLogoIdx((i) => i + 1)}
+              />
+            ) : fallbackSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={fallbackSrc}
+                alt={game.name}
+                className="game-menu-logo"
+                onError={() => setFallbackIdx((i) => i + 1)}
+              />
+            ) : (
+              <span className="game-menu-logo-fallback">🎮</span>
+            )}
+          </div>
 
-        <h1 className="game-menu-title">{game.name}</h1>
+          <h1 className="game-menu-title">{game.name}</h1>
+        </div>
 
         <div className="game-menu-actions">
           <button
@@ -114,7 +124,10 @@ export default function GameMenu({
             onClick={onStart}
             disabled={starting}
           >
-            {starting ? "Starting..." : "START"}
+            <span className="game-menu-btn__icon" aria-hidden>
+              ▶
+            </span>
+            {starting ? "Starting..." : "Start Game"}
           </button>
           {sparkError && (
             <p className="game-menu-spark-error" role="alert">
@@ -127,18 +140,13 @@ export default function GameMenu({
               className="game-menu-btn game-menu-btn--leaderboard"
               onClick={onLeaderboard}
             >
+              <span className="game-menu-btn__icon" aria-hidden>
+                🏆
+              </span>
               Leaderboard
             </button>
           )}
-          <button
-            type="button"
-            className="game-menu-btn game-menu-btn--back"
-            onClick={() => router.push("/")}
-          >
-            Back
-          </button>
         </div>
-      </div>
       </div>
     </div>
   );

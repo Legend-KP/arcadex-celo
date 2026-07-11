@@ -5,14 +5,20 @@ import { useRouter } from "next/navigation";
 import ExitGameModal from "@/components/ExitGameModal";
 import LoadingScreen from "@/components/LoadingScreen";
 import NewHighScoreBanner from "@/components/NewHighScoreBanner";
-import { sendToUnity, UnityMessage } from "@/lib/bridge";
+import {
+  normalizeUnityMessageType,
+  sendToUnity,
+  UnityMessage,
+} from "@/lib/bridge";
 import { getLeaderboard } from "@/lib/firebase";
 import { getGameProgress, saveGameProgress } from "@/lib/game-progress-client";
+import { submitScoreToLeaderboard } from "@/lib/leaderboard-client";
 import { buildGameIframeUrl, getShellOrigin } from "@/lib/game-iframe-url";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { resolveWalletOnAppOpen } from "@/lib/walletAuth";
 import { getGameTheme } from "@/lib/game-themes";
-import { Game, gameHasLeaderboard } from "@/types";
+import { purchaseScoreSubmitOnChain } from "@/lib/score-submit-purchase";
+import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
 
 interface GameClientProps {
   game: Game;
@@ -31,6 +37,7 @@ export default function GameClient({ game, onOpenSubmitScore }: GameClientProps)
   const [newHighScore, setNewHighScore] = useState<number | null>(null);
   const personalBestRef = useRef(0);
   const leaderboardEnabled = gameHasLeaderboard(game);
+  const contestLive = gameHasContestLive(game);
   const theme = getGameTheme(game);
   const shellOrigin = getShellOrigin();
   const progressRetryRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -112,9 +119,9 @@ export default function GameClient({ game, onOpenSubmitScore }: GameClientProps)
   );
 
   const persistScore = useCallback(
-    async (score: number, name: string, resolvedWallet: string) => {
+    async (score: number, name: string, resolvedWalletAddr: string) => {
       const previousBest = personalBestRef.current;
-      const result = await saveGameProgress(game.id, resolvedWallet, score, {
+      const result = await saveGameProgress(game.id, resolvedWalletAddr, score, {
         playerName: name,
       });
       const nextBest = result.progress.score ?? score;
@@ -138,10 +145,16 @@ export default function GameClient({ game, onOpenSubmitScore }: GameClientProps)
   const handleMessage = useCallback(
     async (event: MessageEvent) => {
       const msg = event.data as UnityMessage;
-      if (!msg?.type?.startsWith("MINIPAY_")) return;
+      const bridgeType = normalizeUnityMessageType(msg.type);
+      if (!bridgeType) {
+        if (msg?.type?.startsWith("MINIPAY_")) {
+          console.warn("[ArcadeX bridge] unhandled legacy message:", msg.type);
+        }
+        return;
+      }
 
-      switch (msg.type) {
-        case "MINIPAY_BOOTSTRAP": {
+      switch (bridgeType) {
+        case "GAME_BOOTSTRAP": {
           markGameReady();
           const wallet =
             walletAddress ||
@@ -180,6 +193,7 @@ export default function GameClient({ game, onOpenSubmitScore }: GameClientProps)
             shellOrigin,
             walletAddress: wallet,
             playerName: bootstrapName,
+            contestLive,
             ...progressPayload,
             hints: 0,
             tutorialComplete: false,
@@ -190,7 +204,7 @@ export default function GameClient({ game, onOpenSubmitScore }: GameClientProps)
           break;
         }
 
-        case "MINIPAY_GET_LEADERBOARD": {
+        case "GAME_LEADERBOARD_GET": {
           if (!leaderboardEnabled) {
             sendToUnity(iframeRef, "OnLeaderboardReceived", []);
             break;
@@ -200,45 +214,67 @@ export default function GameClient({ game, onOpenSubmitScore }: GameClientProps)
           break;
         }
 
-        case "MINIPAY_SUBMIT_SCORE": {
+        case "GAME_PROGRESS_SAVE": {
+          const payload = (msg.payload ?? {}) as {
+            name?: string;
+            score?: number;
+            value?: number;
+            walletAddress?: string;
+          };
+          const progressValue =
+            typeof payload.value === "number"
+              ? payload.value
+              : typeof payload.score === "number"
+                ? payload.score
+                : undefined;
+          const saveCallback =
+            msg.type === "MINIPAY_SUBMIT_SCORE"
+              ? "OnScoreSubmitted"
+              : "OnProgressSaved";
+
           if (!leaderboardEnabled) {
-            sendToUnity(iframeRef, "OnScoreSubmitted", {
+            sendToUnity(iframeRef, saveCallback, {
               success: false,
               error: "Leaderboard disabled for this game.",
             });
             break;
           }
-          const { name, score, walletAddress: payloadWallet } = msg.payload as {
-            name: string;
-            score: number;
-            walletAddress?: string;
-          };
-          const resolvedWallet =
-            walletAddress || payloadWallet || profile?.walletAddress || "";
-          if (!resolvedWallet) {
-            sendToUnity(iframeRef, "OnScoreSubmitted", {
+          if (typeof progressValue !== "number") {
+            sendToUnity(iframeRef, saveCallback, {
+              success: false,
+              error: "score is required.",
+            });
+            break;
+          }
+          const resolvedWalletAddr =
+            walletAddress || payload.walletAddress || profile?.walletAddress || "";
+          if (!resolvedWalletAddr) {
+            sendToUnity(iframeRef, saveCallback, {
               success: false,
               error: "No wallet address available.",
             });
             break;
           }
-          if (payloadWallet && payloadWallet !== profile?.walletAddress) {
-            updateWalletAddress(payloadWallet).catch(() => {
+          if (
+            payload.walletAddress &&
+            payload.walletAddress !== profile?.walletAddress
+          ) {
+            updateWalletAddress(payload.walletAddress).catch(() => {
               // Wallet sync is best-effort
             });
           }
           try {
             const highScore = await persistScore(
-              score,
-              playerName || name,
-              resolvedWallet
+              progressValue,
+              playerName || payload.name || "",
+              resolvedWalletAddr
             );
-            sendToUnity(iframeRef, "OnScoreSubmitted", {
+            sendToUnity(iframeRef, saveCallback, {
               success: true,
               highScore,
             });
           } catch (err) {
-            sendToUnity(iframeRef, "OnScoreSubmitted", {
+            sendToUnity(iframeRef, saveCallback, {
               success: false,
               error:
                 err instanceof Error
@@ -249,7 +285,7 @@ export default function GameClient({ game, onOpenSubmitScore }: GameClientProps)
           break;
         }
 
-        case "MINIPAY_GET_PROGRESS": {
+        case "GAME_PROGRESS_GET": {
           const wallet =
             walletAddress || profile?.walletAddress || "";
           if (!wallet) {
@@ -270,6 +306,7 @@ export default function GameClient({ game, onOpenSubmitScore }: GameClientProps)
               level: progress.level ?? 0,
               hasLeaderboard,
             };
+            personalBestRef.current = payload.highScore;
             sendToUnity(iframeRef, "OnProgressReceived", {
               success: true,
               ...payload,
@@ -287,72 +324,63 @@ export default function GameClient({ game, onOpenSubmitScore }: GameClientProps)
           break;
         }
 
-        case "MINIPAY_SAVE_PROGRESS": {
-          const { value, score } = (msg.payload ?? {}) as {
-            value?: number;
-            score?: number;
-          };
-          const progressValue =
-            typeof value === "number"
-              ? value
-              : typeof score === "number"
-                ? score
-                : undefined;
-          if (typeof progressValue !== "number") {
-            sendToUnity(iframeRef, "OnProgressSaved", {
+        case "GAME_LEADERBOARD_SUBMIT": {
+          if (!leaderboardEnabled) {
+            sendToUnity(iframeRef, "OnLeaderboardSubmitComplete", {
               success: false,
-              error: "value or score is required.",
+              error: "Leaderboard disabled for this game.",
             });
             break;
           }
+          const { score } = (msg.payload ?? {}) as { score?: number };
           const wallet =
             walletAddress || profile?.walletAddress || "";
           if (!wallet) {
-            sendToUnity(iframeRef, "OnProgressSaved", {
+            sendToUnity(iframeRef, "OnLeaderboardSubmitComplete", {
               success: false,
               error: "No wallet address available.",
             });
             break;
           }
-          try {
-            const result = await saveGameProgress(game.id, wallet, progressValue, {
-              playerName: playerName || profile?.name || undefined,
+          if (typeof score !== "number" || score <= 0) {
+            sendToUnity(iframeRef, "OnLeaderboardSubmitComplete", {
+              success: false,
+              error: "score is required.",
             });
-            const nextBest = leaderboardEnabled
-              ? (result.progress.score ?? progressValue)
-              : progressValue;
-            if (leaderboardEnabled) {
-              maybeCelebrateHighScore(personalBestRef.current, nextBest);
-              if (nextBest > personalBestRef.current) {
-                personalBestRef.current = nextBest;
-              }
-            }
-            sendToUnity(iframeRef, "OnProgressSaved", {
+            break;
+          }
+          try {
+            const { txHash } = await purchaseScoreSubmitOnChain();
+            const result = await submitScoreToLeaderboard(game.id, {
+              walletAddress: wallet,
+              txHash,
+              score,
+            });
+            sendToUnity(iframeRef, "OnLeaderboardSubmitComplete", {
               success: true,
-              ...(leaderboardEnabled
-                ? { highScore: nextBest }
-                : { level: result.progress.level ?? progressValue }),
-              hasLeaderboard: result.hasLeaderboard,
+              highScore: result.highScore,
+              leaderboardScore: result.leaderboardScore,
             });
           } catch (err) {
-            sendToUnity(iframeRef, "OnProgressSaved", {
+            sendToUnity(iframeRef, "OnLeaderboardSubmitComplete", {
               success: false,
               error:
                 err instanceof Error
                   ? err.message
-                  : "Could not save progress.",
+                  : "Could not submit score.",
             });
           }
           break;
         }
 
         default:
-          console.warn("[ArcadeX bridge] unhandled message:", msg.type);
+          console.warn("[ArcadeX bridge] unhandled message:", bridgeType);
       }
     },
     [
       game.id,
       leaderboardEnabled,
+      contestLive,
       playerName,
       profile?.name,
       profile?.walletAddress,
@@ -361,7 +389,6 @@ export default function GameClient({ game, onOpenSubmitScore }: GameClientProps)
       updateWalletAddress,
       markGameReady,
       scheduleProgressRetries,
-      maybeCelebrateHighScore,
       persistScore,
     ]
   );

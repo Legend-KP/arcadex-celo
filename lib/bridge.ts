@@ -29,11 +29,20 @@ export function sendToUnity(
     }
   ).unityInstance;
   if (unityInstance?.SendMessage) {
-    unityInstance.SendMessage("MiniPayBridge", method, value);
+    unityInstance.SendMessage("ArcadeXBridge", method, value);
   }
 }
 
-export type UnityMessageType =
+/** Unity → shell message types (wallet-agnostic naming). */
+export type GameBridgeMessageType =
+  | "GAME_BOOTSTRAP"
+  | "GAME_PROGRESS_SAVE"
+  | "GAME_PROGRESS_GET"
+  | "GAME_LEADERBOARD_GET"
+  | "GAME_LEADERBOARD_SUBMIT";
+
+/** @deprecated Legacy MiniPay-prefixed aliases — still accepted inbound. */
+export type LegacyUnityMessageType =
   | "MINIPAY_BOOTSTRAP"
   | "MINIPAY_SYNC_USER_STATE"
   | "MINIPAY_COMPLETE_TUTORIAL"
@@ -47,7 +56,42 @@ export type UnityMessageType =
   | "MINIPAY_GET_PROGRESS"
   | "MINIPAY_SAVE_PROGRESS";
 
+export type UnityMessageType = GameBridgeMessageType | LegacyUnityMessageType;
+
 export interface UnityMessage {
   type: UnityMessageType;
   payload?: unknown;
+}
+
+const LEGACY_MESSAGE_ALIASES: Record<string, GameBridgeMessageType> = {
+  MINIPAY_BOOTSTRAP: "GAME_BOOTSTRAP",
+  MINIPAY_SAVE_PROGRESS: "GAME_PROGRESS_SAVE",
+  MINIPAY_SUBMIT_SCORE: "GAME_PROGRESS_SAVE",
+  MINIPAY_GET_PROGRESS: "GAME_PROGRESS_GET",
+  MINIPAY_GET_LEADERBOARD: "GAME_LEADERBOARD_GET",
+};
+
+const HANDLED_GAME_MESSAGES = new Set<GameBridgeMessageType>([
+  "GAME_BOOTSTRAP",
+  "GAME_PROGRESS_SAVE",
+  "GAME_PROGRESS_GET",
+  "GAME_LEADERBOARD_GET",
+  "GAME_LEADERBOARD_SUBMIT",
+]);
+
+export function normalizeUnityMessageType(
+  type: string | undefined
+): GameBridgeMessageType | null {
+  if (!type) return null;
+  const aliased = LEGACY_MESSAGE_ALIASES[type] ?? type;
+  if (HANDLED_GAME_MESSAGES.has(aliased as GameBridgeMessageType)) {
+    return aliased as GameBridgeMessageType;
+  }
+  return null;
+}
+
+export function isUnityBridgeMessage(type: string | undefined): boolean {
+  if (!type) return false;
+  if (normalizeUnityMessageType(type)) return true;
+  return type.startsWith("MINIPAY_");
 }

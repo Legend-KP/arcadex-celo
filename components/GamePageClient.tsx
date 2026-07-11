@@ -112,17 +112,11 @@ export default function GamePageClient() {
         walletAddress,
         playerName: playerName || undefined,
       });
-      if (data.canSubmit) {
-        openSubmitPanel(data.personalBest);
-      } else {
-        setLbOpen(true);
-        setSubmitOpen(false);
-      }
+      openSubmitPanel(data.personalBest ?? pendingScore);
     } catch {
-      setLbOpen(true);
-      setSubmitOpen(false);
+      openSubmitPanel(pendingScore);
     }
-  }, [game, walletAddress, playerName, openSubmitPanel]);
+  }, [game, walletAddress, playerName, openSubmitPanel, pendingScore]);
 
   if (loading) {
     return <LoadingScreen message="Loading game" />;

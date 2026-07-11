@@ -33,14 +33,13 @@ export default function SubmitScorePanel({
   const { walletAddress, playerName } = usePlayerProfile();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [personalBest, setPersonalBest] = useState(0);
-  const [submittedBest, setSubmittedBest] = useState(0);
-  const [canSubmit, setCanSubmit] = useState(false);
+  const [leaderboardScore, setLeaderboardScore] = useState(0);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  const displayScore = pendingScore ?? personalBest;
+  const submitScore = pendingScore ?? personalBest;
   const displayName = playerName?.trim() || "You";
 
   async function loadLeaderboard() {
@@ -53,13 +52,11 @@ export default function SubmitScorePanel({
       });
       setEntries((data.entries ?? []).slice(0, LEADERBOARD_MAX_ENTRIES));
       setPersonalBest(data.personalBest ?? 0);
-      setSubmittedBest(data.submittedBest ?? 0);
-      setCanSubmit(Boolean(data.canSubmit));
+      setLeaderboardScore(data.submittedBest ?? 0);
     } catch {
       setEntries([]);
       setPersonalBest(0);
-      setSubmittedBest(0);
-      setCanSubmit(false);
+      setLeaderboardScore(0);
     } finally {
       setLoading(false);
     }
@@ -72,7 +69,7 @@ export default function SubmitScorePanel({
   }, [open, gameId, walletAddress, playerName]);
 
   async function handleSubmitScore() {
-    if (!walletAddress || submitting) return;
+    if (!walletAddress || submitting || submitScore <= 0) return;
 
     setSubmitting(true);
     setSubmitError("");
@@ -80,12 +77,14 @@ export default function SubmitScorePanel({
 
     try {
       const { txHash } = await purchaseScoreSubmitOnChain();
-      await submitScoreToLeaderboard(gameId, {
+      const result = await submitScoreToLeaderboard(gameId, {
         walletAddress,
         txHash,
+        score: submitScore,
       });
+      setPersonalBest(result.highScore);
+      setLeaderboardScore(result.leaderboardScore);
       setSubmitSuccess(true);
-      setCanSubmit(false);
       await loadLeaderboard();
       onSubmitted?.();
     } catch (err) {
@@ -129,12 +128,12 @@ export default function SubmitScorePanel({
           </div>
         )}
 
-        {canSubmit && !submitSuccess && (
+        {!submitSuccess && (
           <button
             type="button"
             className="submit-panel__submit-btn"
             onClick={() => void handleSubmitScore()}
-            disabled={submitting}
+            disabled={submitting || submitScore <= 0}
           >
             {submitting ? "Submitting…" : "Submit Score"}
           </button>
@@ -152,26 +151,28 @@ export default function SubmitScorePanel({
           </p>
         )}
 
-        {canSubmit && !submitSuccess && displayScore > 0 && (
+        {submitScore > 0 && !submitSuccess && (
           <div className="submit-panel__hero">
-            <p className="submit-panel__hero-label">Your new high score</p>
+            <p className="submit-panel__hero-label">Score to submit</p>
             <div className="submit-panel__hero-row">
               <span className="submit-panel__hero-name">{displayName}</span>
               <span className="submit-panel__hero-score">
-                {displayScore.toLocaleString()}
+                {submitScore.toLocaleString()}
               </span>
             </div>
+            {personalBest > 0 && personalBest !== submitScore && (
+              <p className="submit-panel__hero-hint">
+                Personal best: {personalBest.toLocaleString()}
+              </p>
+            )}
             <p className="submit-panel__hero-hint">
               Submit to post on the leaderboard
               {contestLive ? " and enter the contest" : ""}.
+              {leaderboardScore > 0
+                ? ` Your current leaderboard score is ${leaderboardScore.toLocaleString()}.`
+                : ""}
             </p>
           </div>
-        )}
-
-        {!canSubmit && !loading && submittedBest > 0 && (
-          <p className="submit-panel__hint">
-            Your best submitted score: {submittedBest.toLocaleString()}
-          </p>
         )}
 
         <div className="submit-panel__list">

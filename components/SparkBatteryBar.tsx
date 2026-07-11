@@ -301,25 +301,22 @@ export default function SparkBatteryBar() {
           className="spark-battery"
           onClick={() => setOpen(true)}
           aria-expanded={open}
-          aria-label={`${sparks.available} of ${sparks.max} Sparks available`}
+          aria-label={
+            sparks.hasInfinite
+              ? "Infinite Sparks active"
+              : `${sparks.available} of ${sparks.max} Sparks available`
+          }
           disabled={loading}
         >
-          <span className="spark-battery__bolt" aria-hidden>
-            ⚡
+          <span className="spark-battery__label" aria-hidden>
+            {sparks.hasInfinite ? (
+              <>⚡∞</>
+            ) : (
+              <>
+                ⚡{sparks.available}/{sparks.max}
+              </>
+            )}
           </span>
-          <span className="spark-battery__shell">
-            {sparks.slots.map((slot) => (
-              <span
-                key={slot.index}
-                className={`spark-battery__cell${
-                  sparks.hasInfinite || slot.status === "ready"
-                    ? " spark-battery__cell--on"
-                    : " spark-battery__cell--off"
-                }`}
-              />
-            ))}
-          </span>
-          <span className="spark-battery__cap" aria-hidden />
         </button>
       </div>
 
