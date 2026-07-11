@@ -4,7 +4,9 @@ import { Game } from "@/types";
 const LOCAL_GAME_FOLDERS = [
   "basedrop",
   "block-blast",
+  "coin-sort",
   "dot-connect",
+  "line-link",
   "math-run",
   "orbit-flow",
 ] as const;
@@ -93,6 +95,16 @@ export function gameAssetCandidates(
   return out;
 }
 
+function pushLocalMenuAssets(push: (url?: string) => void, folder: string) {
+  const prefix = folder.split("-")[0];
+  push(`/games/${folder}/${prefix}-logo.webp`);
+  push(`/games/${folder}/${prefix}-logo.png`);
+  push(`/games/${folder}/fallback.webp`);
+  push(`/games/${folder}/fallback.png`);
+  push(`/games/${folder}/logo.webp`);
+  push(`/games/${folder}/logo.png`);
+}
+
 /** Fallback image URLs when thumbnail and logo are unavailable. */
 export function gameFallbackCandidates(game: Game): string[] {
   const seen = new Set<string>();
@@ -108,15 +120,31 @@ export function gameFallbackCandidates(game: Game): string[] {
 
   const localFolder = resolveLocalGameFolder(game);
   if (localFolder) {
-    push(`/games/${localFolder}/fallback.webp`);
-    push(`/games/${localFolder}/fallback.png`);
+    pushLocalMenuAssets(push, localFolder);
   }
 
   const nameSlug = slugifyGameName(game.name);
   if (nameSlug && nameSlug !== localFolder) {
-    push(`/games/${nameSlug}/fallback.webp`);
-    push(`/games/${nameSlug}/fallback.png`);
+    pushLocalMenuAssets(push, nameSlug);
   }
+
+  return out;
+}
+
+/** Menu screen image URLs — fallback first, then logo, then thumbnail. */
+export function gameMenuImageCandidates(game: Game): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  const push = (url?: string) => {
+    if (!url?.trim() || seen.has(url)) return;
+    seen.add(url);
+    out.push(url);
+  };
+
+  for (const url of gameFallbackCandidates(game)) push(url);
+  for (const url of gameAssetCandidates(game, "logo")) push(url);
+  for (const url of gameAssetCandidates(game, "thumbnail")) push(url);
 
   return out;
 }

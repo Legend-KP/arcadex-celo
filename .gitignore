@@ -50,3 +50,4 @@ contract-deploy/node_modules/
 *.tsbuildinfo
 .env.example
 *.example
+unity-bridge/DEVELOPER_GUIDE.md

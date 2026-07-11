@@ -6,23 +6,19 @@ import { Game, gameHasLeaderboard, gameHasContestLive, gameIsLive } from "@/type
 import GameClient from "@/components/GameClient";
 import GameMenu from "@/components/GameMenu";
 import Leaderboard from "@/components/Leaderboard";
-import SubmitScorePanel from "@/components/SubmitScorePanel";
 import LoadingScreen from "@/components/LoadingScreen";
 import NoSparksModal from "@/components/NoSparksModal";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { useSparks } from "@/components/SparkProvider";
-import { getLeaderboard } from "@/lib/leaderboard-client";
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { walletAddress, playerName } = usePlayerProfile();
+  const { walletAddress } = usePlayerProfile();
   const { sparks, spendForGame } = useSparks();
   const [game, setGame] = useState<Game | null>(null);
   const [started, setStarted] = useState(false);
   const [lbOpen, setLbOpen] = useState(false);
-  const [submitOpen, setSubmitOpen] = useState(false);
-  const [pendingScore, setPendingScore] = useState<number | undefined>();
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
@@ -94,30 +90,6 @@ export default function GamePageClient() {
     }
   }, [walletAddress, sparks.hasInfinite, sparks.available, spendForGame]);
 
-  const openSubmitPanel = useCallback((score?: number) => {
-    setPendingScore(score);
-    setSubmitOpen(true);
-    setLbOpen(false);
-  }, []);
-
-  const openLeaderboardView = useCallback(async () => {
-    if (!game || !walletAddress) {
-      setLbOpen(true);
-      setSubmitOpen(false);
-      return;
-    }
-
-    try {
-      const data = await getLeaderboard(game.id, {
-        walletAddress,
-        playerName: playerName || undefined,
-      });
-      openSubmitPanel(data.personalBest ?? pendingScore);
-    } catch {
-      openSubmitPanel(pendingScore);
-    }
-  }, [game, walletAddress, playerName, openSubmitPanel, pendingScore]);
-
   if (loading) {
     return <LoadingScreen message="Loading game" />;
   }
@@ -158,43 +130,21 @@ export default function GamePageClient() {
         <GameMenu
           game={game}
           onStart={handleStart}
-          onLeaderboard={() => void openLeaderboardView()}
+          onLeaderboard={() => setLbOpen(true)}
           starting={starting}
           sparkError={sparkError}
         />
       ) : (
-        <GameClient
-          game={game}
-          onOpenSubmitScore={openSubmitPanel}
-        />
+        <GameClient game={game} />
       )}
       {gameHasLeaderboard(game) && (
-        <>
-          <SubmitScorePanel
-            gameId={game.id}
-            gameName={game.name}
-            contestLive={gameHasContestLive(game)}
-            open={submitOpen}
-            pendingScore={pendingScore}
-            onClose={() => {
-              setSubmitOpen(false);
-              setPendingScore(undefined);
-            }}
-            onSubmitted={() => {
-              setTimeout(() => {
-                setSubmitOpen(false);
-                setPendingScore(undefined);
-              }, 1500);
-            }}
-          />
-          <Leaderboard
-            gameId={game.id}
-            gameName={game.name}
-            contestLive={gameHasContestLive(game)}
-            open={lbOpen}
-            onClose={() => setLbOpen(false)}
-          />
-        </>
+        <Leaderboard
+          gameId={game.id}
+          gameName={game.name}
+          contestLive={gameHasContestLive(game)}
+          open={lbOpen}
+          onClose={() => setLbOpen(false)}
+        />
       )}
       <NoSparksModal
         open={noSparksOpen}

@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { gameAssetCandidates, gameFallbackCandidates } from "@/lib/game-assets";
+import {
+  gameAssetCandidates,
+  gameMenuImageCandidates,
+} from "@/lib/game-assets";
 import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
 
 interface GameMenuProps {
@@ -27,28 +30,16 @@ export default function GameMenu({
     () => gameAssetCandidates(game, "thumbnail"),
     [game]
   );
-  const logoCandidates = useMemo(() => {
-    const logos = gameAssetCandidates(game, "logo");
-    const seen = new Set(logos);
-    const thumbs = gameAssetCandidates(game, "thumbnail").filter((url) => {
-      if (seen.has(url)) return false;
-      seen.add(url);
-      return true;
-    });
-    return [...logos, ...thumbs];
-  }, [game]);
-  const fallbackCandidates = useMemo(
-    () => gameFallbackCandidates(game),
+  const logoCandidates = useMemo(
+    () => gameMenuImageCandidates(game),
     [game]
   );
 
   const [thumbIdx, setThumbIdx] = useState(0);
   const [logoIdx, setLogoIdx] = useState(0);
-  const [fallbackIdx, setFallbackIdx] = useState(0);
 
   const thumbSrc = thumbCandidates[thumbIdx];
-  const logoSrc = logoCandidates[logoIdx];
-  const fallbackSrc = fallbackCandidates[fallbackIdx];
+  const menuImageSrc = logoCandidates[logoIdx];
 
   return (
     <div className="game-menu">
@@ -93,21 +84,13 @@ export default function GameMenu({
 
         <div className="game-menu-card">
           <div className="game-menu-logo-wrap">
-            {logoSrc ? (
+            {menuImageSrc ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={logoSrc}
+                src={menuImageSrc}
                 alt={game.name}
                 className="game-menu-logo"
                 onError={() => setLogoIdx((i) => i + 1)}
-              />
-            ) : fallbackSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={fallbackSrc}
-                alt={game.name}
-                className="game-menu-logo"
-                onError={() => setFallbackIdx((i) => i + 1)}
               />
             ) : (
               <span className="game-menu-logo-fallback">🎮</span>

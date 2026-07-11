@@ -220,15 +220,11 @@ ArcadeXBridge.Instance.WalletAddress
 
 ---
 
-## Shell fallback UI
+## Shell UI
 
-The ArcadeX shell still provides:
+Score submission happens **inside Unity only** via `SubmitToLeaderboard(score)`.
 
-- **New High Score** banner (tap → submit panel)
-- **Submit Score panel** from the game menu
-- **Leaderboard** view (read-only)
-
-Unity in-game submit is the primary path; shell UI remains as fallback.
+The pre-game menu still has a **Leaderboard** button (view-only rankings). There is no shell submit panel or high-score banner.
 
 ---
 

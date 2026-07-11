@@ -4,7 +4,6 @@ import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import ExitGameModal from "@/components/ExitGameModal";
 import LoadingScreen from "@/components/LoadingScreen";
-import NewHighScoreBanner from "@/components/NewHighScoreBanner";
 import {
   normalizeUnityMessageType,
   sendToUnity,
@@ -22,19 +21,17 @@ import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
 
 interface GameClientProps {
   game: Game;
-  onOpenSubmitScore?: (score: number) => void;
 }
 
 const GAME_LOAD_FALLBACK_MS = 12000;
 const PROGRESS_RETRY_DELAYS_MS = [0, 600, 1500, 3000] as const;
 
-export default function GameClient({ game, onOpenSubmitScore }: GameClientProps) {
+export default function GameClient({ game }: GameClientProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const loadFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const [exitOpen, setExitOpen] = useState(false);
   const [gameReady, setGameReady] = useState(false);
-  const [newHighScore, setNewHighScore] = useState<number | null>(null);
   const personalBestRef = useRef(0);
   const leaderboardEnabled = gameHasLeaderboard(game);
   const contestLive = gameHasContestLive(game);
@@ -108,16 +105,6 @@ export default function GameClient({ game, onOpenSubmitScore }: GameClientProps)
     loadFallbackRef.current = setTimeout(markGameReady, GAME_LOAD_FALLBACK_MS);
   }, [markGameReady]);
 
-  const maybeCelebrateHighScore = useCallback(
-    (previousBest: number, nextBest: number) => {
-      if (!leaderboardEnabled) return;
-      if (nextBest > previousBest) {
-        setNewHighScore(nextBest);
-      }
-    },
-    [leaderboardEnabled]
-  );
-
   const persistScore = useCallback(
     async (score: number, name: string, resolvedWalletAddr: string) => {
       const previousBest = personalBestRef.current;
@@ -128,10 +115,9 @@ export default function GameClient({ game, onOpenSubmitScore }: GameClientProps)
       if (nextBest > previousBest) {
         personalBestRef.current = nextBest;
       }
-      maybeCelebrateHighScore(previousBest, nextBest);
       return nextBest;
     },
-    [game.id, maybeCelebrateHighScore]
+    [game.id]
   );
 
   useEffect(() => {
@@ -427,18 +413,6 @@ export default function GameClient({ game, onOpenSubmitScore }: GameClientProps)
         <span className="game-title-bar">{game.name}</span>
         <div className="game-topbar-spacer" aria-hidden="true" />
       </div>
-
-      {newHighScore !== null && (
-        <NewHighScoreBanner
-          score={newHighScore}
-          onTap={() => {
-            const score = newHighScore;
-            setNewHighScore(null);
-            if (score !== null) onOpenSubmitScore?.(score);
-          }}
-          onDismiss={() => setNewHighScore(null)}
-        />
-      )}
 
       <div className="iframe-wrap">
         {!isReady || !iframeSrc ? (
