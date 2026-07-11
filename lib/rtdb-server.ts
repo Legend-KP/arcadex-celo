@@ -10,6 +10,7 @@ import {
   computeSparkSnapshot,
   coerceSparkState,
   defaultSparkState,
+  findReadySparkSlotIndex,
   normalizeSparkState,
 } from "@/lib/spark";
 import { INFINITE_SPARK_DURATION_MS } from "@/lib/infinite-spark";
@@ -342,9 +343,7 @@ export async function spendSparkOnServer(
     return { state, sparks: computeSparkSnapshot(state), spent: false };
   }
 
-  const readyIndex = state.slots.findIndex(
-    (slot) => slot === null || slot <= now
-  );
+  const readyIndex = findReadySparkSlotIndex(state.slots, now);
 
   if (readyIndex === -1) {
     throw new SparkSpendError("No Sparks available.", "NO_SPARKS");

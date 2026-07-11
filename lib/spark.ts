@@ -14,6 +14,10 @@ export function defaultSparkState(): StoredSparkState {
 function coerceSlotValue(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
   return null;
 }
 
@@ -62,6 +66,18 @@ export function coerceSparkState(raw: unknown): StoredSparkState {
     slots,
     ...(infiniteUntil ? { infiniteUntil } : {}),
   };
+}
+
+/** Rightmost ready slot — each consumed spark gets its own regen timer. */
+export function findReadySparkSlotIndex(
+  slots: (number | null)[],
+  now = Date.now()
+): number {
+  for (let i = slots.length - 1; i >= 0; i--) {
+    const slot = slots[i];
+    if (slot === null || slot <= now) return i;
+  }
+  return -1;
 }
 
 /** Normalize expired regen timestamps back to ready (`null`). */
