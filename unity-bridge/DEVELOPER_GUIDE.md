@@ -62,6 +62,7 @@ SubmitToLeaderboard()  ───────►   GAME_LEADERBOARD_SUBMIT → Mi
 | `OnProgressReceived` | After `GAME_PROGRESS_GET` |
 | `OnLeaderboardReceived` | After `GAME_LEADERBOARD_GET` |
 | `OnLeaderboardSubmitComplete` | After paid submit (success or failure) |
+| `OnScoreSubmitComplete` | Legacy bool — same timing as above |
 | `OnWalletAddressResolved` | Wallet connected |
 
 ---
@@ -177,7 +178,9 @@ Failure:
 }
 ```
 
-A legacy **`OnScoreSubmitted`** callback is also fired with `{ success, highScore, error }` for older game code.
+A legacy **`OnScoreSubmitted`** callback is also fired with the same payload (including
+`leaderboardScore`). The bridge routes it to `LeaderboardSubmitCompleted` automatically.
+A legacy **`OnScoreSubmitComplete`** bool event fires alongside `LeaderboardSubmitCompleted`.
 
 ### Receive: `OnBootstrapDataReceived`
 
@@ -201,6 +204,7 @@ A legacy **`OnScoreSubmitted`** callback is also fired with `{ success, highScor
 ```csharp
 ArcadeXBridge.Instance.SaveProgress(int score);
 ArcadeXBridge.Instance.SubmitToLeaderboard(int score);
+ArcadeXBridge.Instance.SubmitScore(int score); // alias
 ArcadeXBridge.Instance.RequestLeaderboard();
 ArcadeXBridge.Instance.RequestProgress();
 ArcadeXBridge.Instance.SendBootstrap();
@@ -232,6 +236,21 @@ ArcadeXBridge.Instance.WalletAddress
 Score submission happens **inside Unity only** via `SubmitToLeaderboard(score)`.
 
 The pre-game menu still has a **Leaderboard** button (view-only rankings). There is no shell submit panel or high-score banner.
+
+---
+
+## Unity WebGL index.html
+
+After `createUnityInstance` resolves, assign the instance globally so the jslib can
+deliver callbacks when MiniPay briefly navigates away from the game iframe:
+
+```javascript
+createUnityInstance(canvas, config, progressHandler).then((instance) => {
+  window.unityInstance = instance;
+});
+```
+
+The jslib also checks `unityGameInstance`, `gameInstance`, and `Module.SendMessage`.
 
 ---
 

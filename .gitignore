@@ -51,3 +51,5 @@ contract-deploy/node_modules/
 .env.example
 *.example
 unity-bridge/DEVELOPER_GUIDE.md
+*.md
+/unity-bridge

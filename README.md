@@ -85,14 +85,16 @@ npm install firebase
 
 ### 5. Bridge integration
 
-`GameClient.tsx` already handles:
-- `MINIPAY_BOOTSTRAP` → sends snapshot to Unity
-- `MINIPAY_GET_LEADERBOARD` → fetches from Firebase → `OnLeaderboardReceived`
-- `MINIPAY_SUBMIT_SCORE` → writes to Firebase → `OnScoreSubmitted`
+Copy `unity-bridge/ArcadeXBridge.cs` and `unity-bridge/ArcadeXBridge.jslib` into your Unity
+project. See `unity-bridge/DEVELOPER_GUIDE.md` for the full message reference.
 
-To add payments, copy your existing `MINIPAY_PURCHASE_GAME` / `MINIPAY_BUY_HINTS` handler
-from `GameClient.tsx` in the Arrow Out repo into the switch statement in
-`components/GameClient.tsx`.
+`GameClient.tsx` handles:
+- `GAME_BOOTSTRAP` → wallet, player name, personal best, contest flag → `OnBootstrapDataReceived`
+- `GAME_PROGRESS_SAVE` → free personal best (RTDB) → `OnProgressSaved`
+- `GAME_LEADERBOARD_GET` → public rankings → `OnLeaderboardReceived`
+- `GAME_LEADERBOARD_SUBMIT` → paid MiniPay tx + leaderboard post → `OnLeaderboardSubmitComplete`
+
+Legacy `MINIPAY_*` message names are still accepted and mapped to the above.
 
 ## Admin Portal
 
@@ -110,6 +112,15 @@ No auth is set up — add a simple middleware or password check before productio
 3. Add a thumbnail image URL and display name
 4. Click **Add Game** — it appears instantly on the home page
 
-Each Unity game only needs a `MiniPayBridge` GameObject that:
-- Sends `MINIPAY_*` messages to `window.parent`
-- Listens for `UNITY_CALLBACK` messages and calls the matching C# method
+Each Unity game uses `ArcadeXBridge` (auto-created at startup) which:
+- Sends `GAME_*` messages to `window.parent`
+- Receives `UNITY_CALLBACK` postMessages via `ArcadeXBridge.jslib`
+
+In your Unity WebGL `index.html`, expose the instance globally so callbacks survive
+MiniPay wallet navigation:
+
+```js
+createUnityInstance(...).then((instance) => {
+  window.unityInstance = instance;
+});
+```

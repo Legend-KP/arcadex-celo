@@ -14,12 +14,16 @@ public class ArcadeXBridge : MonoBehaviour
     public string PlayerName { get; private set; }
     public string WalletAddress { get; private set; }
     public int HighScore { get; private set; }
+    public int Level { get; private set; }
+    public bool HasLeaderboard { get; private set; }
     public bool ContestLive { get; private set; }
 
     public event Action<ArcadeXBootstrapData> OnBootstrapReady;
     public event Action<ArcadeXLeaderboardEntry[]> OnLeaderboardReady;
     public event Action<ArcadeXProgressSaveResult> ProgressSaved;
     public event Action<ArcadeXLeaderboardSubmitResult> LeaderboardSubmitCompleted;
+    /// <summary>Legacy bool callback — fired alongside LeaderboardSubmitCompleted.</summary>
+    public event Action<bool> OnScoreSubmitComplete;
 
     private const string DefaultPlayerName = "Player";
 
@@ -113,6 +117,9 @@ public class ArcadeXBridge : MonoBehaviour
         });
     }
 
+    /// <summary>Alias for SubmitToLeaderboard — older game code may call this.</summary>
+    public void SubmitScore(int score) => SubmitToLeaderboard(score);
+
     public void RequestLeaderboard()
     {
         SendMessageToParent(new ArcadeXBridgeMessage { type = "GAME_LEADERBOARD_GET" });
@@ -140,6 +147,8 @@ public class ArcadeXBridge : MonoBehaviour
         PlayerName = data.playerName;
         WalletAddress = data.walletAddress;
         HighScore = data.highScore;
+        Level = data.level;
+        HasLeaderboard = data.hasLeaderboard;
         ContestLive = data.contestLive;
         OnBootstrapReady?.Invoke(data);
     }
@@ -165,9 +174,18 @@ public class ArcadeXBridge : MonoBehaviour
         ProgressSaved?.Invoke(result);
     }
 
-    /// <summary>Legacy callback name — still sent for MINIPAY_SUBMIT_SCORE saves.</summary>
+    /// <summary>
+    /// Legacy callback — free saves and paid leaderboard submits both use this name.
+    /// Payloads with leaderboardScore route to LeaderboardSubmitCompleted.
+    /// </summary>
     public void OnScoreSubmitted(string json)
     {
+        if (json.Contains("\"leaderboardScore\""))
+        {
+            OnLeaderboardSubmitComplete(json);
+            return;
+        }
+
         OnProgressSaved(json);
     }
 
@@ -186,6 +204,7 @@ public class ArcadeXBridge : MonoBehaviour
         ArcadeXLeaderboardSubmitResult result =
             JsonUtility.FromJson<ArcadeXLeaderboardSubmitResult>(json);
         LeaderboardSubmitCompleted?.Invoke(result);
+        OnScoreSubmitComplete?.Invoke(result.success);
     }
 }
 

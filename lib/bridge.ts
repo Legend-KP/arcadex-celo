@@ -69,12 +69,8 @@ export function notifyUnityLeaderboardSubmit(
 
   sendToUnity(iframeRef, "OnLeaderboardSubmitComplete", payload);
 
-  // Legacy games may still listen on OnScoreSubmitted / ProgressSaved.
-  sendToUnity(iframeRef, "OnScoreSubmitted", {
-    success: result.success,
-    highScore: result.leaderboardScore ?? result.highScore ?? 0,
-    error: result.error ?? "",
-  });
+  // Legacy games may still listen on OnScoreSubmitted (not OnProgressSaved).
+  sendToUnity(iframeRef, "OnScoreSubmitted", payload);
 }
 
 /** Unity → shell message types (wallet-agnostic naming). */
