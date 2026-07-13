@@ -1240,10 +1240,11 @@ a { color: inherit; text-decoration: none; }
   grid-template-columns: 44px 1fr 44px;
   align-items: center;
   padding: 8px 12px;
-  background: var(--game-topbar-bg, #fff);
-  border-bottom: 1px solid color-mix(in srgb, var(--game-topbar-text, #1a1a2e) 12%, transparent);
+  --game-topbar-bg: #000000;
+  --game-topbar-text: #ffffff;
+  background: var(--game-topbar-bg);
+  border-bottom: 1px solid color-mix(in srgb, var(--game-topbar-text) 12%, transparent);
   flex-shrink: 0;
-  transition: background 0.2s ease;
 }
 
 .game-close-btn {

@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import ExitGameModal from "@/components/ExitGameModal";
 import LoadingScreen from "@/components/LoadingScreen";
 import LeaderboardSubmitToast, {
   type LeaderboardSubmitToastState,
@@ -21,7 +19,6 @@ import { submitScoreToLeaderboard } from "@/lib/leaderboard-client";
 import { buildGameIframeUrl, getShellOrigin } from "@/lib/game-iframe-url";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { resolveWalletOnAppOpen } from "@/lib/walletAuth";
-import { getGameTheme } from "@/lib/game-themes";
 import { formatChainError } from "@/lib/celo-public-client";
 import { purchaseScoreSubmitOnChain } from "@/lib/score-submit-purchase";
 import {
@@ -34,16 +31,19 @@ import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
 interface GameClientProps {
   game: Game;
   onScoreSubmitted?: () => void;
+  onBackToMenu?: () => void;
 }
 
 const GAME_LOAD_FALLBACK_MS = 12000;
 const PROGRESS_RETRY_DELAYS_MS = [0, 600, 1500, 3000] as const;
 
-export default function GameClient({ game, onScoreSubmitted }: GameClientProps) {
+export default function GameClient({
+  game,
+  onScoreSubmitted,
+  onBackToMenu,
+}: GameClientProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const loadFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const router = useRouter();
-  const [exitOpen, setExitOpen] = useState(false);
   const [gameReady, setGameReady] = useState(false);
   const [submitToast, setSubmitToast] = useState<LeaderboardSubmitToastState | null>(
     null
@@ -51,7 +51,6 @@ export default function GameClient({ game, onScoreSubmitted }: GameClientProps) 
   const personalBestRef = useRef(0);
   const leaderboardEnabled = gameHasLeaderboard(game);
   const contestLive = gameHasContestLive(game);
-  const theme = getGameTheme(game);
   const shellOrigin = getShellOrigin();
   const progressRetryRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const {
@@ -474,20 +473,12 @@ export default function GameClient({ game, onScoreSubmitted }: GameClientProps) 
         </div>
       )}
 
-      <div
-        className={`game-topbar${theme.text === "#ffffff" ? " game-topbar--on-dark" : ""}`}
-        style={
-          {
-            "--game-topbar-bg": theme.topbar,
-            "--game-topbar-text": theme.text,
-          } as React.CSSProperties
-        }
-      >
+      <div className="game-topbar game-topbar--on-dark">
         <button
           type="button"
           className="game-close-btn"
-          aria-label="Go home"
-          onClick={() => setExitOpen(true)}
+          aria-label="Back to menu"
+          onClick={() => onBackToMenu?.()}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/home-button.png" alt="" className="game-home-btn-icon" />
@@ -516,13 +507,6 @@ export default function GameClient({ game, onScoreSubmitted }: GameClientProps) 
           onDismiss={() => setSubmitToast(null)}
         />
       </div>
-
-      <ExitGameModal
-        open={exitOpen}
-        onCancel={() => setExitOpen(false)}
-        onExit={() => router.push("/")}
-        onPlayMore={() => router.push("/")}
-      />
     </div>
   );
 }

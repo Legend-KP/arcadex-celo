@@ -149,6 +149,10 @@ export default function GamePageClient() {
         <GameClient
           game={game}
           onScoreSubmitted={() => openLeaderboard("postSubmit")}
+          onBackToMenu={() => {
+            closeLeaderboard();
+            setStarted(false);
+          }}
         />
       )}
       {gameHasLeaderboard(game) && (
