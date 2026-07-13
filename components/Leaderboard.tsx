@@ -12,11 +12,14 @@ import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { formatContestCountdown } from "@/lib/contest";
 import { getLeaderboard } from "@/lib/leaderboard-client";
 
+export type LeaderboardMode = "default" | "postSubmit";
+
 interface LeaderboardProps {
   gameId: string;
   gameName: string;
   contestLive?: boolean;
   open: boolean;
+  mode?: LeaderboardMode;
   onClose: () => void;
 }
 
@@ -28,8 +31,10 @@ export default function Leaderboard({
   gameName,
   contestLive = false,
   open,
+  mode = "default",
   onClose,
 }: LeaderboardProps) {
+  const isPostSubmit = mode === "postSubmit";
   const { walletAddress, playerName } = usePlayerProfile();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [contest, setContest] = useState<ContestInfo | null>(null);
@@ -82,6 +87,7 @@ export default function Leaderboard({
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    if (isPostSubmit) return;
     if (touchStartY.current === null) return;
     const delta = e.changedTouches[0].clientY - touchStartY.current;
     touchStartY.current = null;
@@ -94,9 +100,13 @@ export default function Leaderboard({
   if (!open) return null;
 
   return (
-    <div className="lb-backdrop" onClick={onClose} role="presentation">
+    <div
+      className="lb-backdrop"
+      onClick={isPostSubmit ? undefined : onClose}
+      role="presentation"
+    >
       <div
-        className="lb-sheet"
+        className={`lb-sheet${isPostSubmit ? " lb-sheet--post-submit" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={`${gameName} leaderboard`}
@@ -104,14 +114,23 @@ export default function Leaderboard({
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
+        {isPostSubmit && (
+          <div className="lb-success-header" role="status">
+            <span className="lb-success-header__icon" aria-hidden="true">🏆</span>
+            <span className="lb-success-header__text">Score submitted!</span>
+          </div>
+        )}
+
         <div className="lb-header">
           <div className="lb-title-wrap">
             <span className="lb-trophy" aria-hidden="true">🏆</span>
             <span className="lb-title">{gameName}</span>
           </div>
-          <button type="button" className="lb-close" onClick={onClose} aria-label="Close leaderboard">
-            ✕
-          </button>
+          {!isPostSubmit && (
+            <button type="button" className="lb-close" onClick={onClose} aria-label="Close leaderboard">
+              ✕
+            </button>
+          )}
         </div>
 
         {isLiveContest && (
@@ -165,6 +184,16 @@ export default function Leaderboard({
               </div>
             ))}
         </div>
+
+        {isPostSubmit && (
+          <button
+            type="button"
+            className="lb-continue-btn"
+            onClick={onClose}
+          >
+            Continue
+          </button>
+        )}
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Game, gameHasLeaderboard, gameHasContestLive, gameIsLive } from "@/types";
 import GameClient from "@/components/GameClient";
 import GameMenu from "@/components/GameMenu";
-import Leaderboard from "@/components/Leaderboard";
+import Leaderboard, { type LeaderboardMode } from "@/components/Leaderboard";
 import LoadingScreen from "@/components/LoadingScreen";
 import NoSparksModal from "@/components/NoSparksModal";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
@@ -19,6 +19,7 @@ export default function GamePageClient() {
   const [game, setGame] = useState<Game | null>(null);
   const [started, setStarted] = useState(false);
   const [lbOpen, setLbOpen] = useState(false);
+  const [lbMode, setLbMode] = useState<LeaderboardMode>("default");
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
@@ -124,18 +125,31 @@ export default function GamePageClient() {
     router.push("/");
   }
 
+  function openLeaderboard(mode: LeaderboardMode) {
+    setLbMode(mode);
+    setLbOpen(true);
+  }
+
+  function closeLeaderboard() {
+    setLbOpen(false);
+    setLbMode("default");
+  }
+
   return (
     <>
       {!started ? (
         <GameMenu
           game={game}
           onStart={handleStart}
-          onLeaderboard={() => setLbOpen(true)}
+          onLeaderboard={() => openLeaderboard("default")}
           starting={starting}
           sparkError={sparkError}
         />
       ) : (
-        <GameClient game={game} />
+        <GameClient
+          game={game}
+          onScoreSubmitted={() => openLeaderboard("postSubmit")}
+        />
       )}
       {gameHasLeaderboard(game) && (
         <Leaderboard
@@ -143,7 +157,8 @@ export default function GamePageClient() {
           gameName={game.name}
           contestLive={gameHasContestLive(game)}
           open={lbOpen}
-          onClose={() => setLbOpen(false)}
+          mode={lbMode}
+          onClose={closeLeaderboard}
         />
       )}
       <NoSparksModal
