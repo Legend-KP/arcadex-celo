@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  gameAssetCandidates,
+  gameMenuBackgroundCandidates,
   gameMenuImageCandidates,
+  preloadGameMenuAssets,
 } from "@/lib/game-assets";
 import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
 
@@ -26,8 +27,8 @@ export default function GameMenu({
   const router = useRouter();
   const contestLive = gameHasContestLive(game);
 
-  const thumbCandidates = useMemo(
-    () => gameAssetCandidates(game, "thumbnail"),
+  const bgCandidates = useMemo(
+    () => gameMenuBackgroundCandidates(game),
     [game]
   );
   const logoCandidates = useMemo(
@@ -35,22 +36,29 @@ export default function GameMenu({
     [game]
   );
 
-  const [thumbIdx, setThumbIdx] = useState(0);
+  const [bgIdx, setBgIdx] = useState(0);
   const [logoIdx, setLogoIdx] = useState(0);
 
-  const thumbSrc = thumbCandidates[thumbIdx];
+  const bgSrc = bgCandidates[bgIdx];
   const menuImageSrc = logoCandidates[logoIdx];
+
+  useEffect(() => {
+    preloadGameMenuAssets(game);
+  }, [game]);
 
   return (
     <div className="game-menu">
       <div className="game-menu-bg">
-        {thumbSrc ? (
+        {bgSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={thumbSrc}
+            src={bgSrc}
             alt=""
             className="game-menu-bg-img"
-            onError={() => setThumbIdx((i) => i + 1)}
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            onError={() => setBgIdx((i) => i + 1)}
           />
         ) : (
           <div className="game-menu-bg-fallback" />
@@ -90,6 +98,9 @@ export default function GameMenu({
                 src={menuImageSrc}
                 alt={game.name}
                 className="game-menu-logo"
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
                 onError={() => setLogoIdx((i) => i + 1)}
               />
             ) : (

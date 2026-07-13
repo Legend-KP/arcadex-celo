@@ -116,8 +116,6 @@ export function gameFallbackCandidates(game: Game): string[] {
     out.push(url);
   };
 
-  push(game.fallbackImage);
-
   const localFolder = resolveLocalGameFolder(game);
   if (localFolder) {
     pushLocalMenuAssets(push, localFolder);
@@ -127,6 +125,8 @@ export function gameFallbackCandidates(game: Game): string[] {
   if (nameSlug && nameSlug !== localFolder) {
     pushLocalMenuAssets(push, nameSlug);
   }
+
+  push(game.fallbackImage);
 
   return out;
 }
@@ -147,4 +147,43 @@ export function gameMenuImageCandidates(game: Game): string[] {
   for (const url of gameAssetCandidates(game, "thumbnail")) push(url);
 
   return out;
+}
+
+/** Blurred menu background — fallback first so it appears immediately. */
+export function gameMenuBackgroundCandidates(game: Game): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  const push = (url?: string) => {
+    if (!url?.trim() || seen.has(url)) return;
+    seen.add(url);
+    out.push(url);
+  };
+
+  for (const url of gameFallbackCandidates(game)) push(url);
+  for (const url of gameAssetCandidates(game, "thumbnail")) push(url);
+  for (const url of gameAssetCandidates(game, "logo")) push(url);
+
+  return out;
+}
+
+/** Warm the browser cache for menu images before the menu mounts. */
+export function preloadGameMenuAssets(game: Game): void {
+  if (typeof window === "undefined") return;
+
+  const seen = new Set<string>();
+  const urls = [
+    ...gameMenuBackgroundCandidates(game),
+    ...gameMenuImageCandidates(game),
+  ];
+
+  for (const url of urls) {
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    const img = new Image();
+    img.fetchPriority = "high";
+    img.decoding = "async";
+    img.src = url;
+    if (seen.size >= 5) break;
+  }
 }

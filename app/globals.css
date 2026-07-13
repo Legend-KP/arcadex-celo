@@ -1527,6 +1527,34 @@ a { color: inherit; text-decoration: none; }
   max-height: min(90dvh, 720px);
 }
 
+.lb-sheet--post-submit .lb-header {
+  justify-content: center;
+}
+
+.lb-sheet--post-submit .lb-title-wrap {
+  justify-content: center;
+  width: 100%;
+}
+
+.lb-sheet--post-submit .lb-title {
+  text-align: center;
+  white-space: normal;
+}
+
+.lb-sheet--post-submit .lb-contest-banner,
+.lb-sheet--post-submit .lb-contest-ended,
+.lb-sheet--post-submit .lb-contest-task,
+.lb-sheet--post-submit .lb-submit-hint {
+  margin-left: 0;
+  margin-right: 0;
+  text-align: center;
+}
+
+.lb-sheet--post-submit .lb-contest-task-label,
+.lb-sheet--post-submit .lb-contest-task-text {
+  text-align: center;
+}
+
 .lb-success-header {
   position: relative;
   z-index: 1;
@@ -1540,11 +1568,6 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(135deg, #22c55e, #16a34a);
   color: #fff;
   box-shadow: 0 4px 14px rgba(34, 197, 94, 0.35);
-}
-
-.lb-success-header__icon {
-  font-size: 20px;
-  line-height: 1;
 }
 
 .lb-success-header__text {

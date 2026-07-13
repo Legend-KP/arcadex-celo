@@ -116,14 +116,15 @@ export default function Leaderboard({
       >
         {isPostSubmit && (
           <div className="lb-success-header" role="status">
-            <span className="lb-success-header__icon" aria-hidden="true">🏆</span>
             <span className="lb-success-header__text">Score submitted!</span>
           </div>
         )}
 
         <div className="lb-header">
           <div className="lb-title-wrap">
-            <span className="lb-trophy" aria-hidden="true">🏆</span>
+            {!isPostSubmit && (
+              <span className="lb-trophy" aria-hidden="true">🏆</span>
+            )}
             <span className="lb-title">{gameName}</span>
           </div>
           {!isPostSubmit && (

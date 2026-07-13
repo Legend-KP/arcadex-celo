@@ -10,6 +10,7 @@ import LoadingScreen from "@/components/LoadingScreen";
 import NoSparksModal from "@/components/NoSparksModal";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { useSparks } from "@/components/SparkProvider";
+import { preloadGameMenuAssets } from "@/lib/game-assets";
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
@@ -64,6 +65,10 @@ export default function GamePageClient() {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (game) preloadGameMenuAssets(game);
+  }, [game]);
 
   const handleStart = useCallback(async () => {
     setSparkError("");

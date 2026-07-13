@@ -1,8 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { gameAssetCandidates, gameFallbackCandidates } from "@/lib/game-assets";
+import { useEffect, useMemo, useState } from "react";
+import {
+  gameAssetCandidates,
+  gameFallbackCandidates,
+  preloadGameMenuAssets,
+} from "@/lib/game-assets";
 import { formatPlayCount } from "@/lib/format-play-count";
 import { Game, gameHasContestLive, gameIsLive } from "@/types";
 
@@ -31,6 +35,10 @@ export default function GameCard({ game, playCount = 0 }: GameCardProps) {
   const [thumbIdx, setThumbIdx] = useState(0);
   const [logoIdx, setLogoIdx] = useState(0);
   const [fallbackIdx, setFallbackIdx] = useState(0);
+
+  useEffect(() => {
+    preloadGameMenuAssets(game);
+  }, [game]);
 
   const thumbSrc = thumbCandidates[thumbIdx];
   const logoSrc = logoCandidates[logoIdx];
