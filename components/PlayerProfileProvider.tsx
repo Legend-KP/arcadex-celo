@@ -25,6 +25,7 @@ import {
   readWalletImmediately,
   resolveWalletForSave,
   resolveWalletOnAppOpen,
+  ensureWalletSession,
 } from "@/lib/walletAuth";
 import {
   isWalletAddress,
@@ -120,6 +121,7 @@ export default function PlayerProfileProvider({
       setPlayerId(wallet);
 
       try {
+        await ensureWalletSession(wallet);
         const user = await bootstrapPlayerProfile(wallet);
         if (cancelled) return;
 
@@ -176,6 +178,7 @@ export default function PlayerProfileProvider({
 
         wallet = normalizeWalletAddress(wallet);
 
+        await ensureWalletSession(wallet);
         const saved = await savePlayerProfile(wallet, name, wallet);
 
         setCachedWallet(wallet);
@@ -202,6 +205,7 @@ export default function PlayerProfileProvider({
       if (!profile?.name) return;
 
       const wallet = nextWallet.trim();
+      await ensureWalletSession(wallet);
       const saved = await savePlayerProfile(wallet, profile.name, wallet);
       setProfile(saved);
       setPlayerId(saved.id);

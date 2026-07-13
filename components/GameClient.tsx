@@ -19,6 +19,7 @@ import { submitScoreToLeaderboard } from "@/lib/leaderboard-client";
 import { buildGameIframeUrl, getShellOrigin } from "@/lib/game-iframe-url";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { resolveWalletOnAppOpen } from "@/lib/walletAuth";
+import { getWalletSessionToken } from "@/lib/wallet-session-client";
 import { formatChainError } from "@/lib/celo-public-client";
 import { purchaseScoreSubmitOnChain } from "@/lib/score-submit-purchase";
 import {
@@ -72,6 +73,7 @@ export default function GameClient({
       walletAddress: resolvedWallet || undefined,
       playerName: resolvedName || undefined,
       hasLeaderboard: leaderboardEnabled,
+      sessionToken: getWalletSessionToken() || undefined,
     });
   }, [
     isReady,

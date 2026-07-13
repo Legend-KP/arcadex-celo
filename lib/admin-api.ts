@@ -3,9 +3,8 @@
 import { Game } from "@/types";
 
 const SESSION_KEY = "arcadex_admin_authed";
-const PASSWORD_KEY = "arcadex_admin_password";
 const LEGACY_SESSION_KEY = SESSION_KEY;
-const LEGACY_PASSWORD_KEY = PASSWORD_KEY;
+const LEGACY_PASSWORD_KEY = "arcadex_admin_password";
 
 function migrateLegacySession(): void {
   if (typeof window === "undefined") return;
@@ -16,22 +15,20 @@ function migrateLegacySession(): void {
   if (!legacyAuthed || !legacyPassword) return;
 
   localStorage.setItem(SESSION_KEY, "1");
-  localStorage.setItem(PASSWORD_KEY, legacyPassword);
   sessionStorage.removeItem(LEGACY_SESSION_KEY);
   sessionStorage.removeItem(LEGACY_PASSWORD_KEY);
-}
-
-function getStoredPassword(): string {
-  migrateLegacySession();
-  return localStorage.getItem(PASSWORD_KEY) ?? "";
 }
 
 function adminHeaders(): HeadersInit {
   return {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${getStoredPassword()}`,
   };
 }
+
+const fetchOptions: RequestInit = {
+  credentials: "include",
+  cache: "no-store",
+};
 
 async function parseJson<T>(res: Response): Promise<T> {
   const text = await res.text();
@@ -55,18 +52,18 @@ async function parseJson<T>(res: Response): Promise<T> {
   }
 }
 
-export function saveAdminSession(password: string) {
+export function saveAdminSession() {
   localStorage.setItem(SESSION_KEY, "1");
-  localStorage.setItem(PASSWORD_KEY, password);
   sessionStorage.removeItem(LEGACY_SESSION_KEY);
   sessionStorage.removeItem(LEGACY_PASSWORD_KEY);
+  localStorage.removeItem(LEGACY_PASSWORD_KEY);
 }
 
 export function clearAdminSession() {
   localStorage.removeItem(SESSION_KEY);
-  localStorage.removeItem(PASSWORD_KEY);
   sessionStorage.removeItem(LEGACY_SESSION_KEY);
   sessionStorage.removeItem(LEGACY_PASSWORD_KEY);
+  localStorage.removeItem(LEGACY_PASSWORD_KEY);
 }
 
 export function hasAdminSession(): boolean {
@@ -79,15 +76,26 @@ export async function loginAdmin(password: string): Promise<void> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ password }),
+    credentials: "include",
   });
   const data = await parseJson<{ ok?: boolean; error?: string }>(res);
   if (!res.ok) throw new Error(data.error ?? "Wrong password.");
 }
 
+export async function logoutAdmin(): Promise<void> {
+  await fetch("/api/login", {
+    method: "DELETE",
+    credentials: "include",
+  }).catch(() => {
+    // Best-effort cookie clear
+  });
+  clearAdminSession();
+}
+
 export async function fetchAdminGames(): Promise<Game[]> {
   const res = await fetch("/api/games", {
     headers: adminHeaders(),
-    cache: "no-store",
+    ...fetchOptions,
   });
   const data = await parseJson<{ games?: Game[]; error?: string }>(res);
   if (!res.ok) {
@@ -105,6 +113,7 @@ export async function createAdminGame(
     method: "POST",
     headers: adminHeaders(),
     body: JSON.stringify(game),
+    credentials: "include",
   });
   const data = await parseJson<{ id?: string; error?: string }>(res);
   if (!res.ok) {
@@ -123,6 +132,7 @@ export async function updateAdminGame(
     method: "PATCH",
     headers: adminHeaders(),
     body: JSON.stringify(patch),
+    credentials: "include",
   });
   const data = await parseJson<{ error?: string }>(res);
   if (!res.ok) {
@@ -136,6 +146,7 @@ export async function deleteAdminGame(id: string): Promise<void> {
   const res = await fetch(`/api/games/${id}`, {
     method: "DELETE",
     headers: adminHeaders(),
+    credentials: "include",
   });
   const data = await parseJson<{ error?: string }>(res);
   if (!res.ok) {
@@ -150,6 +161,7 @@ export async function reorderAdminGames(orderedIds: string[]): Promise<void> {
     method: "PATCH",
     headers: adminHeaders(),
     body: JSON.stringify({ order: orderedIds }),
+    credentials: "include",
   });
   const data = await parseJson<{ error?: string }>(res);
   if (!res.ok) {

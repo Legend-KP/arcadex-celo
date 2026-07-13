@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server";
 import { bootstrapUserOnServer } from "@/lib/rtdb-server";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
 import { normalizeWalletAddress } from "@/lib/wallet-address";
+import { requireWalletAuth } from "@/lib/wallet-session";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  if (!checkRateLimit(`bootstrap:${ip}`, 30, 60_000)) {
+    return rateLimitResponse();
+  }
+
   try {
     const body = (await request.json()) as {
       walletAddress?: string;
@@ -19,6 +30,11 @@ export async function POST(request: Request) {
     }
 
     const wallet = normalizeWalletAddress(rawWallet);
+    const auth = await requireWalletAuth(request, wallet);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
     const user = await bootstrapUserOnServer(wallet);
     return NextResponse.json({ user });
   } catch (err) {

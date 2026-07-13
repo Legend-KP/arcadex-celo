@@ -1,5 +1,6 @@
 import { SparkSnapshot, StoredSparkState } from "@/types";
 import { defaultSparkState, computeSparkSnapshot } from "@/lib/spark";
+import { walletAuthHeaders } from "@/lib/wallet-session-client";
 
 export interface SparkApiResponse {
   state: StoredSparkState;
@@ -36,7 +37,7 @@ export async function spendSpark(
 ): Promise<SparkSpendResponse> {
   const res = await fetch("/api/sparks/spend", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: walletAuthHeaders(),
     body: JSON.stringify({ walletAddress }),
     cache: "no-store",
   });
@@ -63,7 +64,7 @@ export async function activateInfiniteSpark(
 ): Promise<InfiniteSparkActivateResponse> {
   const res = await fetch("/api/sparks/infinite", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: walletAuthHeaders(),
     body: JSON.stringify({ walletAddress, txHash }),
     cache: "no-store",
   });
@@ -90,7 +91,7 @@ export async function activateSparkRefill(
 ): Promise<SparkRefillActivateResponse> {
   const res = await fetch("/api/sparks/refill", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: walletAuthHeaders(),
     body: JSON.stringify({ walletAddress, txHash }),
     cache: "no-store",
   });

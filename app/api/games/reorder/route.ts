@@ -9,7 +9,7 @@ import { reorderGamesOnServer } from "@/lib/firestore-server";
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: Request) {
-  if (!verifyAdminRequest(request)) return unauthorizedResponse();
+  if (!(await verifyAdminRequest(request))) return unauthorizedResponse();
 
   try {
     const body = (await request.json()) as { order?: string[] };

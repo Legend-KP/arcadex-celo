@@ -1,4 +1,5 @@
 import { ContestInfo, LeaderboardEntry } from "@/types";
+import { walletAuthHeaders } from "@/lib/wallet-session-client";
 
 export interface LeaderboardStatus {
   entries: LeaderboardEntry[];
@@ -59,7 +60,7 @@ export async function submitScore(
 ): Promise<number> {
   const res = await fetch(`/api/games/${gameId}/leaderboard`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: walletAuthHeaders(),
     body: JSON.stringify(entry),
   });
 
@@ -83,7 +84,7 @@ export async function submitScoreToLeaderboard(
 }> {
   const res = await fetch(`/api/games/${gameId}/leaderboard/submit`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: walletAuthHeaders(),
     body: JSON.stringify(opts),
   });
 

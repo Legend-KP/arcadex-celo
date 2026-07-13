@@ -23,7 +23,8 @@ export async function GET(request: Request) {
       ),
     ]);
 
-    const visible = verifyAdminRequest(request)
+    const isAdmin = await verifyAdminRequest(request);
+    const visible = isAdmin
       ? games
       : games.filter(isGameVisible);
 
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!verifyAdminRequest(request)) return unauthorizedResponse();
+  if (!(await verifyAdminRequest(request))) return unauthorizedResponse();
 
   try {
     const body = (await request.json()) as Omit<Game, "id" | "createdAt">;

@@ -8,6 +8,7 @@ import {
   fetchAdminGames,
   hasAdminSession,
   loginAdmin,
+  logoutAdmin,
   reorderAdminGames,
   saveAdminSession,
   updateAdminGame,
@@ -66,7 +67,7 @@ export default function AdminPortal() {
     setPwError(false);
     try {
       await loginAdmin(pwInput);
-      saveAdminSession(pwInput);
+      saveAdminSession();
       setAuthed(true);
     } catch {
       setPwError(true);
@@ -77,9 +78,11 @@ export default function AdminPortal() {
   }
 
   function handleLogout() {
-    clearAdminSession();
-    setAuthed(false);
-    setPwInput("");
+    logoutAdmin().finally(() => {
+      clearAdminSession();
+      setAuthed(false);
+      setPwInput("");
+    });
   }
 
   function showToast(msg: string) {

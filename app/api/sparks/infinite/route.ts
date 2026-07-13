@@ -4,6 +4,7 @@ import {
   InfiniteSparkActivationError,
 } from "@/lib/rtdb-server";
 import { normalizeWalletAddress } from "@/lib/wallet-address";
+import { requireWalletAuth } from "@/lib/wallet-session";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,14 @@ export async function POST(request: Request) {
     }
 
     const wallet = normalizeWalletAddress(rawWallet);
+    const auth = await requireWalletAuth(request, wallet);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: auth.error, code: "UNAUTHORIZED" },
+        { status: auth.status }
+      );
+    }
+
     const result = await activateInfiniteSparkOnServer(wallet, txHash);
     return NextResponse.json(result);
   } catch (err) {

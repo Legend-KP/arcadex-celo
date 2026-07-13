@@ -5,6 +5,7 @@ import {
   normalizeWalletAddress,
   tryNormalizeWalletAddress,
 } from "@/lib/wallet-address";
+import { requireWalletAuth } from "@/lib/wallet-session";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,18 @@ export async function PUT(
       return NextResponse.json(
         { error: "Wallet address is required." },
         { status: 400 }
+      );
+    }
+
+    const auth = await requireWalletAuth(request, wallet);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    if (isWalletAddress(id) && normalizeWalletAddress(id) !== wallet) {
+      return NextResponse.json(
+        { error: "Profile id does not match authenticated wallet." },
+        { status: 403 }
       );
     }
 

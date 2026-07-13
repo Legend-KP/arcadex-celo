@@ -1,4 +1,5 @@
 import { GameProgress } from "@/types";
+import { walletAuthHeaders } from "@/lib/wallet-session-client";
 
 export interface GameProgressResponse {
   progress: GameProgress;
@@ -37,7 +38,7 @@ export async function saveGameProgress(
 ): Promise<GameProgressResponse & { success: boolean }> {
   const res = await fetch(`/api/games/${gameId}/progress`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: walletAuthHeaders(),
     body: JSON.stringify({
       walletAddress,
       value,

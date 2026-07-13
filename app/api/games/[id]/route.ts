@@ -38,7 +38,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!verifyAdminRequest(request)) return unauthorizedResponse();
+  if (!(await verifyAdminRequest(request))) return unauthorizedResponse();
 
   try {
     const { id } = await params;
@@ -54,7 +54,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!verifyAdminRequest(request)) return unauthorizedResponse();
+  if (!(await verifyAdminRequest(request))) return unauthorizedResponse();
 
   try {
     const { id } = await params;

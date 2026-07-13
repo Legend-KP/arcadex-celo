@@ -10,6 +10,7 @@ import {
 } from "@/lib/cors";
 import { gameHasLeaderboard } from "@/types";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
+import { requireWalletAuth } from "@/lib/wallet-session";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,15 @@ export async function POST(
     }
 
     const wallet = normalizeWalletAddress(rawWallet);
+    const auth = await requireWalletAuth(request, wallet);
+    if (!auth.ok) {
+      return corsJsonResponse(
+        request,
+        { error: auth.error, code: "UNAUTHORIZED" },
+        { status: auth.status }
+      );
+    }
+
     const contestStartedAt =
       isContestActive(game) && typeof game.contestStartedAt === "number"
         ? game.contestStartedAt

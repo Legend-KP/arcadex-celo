@@ -14,6 +14,7 @@ import {
 } from "@/lib/cors";
 import { gameHasContest, gameHasLeaderboard, LEADERBOARD_MAX_ENTRIES, LeaderboardEntry } from "@/types";
 import { isWalletAddress, tryNormalizeWalletAddress } from "@/lib/wallet-address";
+import { requireWalletAuth } from "@/lib/wallet-session";
 
 export const dynamic = "force-dynamic";
 
@@ -127,40 +128,35 @@ export async function POST(
     const wallet = tryNormalizeWalletAddress(body.walletAddress);
     let name = body.name?.trim() || body.playerName?.trim() || "";
 
-    if (!name && wallet) {
-      const profile = await fetchUserFromServer(wallet);
-      name = profile?.name?.trim() || "";
-    }
-
-    if (!name && wallet) {
-      name = `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
-    }
-
-    if (!name) {
-      return corsJsonResponse(
-        request,
-        { error: "name is required when walletAddress is not provided." },
-        { status: 400 }
-      );
-    }
-
-    const entry = {
-      name,
-      score,
-      walletAddress: body.walletAddress,
-    };
-
-    if (wallet && isWalletAddress(wallet)) {
-      await saveGameProgressOnServer(wallet, id, score, true, {
-        playerName: name,
-      });
-    } else {
+    if (!wallet || !isWalletAddress(wallet)) {
       return corsJsonResponse(
         request,
         { error: "A wallet address is required to save scores." },
         { status: 400 }
       );
     }
+
+    const auth = await requireWalletAuth(request, wallet);
+    if (!auth.ok) {
+      return corsJsonResponse(
+        request,
+        { error: auth.error },
+        { status: auth.status }
+      );
+    }
+
+    if (!name) {
+      const profile = await fetchUserFromServer(wallet);
+      name = profile?.name?.trim() || "";
+    }
+
+    if (!name) {
+      name = `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
+    }
+
+    await saveGameProgressOnServer(wallet, id, score, true, {
+      playerName: name,
+    });
 
     const personalBest = await fetchPersonalBestFromServer(wallet, id);
     const submittedBest = await fetchUserSubmittedScoreFromServer(id, {

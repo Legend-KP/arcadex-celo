@@ -9,6 +9,7 @@ import {
 } from "@/lib/cors";
 import { gameHasLeaderboard } from "@/types";
 import { isWalletAddress } from "@/lib/wallet-address";
+import { requireWalletAuth } from "@/lib/wallet-session";
 
 export const dynamic = "force-dynamic";
 
@@ -87,6 +88,15 @@ export async function POST(
         request,
         { error: "walletAddress is required." },
         { status: 400 }
+      );
+    }
+
+    const auth = await requireWalletAuth(request, body.walletAddress);
+    if (!auth.ok) {
+      return corsJsonResponse(
+        request,
+        { error: auth.error },
+        { status: auth.status }
       );
     }
 

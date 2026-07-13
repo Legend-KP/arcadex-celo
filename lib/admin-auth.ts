@@ -1,20 +1,39 @@
 import { NextResponse } from "next/server";
+import {
+  ADMIN_SESSION_COOKIE,
+  parseCookieHeader,
+  verifyAdminSessionToken,
+} from "@/lib/admin-session";
 
 export function getAdminPassword(): string {
-  return (
-    process.env.ADMIN_PASSWORD ??
-    process.env.NEXT_PUBLIC_ADMIN_PASSWORD ??
-    "arcadex2024"
-  );
+  const password = process.env.ADMIN_PASSWORD?.trim();
+  if (!password) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("ADMIN_PASSWORD is required in production.");
+    }
+    return "dev-admin-password-change-me";
+  }
+  return password;
 }
 
-export function verifyAdminRequest(request: Request): boolean {
-  const auth = request.headers.get("Authorization");
-  if (auth?.startsWith("Bearer ")) {
-    return auth.slice(7) === getAdminPassword();
+export async function verifyAdminRequest(request: Request): Promise<boolean> {
+  const cookieToken = parseCookieHeader(
+    request.headers.get("Cookie"),
+    ADMIN_SESSION_COOKIE
+  );
+  if (cookieToken && (await verifyAdminSessionToken(cookieToken))) {
+    return true;
   }
 
-  return request.headers.get("X-Admin-Password") === getAdminPassword();
+  const auth = request.headers.get("Authorization");
+  if (auth?.startsWith("Bearer ")) {
+    const token = auth.slice(7).trim();
+    if (token && (await verifyAdminSessionToken(token))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function unauthorizedResponse() {

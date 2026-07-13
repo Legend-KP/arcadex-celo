@@ -1,6 +1,7 @@
 import { PlayerProfile } from "@/types";
 import { encodeUserId } from "@/lib/wallet-address";
 import { setCachedPlayerName } from "@/lib/player-id";
+import { walletAuthHeaders } from "@/lib/wallet-session-client";
 
 export async function fetchPlayerProfile(
   playerId: string
@@ -26,7 +27,7 @@ export async function savePlayerProfile(
 ): Promise<PlayerProfile> {
   const res = await fetch(`/api/users/${encodeUserId(playerId)}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: walletAuthHeaders(),
     body: JSON.stringify({ name, walletAddress }),
   });
 
@@ -55,7 +56,7 @@ export async function bootstrapPlayerProfile(
 ): Promise<PlayerProfile> {
   const res = await fetch("/api/bootstrap", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: walletAuthHeaders(),
     body: JSON.stringify({ walletAddress }),
   });
 

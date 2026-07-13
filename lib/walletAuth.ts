@@ -10,6 +10,7 @@ import {
   normalizeWalletAddress,
 } from "@/lib/wallet-address";
 import { clearInvalidCachedWallet, setCachedWallet } from "@/lib/player-id";
+import { setWalletSessionToken, hasValidWalletSession, getWalletSessionToken } from "@/lib/wallet-session-client";
 
 const POLL_MS = 200;
 const MAX_WAIT_MS = 15000;
@@ -125,7 +126,7 @@ function walletInitErrorMessage(): string {
   return "Could not connect to your MiniPay wallet. Update MiniPay and try again.";
 }
 
-/** Resolve wallet for saving profile — address-only, no SIWE (MiniPay constraint). */
+/** Resolve wallet for saving profile — requires signed session. */
 export async function resolveWalletForSave(): Promise<string> {
   const silent = await resolveWalletOnAppOpen();
   if (silent) return silent;
@@ -134,4 +135,75 @@ export async function resolveWalletForSave(): Promise<string> {
   if (wallet) return cacheWallet(wallet);
 
   throw new Error(walletInitErrorMessage());
+}
+
+/** Sign a challenge and exchange it for a wallet session token. */
+export async function establishWalletSession(wallet: string): Promise<string> {
+  const normalized = normalizeWalletAddress(wallet);
+  const client = createMiniPayWalletClient();
+  if (!client) {
+    throw new Error(walletInitErrorMessage());
+  }
+
+  const challengeRes = await fetch("/api/auth/challenge", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ walletAddress: normalized }),
+    cache: "no-store",
+  });
+
+  const challenge = (await challengeRes.json().catch(() => ({}))) as {
+    message?: string;
+    error?: string;
+  };
+
+  if (!challengeRes.ok || !challenge.message) {
+    throw new Error(challenge.error ?? "Could not start wallet authentication.");
+  }
+
+  const signature = await client.signMessage({
+    account: normalized as `0x${string}`,
+    message: challenge.message,
+  });
+
+  const sessionRes = await fetch("/api/auth/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      walletAddress: normalized,
+      message: challenge.message,
+      signature,
+    }),
+    cache: "no-store",
+  });
+
+  const session = (await sessionRes.json().catch(() => ({}))) as {
+    token?: string;
+    error?: string;
+  };
+
+  if (!sessionRes.ok || !session.token) {
+    throw new Error(session.error ?? "Wallet authentication failed.");
+  }
+
+  setWalletSessionToken(session.token);
+  return session.token;
+}
+
+/** Ensure a valid wallet session exists for the connected wallet. */
+export async function ensureWalletSession(wallet: string): Promise<string> {
+  const normalized = normalizeWalletAddress(wallet);
+  if (hasValidWalletSession(normalized)) {
+    return getWalletSessionToken()!;
+  }
+
+  try {
+    return await establishWalletSession(normalized);
+  } catch (err) {
+    throw new Error(
+      err instanceof Error
+        ? err.message
+        : "Could not authenticate your wallet. Open ArcadeX in MiniPay and try again."
+    );
+  }
 }

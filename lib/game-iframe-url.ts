@@ -4,6 +4,7 @@ export interface GameIframeConfig {
   walletAddress?: string;
   playerName?: string;
   hasLeaderboard: boolean;
+  sessionToken?: string;
 }
 
 /** Shell origin for Unity HTTP calls back to `/api/games/{id}/progress`. */
@@ -34,6 +35,9 @@ export function buildGameIframeUrl(
   }
   if (config.playerName) {
     url.searchParams.set("arcadexPlayer", config.playerName);
+  }
+  if (config.sessionToken) {
+    url.searchParams.set("arcadexSession", config.sessionToken);
   }
 
   url.searchParams.set(
