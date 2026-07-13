@@ -1673,20 +1673,6 @@ a { color: inherit; text-decoration: none; }
   white-space: pre-wrap;
 }
 
-.lb-name-col {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 2px;
-}
-
-.lb-wallet-sub {
-  font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
 @keyframes contest-pulse {
   0%, 100% { box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35); }

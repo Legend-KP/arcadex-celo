@@ -23,11 +23,6 @@ interface LeaderboardProps {
 const MEDALS = ["🥇", "🥈", "🥉"];
 const SWIPE_THRESHOLD = 60;
 
-function formatWalletAddress(wallet?: string): string {
-  if (!wallet) return "Unknown wallet";
-  return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
-}
-
 export default function Leaderboard({
   gameId,
   gameName,
@@ -165,16 +160,7 @@ export default function Leaderboard({
                 >
                   {i < 3 ? MEDALS[i] : `#${i + 1}`}
                 </span>
-                <span className="lb-name-col">
-                  <span className="lb-name">
-                    {showContestBoard
-                      ? formatWalletAddress(e.walletAddress)
-                      : e.name}
-                  </span>
-                  {showContestBoard && e.name && (
-                    <span className="lb-wallet-sub">{e.name}</span>
-                  )}
-                </span>
+                <span className="lb-name">{e.name}</span>
                 <span className="lb-score">{e.score.toLocaleString()}</span>
               </div>
             ))}
