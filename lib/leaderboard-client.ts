@@ -1,10 +1,11 @@
-import { LeaderboardEntry } from "@/types";
+import { ContestInfo, LeaderboardEntry } from "@/types";
 
 export interface LeaderboardStatus {
   entries: LeaderboardEntry[];
   personalBest?: number;
   submittedBest?: number;
   canSubmit?: boolean;
+  contest?: ContestInfo | null;
 }
 
 export async function getLeaderboard(
@@ -31,6 +32,7 @@ export async function getLeaderboard(
     personalBest: data.personalBest,
     submittedBest: data.submittedBest,
     canSubmit: data.canSubmit,
+    contest: data.contest ?? null,
   };
 }
 

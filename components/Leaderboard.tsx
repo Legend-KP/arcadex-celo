@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { LEADERBOARD_MAX_ENTRIES, LeaderboardEntry } from "@/types";
+import {
+  CONTEST_DURATION_OPTIONS,
+  ContestDurationDays,
+  ContestInfo,
+  LEADERBOARD_MAX_ENTRIES,
+  LeaderboardEntry,
+} from "@/types";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
+import { formatContestCountdown } from "@/lib/contest";
 import { getLeaderboard } from "@/lib/leaderboard-client";
 
 interface LeaderboardProps {
@@ -16,6 +23,11 @@ interface LeaderboardProps {
 const MEDALS = ["🥇", "🥈", "🥉"];
 const SWIPE_THRESHOLD = 60;
 
+function formatWalletAddress(wallet?: string): string {
+  if (!wallet) return "Unknown wallet";
+  return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
+}
+
 export default function Leaderboard({
   gameId,
   gameName,
@@ -25,8 +37,10 @@ export default function Leaderboard({
 }: LeaderboardProps) {
   const { walletAddress, playerName } = usePlayerProfile();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [contest, setContest] = useState<ContestInfo | null>(null);
   const [submittedBest, setSubmittedBest] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [countdown, setCountdown] = useState("");
   const touchStartY = useRef<number | null>(null);
 
   useEffect(() => {
@@ -37,15 +51,36 @@ export default function Leaderboard({
       playerName: playerName || undefined,
     })
       .then((data) => {
-        setEntries((data.entries ?? []).slice(0, LEADERBOARD_MAX_ENTRIES));
+        setContest(data.contest ?? null);
+        if (data.contest) {
+          setEntries(data.contest.entries ?? []);
+        } else {
+          setEntries((data.entries ?? []).slice(0, LEADERBOARD_MAX_ENTRIES));
+        }
         setSubmittedBest(data.submittedBest ?? 0);
       })
       .catch(() => {
         setEntries([]);
+        setContest(null);
         setSubmittedBest(0);
       })
       .finally(() => setLoading(false));
   }, [open, gameId, walletAddress, playerName]);
+
+  useEffect(() => {
+    if (!open || contest?.status !== "live") {
+      setCountdown("");
+      return;
+    }
+
+    const tick = () => {
+      setCountdown(formatContestCountdown(contest.endsAt - Date.now()));
+    };
+
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [open, contest]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
@@ -57,6 +92,9 @@ export default function Leaderboard({
     touchStartY.current = null;
     if (delta > SWIPE_THRESHOLD) onClose();
   };
+
+  const showContestBoard = Boolean(contest);
+  const isLiveContest = contest?.status === "live" || contestLive;
 
   if (!open) return null;
 
@@ -81,13 +119,27 @@ export default function Leaderboard({
           </button>
         </div>
 
-        {contestLive && (
+        {isLiveContest && (
           <div className="lb-contest-banner" role="status">
-            CONTEST LIVE
+            <span>CONTEST LIVE</span>
+            {countdown && <span className="lb-contest-countdown">{countdown}</span>}
           </div>
         )}
 
-        {submittedBest > 0 && (
+        {contest?.status === "ended" && (
+          <div className="lb-contest-ended" role="status">
+            Contest ended — final top 10
+          </div>
+        )}
+
+        {contest?.task && (
+          <div className="lb-contest-task">
+            <p className="lb-contest-task-label">Contest task</p>
+            <p className="lb-contest-task-text">{contest.task}</p>
+          </div>
+        )}
+
+        {submittedBest > 0 && !showContestBoard && (
           <p className="lb-submit-hint">
             Your best submitted score: {submittedBest.toLocaleString()}
           </p>
@@ -96,12 +148,16 @@ export default function Leaderboard({
         <div className="lb-list">
           {loading && <p className="lb-empty">Loading...</p>}
           {!loading && entries.length === 0 && (
-            <p className="lb-empty">No scores yet — be the first!</p>
+            <p className="lb-empty">
+              {showContestBoard
+                ? "No contest scores yet — be the first!"
+                : "No scores yet — be the first!"}
+            </p>
           )}
           {!loading &&
             entries.map((e, i) => (
               <div
-                key={i}
+                key={`${e.walletAddress ?? e.name}-${i}`}
                 className={`lb-row${i === 0 ? " lb-row--first" : ""}${i < 3 ? " lb-row--podium" : ""}`}
               >
                 <span
@@ -109,7 +165,16 @@ export default function Leaderboard({
                 >
                   {i < 3 ? MEDALS[i] : `#${i + 1}`}
                 </span>
-                <span className="lb-name">{e.name}</span>
+                <span className="lb-name-col">
+                  <span className="lb-name">
+                    {showContestBoard
+                      ? formatWalletAddress(e.walletAddress)
+                      : e.name}
+                  </span>
+                  {showContestBoard && e.name && (
+                    <span className="lb-wallet-sub">{e.name}</span>
+                  )}
+                </span>
                 <span className="lb-score">{e.score.toLocaleString()}</span>
               </div>
             ))}

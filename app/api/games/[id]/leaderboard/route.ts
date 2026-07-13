@@ -1,5 +1,7 @@
 import { fetchGameFromServer } from "@/lib/firestore-server";
+import { buildContestInfo } from "@/lib/contest";
 import {
+  fetchContestLeaderboardFromServer,
   fetchLeaderboardFromServer,
   fetchPersonalBestFromServer,
   fetchUserSubmittedScoreFromServer,
@@ -10,7 +12,7 @@ import {
   corsJsonResponse,
   handleCorsPreflightRequest,
 } from "@/lib/cors";
-import { gameHasLeaderboard, LEADERBOARD_MAX_ENTRIES, LeaderboardEntry } from "@/types";
+import { gameHasContest, gameHasLeaderboard, LEADERBOARD_MAX_ENTRIES, LeaderboardEntry } from "@/types";
 import { isWalletAddress, tryNormalizeWalletAddress } from "@/lib/wallet-address";
 
 export const dynamic = "force-dynamic";
@@ -25,13 +27,16 @@ async function assertLeaderboardEnabled(
 ) {
   const game = await fetchGameFromServer(gameId);
   if (!game || !gameHasLeaderboard(game)) {
-    return corsJsonResponse(
-      request,
-      { error: "Leaderboard is not enabled for this game." },
-      { status: 404 }
-    );
+    return {
+      response: corsJsonResponse(
+        request,
+        { error: "Leaderboard is not enabled for this game." },
+        { status: 404 }
+      ),
+      game: null,
+    };
   }
-  return null;
+  return { response: null, game };
 }
 
 function parseScoreBody(body: LeaderboardEntry & { value?: number }) {
@@ -50,8 +55,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const disabled = await assertLeaderboardEnabled(request, id);
-    if (disabled) return disabled;
+    const { response: disabled, game } = await assertLeaderboardEnabled(request, id);
+    if (disabled || !game) return disabled;
 
     const { searchParams } = new URL(request.url);
     const wallet = searchParams.get("wallet") ?? undefined;
@@ -70,6 +75,15 @@ export async function GET(
           })
         : undefined;
 
+    let contest = null;
+    if (gameHasContest(game) && typeof game.contestStartedAt === "number") {
+      const contestEntries = await fetchContestLeaderboardFromServer(
+        id,
+        game.contestStartedAt
+      );
+      contest = buildContestInfo(game, contestEntries);
+    }
+
     return corsJsonResponse(request, {
       entries,
       personalBest,
@@ -78,6 +92,7 @@ export async function GET(
         typeof personalBest === "number" &&
         typeof submittedBest === "number" &&
         personalBest > submittedBest,
+      contest,
     });
   } catch (err) {
     const message =
@@ -92,7 +107,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const disabled = await assertLeaderboardEnabled(request, id);
+    const { response: disabled } = await assertLeaderboardEnabled(request, id);
     if (disabled) return disabled;
 
     const body = (await request.json()) as LeaderboardEntry & {

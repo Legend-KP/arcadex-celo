@@ -1,6 +1,7 @@
 import {
   GameProgress,
   LEADERBOARD_MAX_ENTRIES,
+  CONTEST_MAX_ENTRIES,
   LeaderboardEntry,
   PlayerProfile,
   StoredGameProgress,
@@ -608,6 +609,55 @@ export async function submitLeaderboardEntryOnServer(
   await writePath(`leaderboards/${gameId}/${leaderboardStorageKey(payload)}`, payload);
 }
 
+function contestLeaderboardPath(
+  gameId: string,
+  contestStartedAt: number
+): string {
+  return `contestLeaderboards/${gameId}/${contestStartedAt}`;
+}
+
+export async function submitContestLeaderboardEntryOnServer(
+  gameId: string,
+  contestStartedAt: number,
+  entry: LeaderboardEntry
+): Promise<void> {
+  const wallet = tryNormalizeWalletAddress(entry.walletAddress);
+  if (!wallet) return;
+
+  const payload: LeaderboardEntry = {
+    name: entry.name,
+    score: entry.score,
+    walletAddress: wallet,
+    createdAt: entry.createdAt ?? Date.now(),
+  };
+
+  const basePath = contestLeaderboardPath(gameId, contestStartedAt);
+  const map = await readPath<LeaderboardMap>(basePath);
+  const userKey = leaderboardUserKey(payload);
+  const existingBest = deduplicateLeaderboardEntries(
+    mapToLeaderboardEntries(map)
+  ).find((e) => leaderboardUserKey(e) === userKey);
+
+  if (existingBest && existingBest.score >= payload.score) {
+    return;
+  }
+
+  await writePath(`${basePath}/${wallet}`, payload);
+}
+
+export async function fetchContestLeaderboardFromServer(
+  gameId: string,
+  contestStartedAt: number,
+  limit = CONTEST_MAX_ENTRIES
+): Promise<LeaderboardEntry[]> {
+  const map = await readPath<LeaderboardMap>(
+    contestLeaderboardPath(gameId, contestStartedAt)
+  );
+  return deduplicateLeaderboardEntries(mapToLeaderboardEntries(map))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
 // ─── Per-user game progress ───────────────────────────────────────────────────
 
 function gameProgressPath(walletAddress: string, gameId: string): string {
@@ -653,7 +703,8 @@ export async function activateScoreSubmitOnServer(
   walletAddress: string,
   gameId: string,
   txHash: string,
-  score: number
+  score: number,
+  opts?: { contestStartedAt?: number }
 ): Promise<{
   highScore: number;
   leaderboardScore: number;
@@ -728,6 +779,15 @@ export async function activateScoreSubmitOnServer(
     score,
     walletAddress: wallet,
   });
+
+  if (typeof opts?.contestStartedAt === "number") {
+    await submitContestLeaderboardEntryOnServer(gameId, opts.contestStartedAt, {
+      name: playerName,
+      score,
+      walletAddress: wallet,
+      createdAt: Date.now(),
+    });
+  }
 
   const leaderboardScore = await fetchUserSubmittedScoreFromServer(gameId, {
     walletAddress: wallet,

@@ -40,6 +40,12 @@ function docToGame(doc: FirestoreDocument): Game {
     live: parseField(fields.live) !== false,
     hasLeaderboard: parseField(fields.hasLeaderboard) !== false,
     contestLive: parseField(fields.contestLive) === true,
+    contestDurationDays: parseField(fields.contestDurationDays) as
+      | Game["contestDurationDays"]
+      | undefined,
+    contestTask: parseField(fields.contestTask) as string | undefined,
+    contestStartedAt: parseField(fields.contestStartedAt) as number | undefined,
+    contestEndsAt: parseField(fields.contestEndsAt) as number | undefined,
     sortOrder: parseField(fields.sortOrder) as number | undefined,
     createdAt: Number(parseField(fields.createdAt) ?? 0),
   };

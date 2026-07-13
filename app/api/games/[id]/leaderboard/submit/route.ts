@@ -1,4 +1,5 @@
 import { fetchGameFromServer } from "@/lib/firestore-server";
+import { isContestActive } from "@/lib/contest";
 import {
   activateScoreSubmitOnServer,
   ScoreSubmitActivationError,
@@ -66,7 +67,17 @@ export async function POST(
     }
 
     const wallet = normalizeWalletAddress(rawWallet);
-    const result = await activateScoreSubmitOnServer(wallet, id, txHash, score);
+    const contestStartedAt =
+      isContestActive(game) && typeof game.contestStartedAt === "number"
+        ? game.contestStartedAt
+        : undefined;
+    const result = await activateScoreSubmitOnServer(
+      wallet,
+      id,
+      txHash,
+      score,
+      { contestStartedAt }
+    );
 
     return corsJsonResponse(request, {
       success: true,

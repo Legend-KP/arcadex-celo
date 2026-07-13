@@ -13,7 +13,14 @@ import {
   updateAdminGame,
 } from "@/lib/admin-api";
 import { sortGames } from "@/lib/game-sort";
-import { Game, gameHasLeaderboard, gameHasContestLive, gameIsLive } from "@/types";
+import { getContestStatus } from "@/lib/contest";
+import {
+  Game,
+  gameHasLeaderboard,
+  gameHasContestLive,
+  gameIsLive,
+} from "@/types";
+import AdminContestModal from "@/components/AdminContestModal";
 import Logo from "@/components/Logo";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "/";
@@ -36,8 +43,9 @@ export default function AdminPortal() {
   const [plays, setPlays] = useState("");
   const [fallbackImage, setFallbackImage] = useState("");
   const [hasLeaderboard, setHasLeaderboard] = useState(true);
-  const [contestLive, setContestLive] = useState(false);
   const [live, setLive] = useState(true);
+
+  const [contestModalGame, setContestModalGame] = useState<Game | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -46,7 +54,6 @@ export default function AdminPortal() {
   const [editPlays, setEditPlays] = useState("");
   const [editFallbackImage, setEditFallbackImage] = useState("");
   const [editHasLeaderboard, setEditHasLeaderboard] = useState(true);
-  const [editContestLive, setEditContestLive] = useState(false);
   const [editLive, setEditLive] = useState(true);
   const [editSaving, setEditSaving] = useState(false);
 
@@ -114,7 +121,6 @@ export default function AdminPortal() {
         active: true,
         live,
         hasLeaderboard,
-        contestLive,
       });
       setName("");
       setThumbnail("");
@@ -122,7 +128,6 @@ export default function AdminPortal() {
       setPlays("");
       setFallbackImage("");
       setHasLeaderboard(true);
-      setContestLive(false);
       setLive(true);
       await refresh();
       showToast("Game added! 🎮");
@@ -170,21 +175,16 @@ export default function AdminPortal() {
     }
   }
 
-  async function handleToggleContest(game: Game) {
+  function openContestPanel(game: Game) {
     if (!gameHasLeaderboard(game)) {
       showToast("Enable Leaderboard for this game first.");
       return;
     }
-    try {
-      const next = !gameHasContestLive(game);
-      await updateAdminGame(game.id, { contestLive: next });
-      await refresh();
-      showToast(next ? "Contest is live! 🔥" : "Contest ended.");
-    } catch (err) {
-      showToast(
-        err instanceof Error ? err.message : "Failed to update contest."
-      );
-    }
+    setContestModalGame(game);
+  }
+
+  function closeContestPanel() {
+    setContestModalGame(null);
   }
 
   function startEdit(game: Game) {
@@ -195,7 +195,6 @@ export default function AdminPortal() {
     setEditPlays(game.plays);
     setEditFallbackImage(game.fallbackImage || "");
     setEditHasLeaderboard(gameHasLeaderboard(game));
-    setEditContestLive(gameHasContestLive(game));
     setEditLive(gameIsLive(game));
   }
 
@@ -220,7 +219,6 @@ export default function AdminPortal() {
         plays: editPlays.trim() || "0",
         fallbackImage: editFallbackImage.trim(),
         hasLeaderboard: editHasLeaderboard,
-        contestLive: editContestLive,
         live: editLive,
       });
       cancelEdit();
@@ -453,18 +451,6 @@ export default function AdminPortal() {
               Unchecked: level-based — stores current level (l) only, no leaderboard.
             </span>
           </label>
-          <label className="form-checkbox">
-            <input
-              type="checkbox"
-              checked={contestLive}
-              onChange={(e) => setContestLive(e.target.checked)}
-              disabled={!hasLeaderboard}
-            />
-            <span>Contest Live</span>
-            <span className="form-checkbox-hint">
-              When on, shows a contest badge on the home page and a banner on the leaderboard.
-            </span>
-          </label>
           <button
             className="add-submit-btn"
             onClick={handleAdd}
@@ -577,18 +563,6 @@ export default function AdminPortal() {
                       Unchecked: level-based — stores current level (l) only, no leaderboard.
                     </span>
                   </label>
-                  <label className="form-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={editContestLive}
-                      onChange={(e) => setEditContestLive(e.target.checked)}
-                      disabled={!editHasLeaderboard}
-                    />
-                    <span>Contest Live</span>
-                    <span className="form-checkbox-hint">
-                      When on, shows a contest badge on the home page and a banner on the leaderboard.
-                    </span>
-                  </label>
                   <button
                     className="add-submit-btn edit-save-btn"
                     type="button"
@@ -637,7 +611,11 @@ export default function AdminPortal() {
                       {g.plays} plays · {g.active ? "🟢 Visible" : "⚫ Hidden"} ·{" "}
                       {gameIsLive(g) ? "✅ Live" : "🔜 Coming Soon"} ·{" "}
                       {gameHasLeaderboard(g) ? "🏆 Leaderboard" : "📊 Level-based"} ·{" "}
-                      {gameHasContestLive(g) ? "🔥 Contest Live" : "No contest"}
+                      {gameHasContestLive(g)
+                        ? "🔥 Contest Live"
+                        : getContestStatus(g) === "ended"
+                          ? "🏁 Contest Ended"
+                          : "No contest"}
                     </p>
                   </div>
                   <div className="admin-actions">
@@ -648,13 +626,19 @@ export default function AdminPortal() {
                     >
                       Edit
                     </button>
-                    <button
-                      className="toggle-btn"
-                      type="button"
-                      onClick={() => handleToggleContest(g)}
-                    >
-                      {gameHasContestLive(g) ? "End Contest" : "Start Contest"}
-                    </button>
+                    {gameHasLeaderboard(g) && (
+                      <button
+                        className="toggle-btn"
+                        type="button"
+                        onClick={() => openContestPanel(g)}
+                      >
+                        {gameHasContestLive(g)
+                          ? "Edit Contest"
+                          : getContestStatus(g) === "ended"
+                            ? "Contest Results"
+                            : "Start Contest"}
+                      </button>
+                    )}
                     <button
                       className="toggle-btn"
                       type="button"
@@ -683,6 +667,14 @@ export default function AdminPortal() {
           </div>
         )}
       </div>
+
+      <AdminContestModal
+        game={contestModalGame}
+        open={!!contestModalGame}
+        onClose={closeContestPanel}
+        onSaved={refresh}
+        showToast={showToast}
+      />
     </div>
   );
 }

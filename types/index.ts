@@ -1,10 +1,24 @@
 export const LEADERBOARD_MAX_ENTRIES = 25;
+export const CONTEST_MAX_ENTRIES = 10;
+export const CONTEST_DURATION_OPTIONS = [1, 2, 4, 7] as const;
+
+export type ContestDurationDays = (typeof CONTEST_DURATION_OPTIONS)[number];
+export type ContestStatus = "live" | "ended";
 
 export interface LeaderboardEntry {
   name: string;
   score: number;
   walletAddress?: string;
   createdAt?: number;
+}
+
+export interface ContestInfo {
+  status: ContestStatus;
+  task: string;
+  startedAt: number;
+  endsAt: number;
+  durationDays: ContestDurationDays;
+  entries: LeaderboardEntry[];
 }
 
 export interface PlayerProfile {
@@ -28,8 +42,16 @@ export interface Game {
   live?: boolean;
   /** When false, leaderboard UI, RTDB paths, and score APIs are disabled. Defaults to true. */
   hasLeaderboard?: boolean;
-  /** When true, shows contest badge on home page and banner on leaderboard. */
+  /** Legacy flag; live status is derived from contestEndsAt. */
   contestLive?: boolean;
+  /** Contest duration in days (1, 2, 4, or 7). */
+  contestDurationDays?: ContestDurationDays;
+  /** Admin-defined task text shown on the leaderboard during a contest. */
+  contestTask?: string;
+  /** Unix ms timestamp when the current contest started. */
+  contestStartedAt?: number;
+  /** Unix ms timestamp when the current contest ends. */
+  contestEndsAt?: number;
   /** Display order on the home page (lower = earlier). Set via admin drag-and-drop. */
   sortOrder?: number;
   createdAt: number;
@@ -44,9 +66,36 @@ export function gameIsLive(game: Pick<Game, "live">): boolean {
 }
 
 export function gameHasContestLive(
-  game: Pick<Game, "contestLive">
+  game: Pick<Game, "contestStartedAt" | "contestEndsAt">
 ): boolean {
-  return game.contestLive === true;
+  const endsAt = game.contestEndsAt;
+  if (typeof endsAt !== "number" || !Number.isFinite(endsAt)) return false;
+  return endsAt > Date.now();
+}
+
+export function gameHasContestEnded(
+  game: Pick<Game, "contestStartedAt" | "contestEndsAt">
+): boolean {
+  const startedAt = game.contestStartedAt;
+  const endsAt = game.contestEndsAt;
+  if (
+    typeof startedAt !== "number" ||
+    typeof endsAt !== "number" ||
+    !Number.isFinite(startedAt) ||
+    !Number.isFinite(endsAt)
+  ) {
+    return false;
+  }
+  return endsAt <= Date.now();
+}
+
+export function gameHasContest(
+  game: Pick<Game, "contestStartedAt" | "contestEndsAt">
+): boolean {
+  return (
+    typeof game.contestStartedAt === "number" &&
+    typeof game.contestEndsAt === "number"
+  );
 }
 
 /**
