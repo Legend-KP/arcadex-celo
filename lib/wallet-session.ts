@@ -4,15 +4,15 @@ import { parseAuthChallengeMessage } from "@/lib/wallet-auth-message";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 
 const SESSION_TTL_SEC = 24 * 60 * 60;
+const DEV_WALLET_SESSION_SECRET = "dev-wallet-session-secret-change-me";
+
+/** Wallet signing is only enforced when this secret is configured (e.g. Cloudflare). */
+export function isWalletAuthEnabled(): boolean {
+  return Boolean(process.env.WALLET_SESSION_SECRET?.trim());
+}
 
 function getWalletSessionSecret(): Uint8Array {
-  const secret = process.env.WALLET_SESSION_SECRET?.trim();
-  if (!secret) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("WALLET_SESSION_SECRET is required in production.");
-    }
-    return new TextEncoder().encode("dev-wallet-session-secret-change-me");
-  }
+  const secret = process.env.WALLET_SESSION_SECRET?.trim() || DEV_WALLET_SESSION_SECRET;
   return new TextEncoder().encode(secret);
 }
 
@@ -53,6 +53,13 @@ export async function requireWalletAuth(
   request: Request,
   walletAddress?: string
 ): Promise<WalletAuthResult> {
+  if (!isWalletAuthEnabled()) {
+    if (walletAddress && isWalletAddress(walletAddress)) {
+      return { ok: true, wallet: normalizeWalletAddress(walletAddress) };
+    }
+    return { ok: true, wallet: "" };
+  }
+
   const token = extractBearerToken(request);
   if (!token) {
     return { ok: false, error: "Authentication required.", status: 401 };

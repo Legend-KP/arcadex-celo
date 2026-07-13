@@ -12,20 +12,22 @@ import {
 import PlayerNameModal from "@/components/PlayerNameModal";
 import {
   bootstrapPlayerProfile,
+  fetchPlayerProfile,
   savePlayerProfile,
 } from "@/lib/player-profile-client";
 import {
   clearCachedPlayerName,
   clearInvalidCachedWallet,
   clearStaleGuestId,
+  getCachedPlayerName,
   getCachedWallet,
+  setCachedPlayerName,
   setCachedWallet,
 } from "@/lib/player-id";
 import {
   readWalletImmediately,
   resolveWalletForSave,
   resolveWalletOnAppOpen,
-  ensureWalletSession,
 } from "@/lib/walletAuth";
 import {
   isWalletAddress,
@@ -121,11 +123,19 @@ export default function PlayerProfileProvider({
       setPlayerId(wallet);
 
       try {
-        await ensureWalletSession(wallet);
-        const user = await bootstrapPlayerProfile(wallet);
+        let user = await fetchPlayerProfile(wallet).catch(() => null);
+        if (!user) {
+          user = await bootstrapPlayerProfile(wallet);
+        } else {
+          bootstrapPlayerProfile(wallet).catch(() => {
+            // Spark/profile sync is best-effort after a cached profile load.
+          });
+        }
+
         if (cancelled) return;
 
         setProfile(user);
+        if (user.name) setCachedPlayerName(user.name);
 
         if (shouldShowNameModal(user)) {
           nameCompleteRef.current = false;
@@ -136,6 +146,23 @@ export default function PlayerProfileProvider({
         }
       } catch (err) {
         if (cancelled) return;
+
+        const cachedName = getCachedPlayerName()?.trim();
+        if (cachedName) {
+          const fallbackProfile: PlayerProfile = {
+            id: wallet,
+            name: cachedName,
+            walletAddress: wallet,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          setProfile(fallbackProfile);
+          nameCompleteRef.current = true;
+          setShowModal(false);
+          setError("");
+          return;
+        }
+
         nameCompleteRef.current = false;
         setShowModal(true);
         setError(
@@ -178,10 +205,10 @@ export default function PlayerProfileProvider({
 
         wallet = normalizeWalletAddress(wallet);
 
-        await ensureWalletSession(wallet);
         const saved = await savePlayerProfile(wallet, name, wallet);
 
         setCachedWallet(wallet);
+        setCachedPlayerName(saved.name);
         setWalletAddress(saved.walletAddress ?? wallet);
         setPlayerId(saved.id);
         setProfile(saved);
@@ -205,7 +232,6 @@ export default function PlayerProfileProvider({
       if (!profile?.name) return;
 
       const wallet = nextWallet.trim();
-      await ensureWalletSession(wallet);
       const saved = await savePlayerProfile(wallet, profile.name, wallet);
       setProfile(saved);
       setPlayerId(saved.id);
@@ -214,6 +240,9 @@ export default function PlayerProfileProvider({
     },
     [profile?.name]
   );
+
+  const defaultName =
+    profile?.name?.trim() || getCachedPlayerName()?.trim() || "";
 
   const value = useMemo(
     () => ({
@@ -234,7 +263,7 @@ export default function PlayerProfileProvider({
         open={showModal}
         saving={saving}
         error={error}
-        defaultName=""
+        defaultName={defaultName}
         onSubmit={handleSubmit}
       />
     </PlayerProfileContext.Provider>
