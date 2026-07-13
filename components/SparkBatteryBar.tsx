@@ -107,11 +107,13 @@ export default function SparkBatteryBar() {
           ×
         </button>
 
+        <span className="spark-panel__title-icon" aria-hidden>
+          ⚡
+        </span>
+
+        <div className="spark-panel__body">
         <header className="spark-panel__header">
           <div className="spark-panel__title-row">
-            <span className="spark-panel__title-icon" aria-hidden>
-              ⚡
-            </span>
             <h2 id="spark-panel-title" className="spark-panel__title">
               Sparks
             </h2>
@@ -252,6 +254,7 @@ export default function SparkBatteryBar() {
             only. Weekly leaderboard attempt limits still apply.
           </p>
         </section>
+        </div>
       </div>
     </div>
   ) : null;
