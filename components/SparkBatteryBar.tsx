@@ -137,6 +137,7 @@ export default function SparkBatteryBar() {
           </section>
         ) : (
           <section className="spark-panel__status">
+            <p className="spark-panel__status-label">Your Sparks</p>
             <div className="spark-panel__count-row">
               <span className="spark-panel__count-icon" aria-hidden>
                 ⚡
