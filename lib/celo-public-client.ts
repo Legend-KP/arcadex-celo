@@ -93,6 +93,18 @@ function isTransientRpcError(error: unknown): boolean {
   );
 }
 
+function isTransactionFailureError(error: unknown): boolean {
+  const message = collectErrorText(error).toLowerCase();
+  return (
+    message.includes("transaction receipt") ||
+    message.includes("could not be found") ||
+    message.includes("not mined") ||
+    message.includes("execution reverted") ||
+    message.includes("transaction failed") ||
+    message.includes("version: viem")
+  );
+}
+
 /** Map low-level RPC errors to short user-facing messages. */
 export function formatChainError(error: unknown): string {
   if (error instanceof Error) {
@@ -105,6 +117,10 @@ export function formatChainError(error: unknown): string {
     ) {
       return error.message;
     }
+  }
+
+  if (isTransactionFailureError(error)) {
+    return "Transaction failed. Please try again.";
   }
 
   if (isTransientRpcError(error)) {

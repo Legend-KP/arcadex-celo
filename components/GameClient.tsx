@@ -22,6 +22,7 @@ import { buildGameIframeUrl, getShellOrigin } from "@/lib/game-iframe-url";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { resolveWalletOnAppOpen } from "@/lib/walletAuth";
 import { getGameTheme } from "@/lib/game-themes";
+import { formatChainError } from "@/lib/celo-public-client";
 import { purchaseScoreSubmitOnChain } from "@/lib/score-submit-purchase";
 import {
   clearPendingLeaderboardSubmit,
@@ -158,7 +159,7 @@ export default function GameClient({ game }: GameClientProps) {
 
     setSubmitToast({
       phase: "error",
-      message: error,
+      message: formatChainError(new Error(error)),
     });
   }, []);
 
@@ -416,11 +417,7 @@ export default function GameClient({ game }: GameClientProps) {
             });
           } catch (err) {
             clearPendingLeaderboardSubmit(game.id);
-            notifyFailure(
-              err instanceof Error
-                ? err.message
-                : "Could not submit score."
-            );
+            notifyFailure(formatChainError(err));
           }
           break;
         }
