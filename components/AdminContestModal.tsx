@@ -26,7 +26,7 @@ interface AdminContestModalProps {
 
 function formatWallet(wallet?: string): string {
   if (!wallet) return "Unknown";
-  return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
+  return wallet;
 }
 
 export default function AdminContestModal({

@@ -2849,9 +2849,9 @@ a { color: inherit; text-decoration: none; }
 
 .admin-contest-result-wallet {
   font-family: monospace;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.72rem;
+  word-break: break-all;
+  line-height: 1.35;
 }
 
 .admin-contest-result-score {
