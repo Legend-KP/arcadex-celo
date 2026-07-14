@@ -570,7 +570,7 @@ export default function GameClient({
         </div>
       )}
 
-      <div className="game-topbar game-topbar--on-dark">
+      <div className="game-topbar">
         <button
           type="button"
           className="game-close-btn"

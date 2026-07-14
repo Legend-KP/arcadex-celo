@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import DailyCheckInModal from "@/components/DailyCheckInModal";
 import PlayerNameModal from "@/components/PlayerNameModal";
 import {
   bootstrapPlayerProfile,
@@ -25,6 +26,7 @@ import {
   setCachedWallet,
 } from "@/lib/player-id";
 import {
+  ensureWalletSession,
   readWalletImmediately,
   resolveWalletForSave,
   resolveWalletOnAppOpen,
@@ -33,6 +35,12 @@ import {
   isWalletAddress,
   normalizeWalletAddress,
 } from "@/lib/wallet-address";
+import { isArcadeXRewardsConfigured } from "@/lib/arcadex-rewards";
+import {
+  fetchStreakStatus,
+  type StreakStatus,
+} from "@/lib/streak-client";
+import { hasValidWalletSession } from "@/lib/wallet-session-client";
 import { PlayerProfile } from "@/types";
 
 interface PlayerProfileContextValue {
@@ -41,7 +49,9 @@ interface PlayerProfileContextValue {
   playerName: string;
   walletAddress: string;
   isReady: boolean;
+  streakStatus: StreakStatus | null;
   updateWalletAddress: (walletAddress: string) => Promise<void>;
+  refreshStreakStatus: () => Promise<void>;
 }
 
 const PlayerProfileContext = createContext<PlayerProfileContextValue | null>(
@@ -51,7 +61,7 @@ const PlayerProfileContext = createContext<PlayerProfileContextValue | null>(
 export function usePlayerProfile(): PlayerProfileContextValue {
   const ctx = useContext(PlayerProfileContext);
   if (!ctx) {
-    throw new Error("usePlayerProfile must be used within PlayerProfileProvider");
+    throw new Error("usePlayerProfile must be within PlayerProfileProvider");
   }
   return ctx;
 }
@@ -82,9 +92,48 @@ export default function PlayerProfileProvider({
   );
   const [isReady, setIsReady] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showCheckIn, setShowCheckIn] = useState(false);
+  const [streakStatus, setStreakStatus] = useState<StreakStatus | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const nameCompleteRef = useRef(false);
+  const pendingWalletRef = useRef<string | null>(null);
+
+  const refreshStreakStatus = useCallback(async () => {
+    const wallet = walletAddress || getCachedWallet();
+    if (!wallet || !isArcadeXRewardsConfigured()) {
+      setStreakStatus(null);
+      return;
+    }
+    try {
+      const status = await fetchStreakStatus(wallet);
+      setStreakStatus(status);
+    } catch {
+      // Status is best-effort for UI
+    }
+  }, [walletAddress]);
+
+  const finishProfileLoad = useCallback(async (wallet: string) => {
+    let user = await fetchPlayerProfile(wallet).catch(() => null);
+    if (!user) {
+      user = await bootstrapPlayerProfile(wallet);
+    } else {
+      bootstrapPlayerProfile(wallet).catch(() => {
+        // Spark/profile sync is best-effort after a cached profile load.
+      });
+    }
+
+    setProfile(user);
+    if (user.name) setCachedPlayerName(user.name);
+
+    if (shouldShowNameModal(user)) {
+      nameCompleteRef.current = false;
+      setShowModal(true);
+    } else {
+      nameCompleteRef.current = syncNameCompletion(user);
+      setShowModal(false);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +141,6 @@ export default function PlayerProfileProvider({
     async function resolveWallet(): Promise<string | null> {
       const immediate = readWalletImmediately();
       if (immediate) return immediate;
-
       return resolveWalletOnAppOpen();
     }
 
@@ -121,29 +169,32 @@ export default function PlayerProfileProvider({
       setCachedWallet(wallet);
       setWalletAddress(wallet);
       setPlayerId(wallet);
+      pendingWalletRef.current = wallet;
 
       try {
-        let user = await fetchPlayerProfile(wallet).catch(() => null);
-        if (!user) {
-          user = await bootstrapPlayerProfile(wallet);
-        } else {
-          bootstrapPlayerProfile(wallet).catch(() => {
-            // Spark/profile sync is best-effort after a cached profile load.
-          });
+        if (isArcadeXRewardsConfigured()) {
+          const status = await fetchStreakStatus(wallet);
+          if (cancelled) return;
+          setStreakStatus(status);
+
+          if (status.canCheckIn) {
+            setShowCheckIn(true);
+            setIsReady(true);
+            return;
+          }
+
+          if (!hasValidWalletSession(wallet)) {
+            await ensureWalletSession(wallet);
+          }
+        } else if (!hasValidWalletSession(wallet)) {
+          try {
+            await ensureWalletSession(wallet);
+          } catch {
+            // personal_sign optional when rewards/auth not fully configured
+          }
         }
 
-        if (cancelled) return;
-
-        setProfile(user);
-        if (user.name) setCachedPlayerName(user.name);
-
-        if (shouldShowNameModal(user)) {
-          nameCompleteRef.current = false;
-          setShowModal(true);
-        } else {
-          nameCompleteRef.current = syncNameCompletion(user);
-          setShowModal(false);
-        }
+        await finishProfileLoad(wallet);
       } catch (err) {
         if (cancelled) return;
 
@@ -179,7 +230,35 @@ export default function PlayerProfileProvider({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [finishProfileLoad]);
+
+  const handleCheckInComplete = useCallback(
+    async (result: {
+      day: number;
+      milestone: boolean;
+      infiniteSparkGranted: boolean;
+    }) => {
+      setShowCheckIn(false);
+      const wallet = pendingWalletRef.current || walletAddress;
+      if (!wallet) return;
+
+      try {
+        await refreshStreakStatus();
+        await finishProfileLoad(wallet);
+        if (result.infiniteSparkGranted) {
+          // SparkProvider will refresh via wallet / focus; status already updated
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Checked in, but could not load your profile."
+        );
+        setShowModal(true);
+      }
+    },
+    [finishProfileLoad, refreshStreakStatus, walletAddress]
+  );
 
   const handleSubmit = useCallback(
     async (name: string) => {
@@ -204,6 +283,18 @@ export default function PlayerProfileProvider({
         }
 
         wallet = normalizeWalletAddress(wallet);
+
+        if (!hasValidWalletSession(wallet)) {
+          if (isArcadeXRewardsConfigured()) {
+            const status = await fetchStreakStatus(wallet);
+            setStreakStatus(status);
+            if (status.canCheckIn) {
+              setShowCheckIn(true);
+              throw new Error("Complete today's check-in first.");
+            }
+          }
+          await ensureWalletSession(wallet);
+        }
 
         const saved = await savePlayerProfile(wallet, name, wallet);
 
@@ -232,6 +323,9 @@ export default function PlayerProfileProvider({
       if (!profile?.name) return;
 
       const wallet = nextWallet.trim();
+      if (!hasValidWalletSession(wallet)) {
+        await ensureWalletSession(wallet);
+      }
       const saved = await savePlayerProfile(wallet, profile.name, wallet);
       setProfile(saved);
       setPlayerId(saved.id);
@@ -251,16 +345,32 @@ export default function PlayerProfileProvider({
       playerName: profile?.name ?? "",
       walletAddress,
       isReady,
+      streakStatus,
       updateWalletAddress,
+      refreshStreakStatus,
     }),
-    [playerId, profile, walletAddress, isReady, updateWalletAddress]
+    [
+      playerId,
+      profile,
+      walletAddress,
+      isReady,
+      streakStatus,
+      updateWalletAddress,
+      refreshStreakStatus,
+    ]
   );
 
   return (
     <PlayerProfileContext.Provider value={value}>
       {children}
+      <DailyCheckInModal
+        open={showCheckIn}
+        walletAddress={walletAddress}
+        status={streakStatus}
+        onComplete={handleCheckInComplete}
+      />
       <PlayerNameModal
-        open={showModal}
+        open={showModal && !showCheckIn}
         saving={saving}
         error={error}
         defaultName={defaultName}

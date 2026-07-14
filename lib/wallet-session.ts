@@ -6,9 +6,12 @@ import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 const SESSION_TTL_SEC = 24 * 60 * 60;
 const DEV_WALLET_SESSION_SECRET = "dev-wallet-session-secret-change-me";
 
-/** Wallet signing is only enforced when this secret is configured (e.g. Cloudflare). */
+/** Enforce wallet sessions once rewards contract is live or a secret is set. */
 export function isWalletAuthEnabled(): boolean {
-  return Boolean(process.env.WALLET_SESSION_SECRET?.trim());
+  return Boolean(
+    process.env.WALLET_SESSION_SECRET?.trim() ||
+      process.env.NEXT_PUBLIC_ARCADEX_REWARDS_CONTRACT?.trim()
+  );
 }
 
 function getWalletSessionSecret(): Uint8Array {

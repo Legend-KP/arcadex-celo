@@ -1,0 +1,29 @@
+{
+  "contract": "ArcadeXRewards",
+  "network": "celo-mainnet",
+  "chainId": 42220,
+  "address": "0x0139e8CF3Cd43b0c0Cc8b4d75DAE6C6b3e41DE85",
+  "campaignId": 1,
+  "requiredDays": 7,
+  "minIntervalSeconds": 86400,
+  "rewardMode": 0,
+  "rewardMeta": "0x0ab4843ee23ccd969c6d889afda5daeb2a0d59d52a8da8a2b6a3006a8906de71",
+  "resetAfterMilestone": true,
+  "requireEligibility": false,
+  "startTime": 1784033040,
+  "endTime": 1815569040,
+  "eligibilitySigner": "0x11015f39Ac7389201aEc778Be8e3D84f2aF44A70",
+  "constructorArgs": [
+    "0x11015f39Ac7389201aEc778Be8e3D84f2aF44A70"
+  ],
+  "deployer": "0x11015f39Ac7389201aEc778Be8e3D84f2aF44A70",
+  "deployedAt": "2026-07-14T12:44:07.516Z",
+  "txHash": "0x2d707fb7a65635e362cbbea2b4face52a81e13814bf64329d97cb3ed0c6caa4a",
+  "setCampaignTxHash": "0x3505cab296e2d633441c77e074ead66c81f6a9924212c9800152e17dddea7dc0",
+  "verified": true,
+  "verifiedAt": "2026-07-14T12:44:46.096Z",
+  "verification": {
+    "celoscan": "https://celoscan.io/address/0x0139e8CF3Cd43b0c0Cc8b4d75DAE6C6b3e41DE85#code",
+    "sourcify": "https://sourcify.dev/#/lookup/42220/0x0139e8CF3Cd43b0c0Cc8b4d75DAE6C6b3e41DE85"
+  }
+}

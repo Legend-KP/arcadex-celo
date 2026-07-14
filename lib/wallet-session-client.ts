@@ -2,16 +2,25 @@
 
 const TOKEN_KEY = "arcadex_wallet_session";
 
-export function getWalletSessionToken(): string | null {
+function readToken(): string | null {
   if (typeof window === "undefined") return null;
-  return sessionStorage.getItem(TOKEN_KEY);
+  return (
+    localStorage.getItem(TOKEN_KEY) ??
+    sessionStorage.getItem(TOKEN_KEY)
+  );
+}
+
+export function getWalletSessionToken(): string | null {
+  return readToken();
 }
 
 export function setWalletSessionToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
   sessionStorage.setItem(TOKEN_KEY, token);
 }
 
 export function clearWalletSessionToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
 }
 

@@ -508,6 +508,181 @@ export async function activateSparkRefillOnServer(
   };
 }
 
+// ─── Streak check-in + off-chain rewards ───────────────────────────────────────
+
+function checkInTxPath(txHash: string): string {
+  return `checkInTxs/${txHash.toLowerCase()}`;
+}
+
+function streakGrantPath(txHash: string): string {
+  return `streakGrants/${txHash.toLowerCase()}`;
+}
+
+export class StreakSyncError extends Error {
+  constructor(
+    message: string,
+    public readonly code:
+      | "NO_WALLET"
+      | "INVALID_TX"
+      | "TX_ALREADY_USED"
+  ) {
+    super(message);
+    this.name = "StreakSyncError";
+  }
+}
+
+export class StreakRewardError extends Error {
+  constructor(
+    message: string,
+    public readonly code:
+      | "NO_WALLET"
+      | "INVALID_TX"
+      | "TX_ALREADY_USED"
+      | "NO_MILESTONE"
+  ) {
+    super(message);
+    this.name = "StreakRewardError";
+  }
+}
+
+export async function recordCheckInTxOnServer(
+  walletAddress: string,
+  txHash: string,
+  day: number,
+  campaignId: number
+): Promise<{ reused: boolean }> {
+  if (!isWalletAddress(walletAddress)) {
+    throw new StreakSyncError("A valid wallet address is required.", "NO_WALLET");
+  }
+
+  const wallet = normalizeWalletAddress(walletAddress);
+  const normalizedTxHash = txHash.trim().toLowerCase();
+
+  if (!/^0x[a-f0-9]{64}$/.test(normalizedTxHash)) {
+    throw new StreakSyncError("A valid transaction hash is required.", "INVALID_TX");
+  }
+
+  const existing = await readPath<{ wallet?: string }>(
+    checkInTxPath(normalizedTxHash)
+  );
+
+  if (existing?.wallet) {
+    const recorded = normalizeWalletAddress(existing.wallet);
+    if (recorded !== wallet) {
+      throw new StreakSyncError(
+        "This check-in was already used by another wallet.",
+        "TX_ALREADY_USED"
+      );
+    }
+    return { reused: true };
+  }
+
+  await writePath(checkInTxPath(normalizedTxHash), {
+    wallet,
+    campaignId,
+    day,
+    syncedAt: Date.now(),
+  });
+
+  return { reused: false };
+}
+
+/**
+ * Grants Infinite Spark after a verified on-chain MilestoneReached for OFFCHAIN campaigns.
+ * Attackers cannot call this usefully: require verified milestone tx for this wallet + one-time grant.
+ */
+export async function grantStreakInfiniteSparkOnServer(
+  walletAddress: string,
+  txHash: string,
+  campaignId: number
+): Promise<{
+  state: StoredSparkState;
+  sparks: ReturnType<typeof computeSparkSnapshot>;
+  granted: boolean;
+}> {
+  if (!isWalletAddress(walletAddress)) {
+    throw new StreakRewardError(
+      "A valid wallet address is required.",
+      "NO_WALLET"
+    );
+  }
+
+  const wallet = normalizeWalletAddress(walletAddress);
+  const normalizedTxHash = txHash.trim().toLowerCase();
+
+  if (!/^0x[a-f0-9]{64}$/.test(normalizedTxHash)) {
+    throw new StreakRewardError(
+      "A valid transaction hash is required.",
+      "INVALID_TX"
+    );
+  }
+
+  const existingGrant = await readPath<{ wallet?: string }>(
+    streakGrantPath(normalizedTxHash)
+  );
+
+  if (existingGrant?.wallet) {
+    const recorded = normalizeWalletAddress(existingGrant.wallet);
+    if (recorded !== wallet) {
+      throw new StreakRewardError(
+        "This reward was already used by another wallet.",
+        "TX_ALREADY_USED"
+      );
+    }
+
+    const state = normalizeSparkState(await ensureSparkStateOnServer(wallet));
+    return {
+      state,
+      sparks: computeSparkSnapshot(state),
+      granted: false,
+    };
+  }
+
+  const { verifyOffchainMilestoneTx } = await import(
+    "@/lib/arcadex-rewards-verify"
+  );
+
+  try {
+    await verifyOffchainMilestoneTx(
+      wallet,
+      normalizedTxHash as Hash,
+      campaignId
+    );
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Invalid milestone transaction.";
+    throw new StreakRewardError(message, "NO_MILESTONE");
+  }
+
+  await recordCheckInTxOnServer(wallet, normalizedTxHash, 0, campaignId);
+
+  const now = Date.now();
+  const state = normalizeSparkState(await ensureSparkStateOnServer(wallet), now);
+  const baseUntil =
+    state.infiniteUntil && state.infiniteUntil > now ? state.infiniteUntil : now;
+  const infiniteUntil = baseUntil + INFINITE_SPARK_DURATION_MS;
+
+  const nextState: StoredSparkState = {
+    ...state,
+    infiniteUntil,
+  };
+
+  await writePath(sparksPath(wallet), nextState);
+  await writePath(streakGrantPath(normalizedTxHash), {
+    wallet,
+    campaignId,
+    grantedAt: now,
+    infiniteUntil,
+    reward: "INFINITE_SPARK_24H",
+  });
+
+  return {
+    state: nextState,
+    sparks: computeSparkSnapshot(nextState),
+    granted: true,
+  };
+}
+
 // ─── Game play counts ──────────────────────────────────────────────────────────
 
 export async function fetchAllGamePlayCounts(): Promise<Record<string, number>> {
