@@ -137,7 +137,10 @@ export async function resolveWalletForSave(): Promise<string> {
   throw new Error(walletInitErrorMessage());
 }
 
-/** Sign a challenge and exchange it for a wallet session token. */
+/**
+ * Fallback message-signing auth (used when daily check-in is not available yet).
+ * Preferred sign-in with ArcadeXRewards: `performDailyCheckIn` → `/api/streak/sync`.
+ */
 export async function establishWalletSession(wallet: string): Promise<string> {
   const normalized = normalizeWalletAddress(wallet);
   const client = createMiniPayWalletClient();

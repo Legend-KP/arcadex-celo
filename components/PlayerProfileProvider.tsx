@@ -172,6 +172,7 @@ export default function PlayerProfileProvider({
       pendingWalletRef.current = wallet;
 
       try {
+        // Sign-in: ArcadeXRewards checkIn → session JWT (campaign 1 by default).
         if (isArcadeXRewardsConfigured()) {
           const status = await fetchStreakStatus(wallet);
           if (cancelled) return;
@@ -184,6 +185,7 @@ export default function PlayerProfileProvider({
           }
 
           if (!hasValidWalletSession(wallet)) {
+            // Already checked in today — refresh session via message sign fallback.
             await ensureWalletSession(wallet);
           }
         } else if (!hasValidWalletSession(wallet)) {

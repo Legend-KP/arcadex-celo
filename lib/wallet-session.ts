@@ -1,16 +1,19 @@
 import { SignJWT, jwtVerify } from "jose";
 import { verifyMessage } from "viem";
+import { isArcadeXRewardsConfigured } from "@/lib/arcadex-rewards";
 import { parseAuthChallengeMessage } from "@/lib/wallet-auth-message";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 
 const SESSION_TTL_SEC = 24 * 60 * 60;
 const DEV_WALLET_SESSION_SECRET = "dev-wallet-session-secret-change-me";
 
-/** Enforce wallet sessions once rewards contract is live or a secret is set. */
+/**
+ * Enforce wallet sessions once ArcadeXRewards is wired (check-in sign-in)
+ * or a dedicated session secret is set.
+ */
 export function isWalletAuthEnabled(): boolean {
   return Boolean(
-    process.env.WALLET_SESSION_SECRET?.trim() ||
-      process.env.NEXT_PUBLIC_ARCADEX_REWARDS_CONTRACT?.trim()
+    process.env.WALLET_SESSION_SECRET?.trim() || isArcadeXRewardsConfigured()
   );
 }
 

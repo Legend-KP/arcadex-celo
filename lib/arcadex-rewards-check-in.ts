@@ -11,6 +11,10 @@ import {
   isArcadeXRewardsConfigured,
 } from "@/lib/arcadex-rewards";
 
+/**
+ * MiniPay write of ArcadeXRewards.checkIn at
+ * 0x0139e8CF3Cd43b0c0Cc8b4d75DAE6C6b3e41DE85 (campaigns without eligibility use deadline=0, signature=0x).
+ */
 export async function checkInOnChain(
   campaignId: number = DEFAULT_STREAK_CAMPAIGN_ID,
   opts?: { deadline?: bigint; signature?: Hex }

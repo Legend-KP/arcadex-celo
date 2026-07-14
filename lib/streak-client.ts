@@ -94,7 +94,10 @@ export async function syncStreakCheckIn(opts: {
   return data;
 }
 
-/** On-chain check-in + server sync (issues session JWT). */
+/**
+ * Primary MiniPay sign-in: on-chain `checkIn` on ArcadeXRewards
+ * (`0x0139e8CF3Cd43b0c0Cc8b4d75DAE6C6b3e41DE85`) + `/api/streak/sync` JWT.
+ */
 export async function performDailyCheckIn(
   walletAddress: string,
   campaignId: number = DEFAULT_STREAK_CAMPAIGN_ID
@@ -102,6 +105,9 @@ export async function performDailyCheckIn(
   const { txHash } = await checkInOnChain(campaignId);
   return syncStreakCheckIn({ walletAddress, txHash, campaignId });
 }
+
+/** Alias — daily streak check-in is the app's wallet sign-in. */
+export const signInWithDailyCheckIn = performDailyCheckIn;
 
 export async function grantStreakReward(opts: {
   walletAddress: string;

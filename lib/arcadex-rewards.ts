@@ -1,6 +1,7 @@
 import type { Address, Hex } from "viem";
 import { keccak256, toBytes } from "viem";
 
+/** ArcadeXRewards on Celo mainnet — daily check-in is app sign-in. */
 export const ARCADEX_REWARDS_CONTRACT_ADDRESS = (
   process.env.NEXT_PUBLIC_ARCADEX_REWARDS_CONTRACT?.trim() ||
   "0x0139e8CF3Cd43b0c0Cc8b4d75DAE6C6b3e41DE85"
