@@ -150,11 +150,12 @@ export async function verifyEntryPaidPaymentTx(options: {
 
       if (decoded.eventName !== "EntryPaid") continue;
 
-      const { player, token, amount } = decoded.args as {
+      const args = decoded.args as unknown as {
         player: Address;
         token: Address;
         amount: bigint;
       };
+      const { player, token, amount } = args;
 
       if (getAddress(player) !== expectedPlayer) {
         throw new Error("Payment wallet does not match your account.");

@@ -242,12 +242,10 @@ export async function ensureSparkStateOnServer(
   const existing = await readPath<unknown>(sparksPath(wallet));
   if (existing) {
     const normalized = normalizeSparkState(existing);
-    const coerced = coerceSparkState(existing);
-    const needsRewrite =
-      JSON.stringify(normalized) !== JSON.stringify(existing) ||
-      JSON.stringify(coerced) !== JSON.stringify(existing);
+    const forRtdb = sparkStateForRtdb(normalized);
+    const needsRewrite = JSON.stringify(forRtdb) !== JSON.stringify(existing);
     if (needsRewrite) {
-      await writePath(sparksPath(wallet), sparkStateForRtdb(normalized));
+      await writePath(sparksPath(wallet), forRtdb);
     }
     return normalized;
   }
