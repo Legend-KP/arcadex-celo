@@ -21,9 +21,10 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as { password?: string };
-    const password = body.password ?? "";
+    const password = (body.password ?? "").trim();
+    const expected = getAdminPassword();
 
-    if (!password || password !== getAdminPassword()) {
+    if (!password || password !== expected) {
       return NextResponse.json({ error: "Wrong password." }, { status: 401 });
     }
 

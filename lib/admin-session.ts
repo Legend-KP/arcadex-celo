@@ -3,15 +3,29 @@ import { SignJWT, jwtVerify } from "jose";
 export const ADMIN_SESSION_COOKIE = "arcadex_admin_session";
 const ADMIN_SESSION_TTL_SEC = 8 * 60 * 60;
 
+function normalizeEnvSecret(value: string | undefined): string {
+  const trimmed = value?.trim() ?? "";
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
 function getAdminSessionSecret(): Uint8Array {
+  // Prefer a dedicated session secret; fall back to ADMIN_PASSWORD so login
+  // works when only the portal password is configured in Cloudflare vars.
   const secret =
-    process.env.ADMIN_SESSION_SECRET?.trim() ??
-    process.env.WALLET_SESSION_SECRET?.trim();
+    normalizeEnvSecret(process.env.ADMIN_SESSION_SECRET) ||
+    normalizeEnvSecret(process.env.WALLET_SESSION_SECRET) ||
+    normalizeEnvSecret(process.env.ADMIN_PASSWORD);
 
   if (!secret) {
     if (process.env.NODE_ENV === "production") {
       throw new Error(
-        "ADMIN_SESSION_SECRET or WALLET_SESSION_SECRET is required in production."
+        "Set ADMIN_PASSWORD (or ADMIN_SESSION_SECRET) on the Cloudflare Worker."
       );
     }
     return new TextEncoder().encode("dev-admin-session-secret-change-me");

@@ -331,12 +331,7 @@ export default function DailyCheckInModal({
           </div>
         </section>
 
-        <div className="daily-checkin-action">
-          <p className="daily-checkin-action-label">✦ Daily check-in ✦</p>
-          <p className="daily-checkin-action-copy">
-            Check in daily with a free on-chain action to build your streak!
-          </p>
-
+        
           {error ? <p className="daily-checkin-error">{error}</p> : null}
 
           <button
@@ -347,13 +342,12 @@ export default function DailyCheckInModal({
           >
             <span className="daily-checkin-btn-main">
               <ShieldCheckIcon />
-              {loading ? "Confirming…" : "Check In Now (Free)"}
+              {loading ? "Confirming…" : "Daily Check In(Free)"}
             </span>
             <span className="daily-checkin-btn-sub">Non-fee transaction</span>
           </button>
         </div>
-      </div>
-    </div>,
+      </div>,
     document.body
   );
 }

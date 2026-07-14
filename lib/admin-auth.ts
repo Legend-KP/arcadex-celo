@@ -5,11 +5,25 @@ import {
   verifyAdminSessionToken,
 } from "@/lib/admin-session";
 
+/** Strip accidental quotes / whitespace from Cloudflare dashboard values. */
+function normalizeEnvSecret(value: string | undefined): string {
+  const trimmed = value?.trim() ?? "";
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
 export function getAdminPassword(): string {
-  const password = process.env.ADMIN_PASSWORD?.trim();
+  const password = normalizeEnvSecret(process.env.ADMIN_PASSWORD);
   if (!password) {
     if (process.env.NODE_ENV === "production") {
-      throw new Error("ADMIN_PASSWORD is required in production.");
+      throw new Error(
+        "ADMIN_PASSWORD is not set on the Worker. Add it under Cloudflare → Settings → Variables (not NEXT_PUBLIC_ADMIN_PASSWORD)."
+      );
     }
     return "dev-admin-password-change-me";
   }

@@ -29,7 +29,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "/";
 export default function AdminPortal() {
   const [authed, setAuthed] = useState(() => hasAdminSession());
   const [pwInput, setPwInput] = useState("");
-  const [pwError, setPwError] = useState(false);
+  const [pwError, setPwError] = useState("");
   const [pwLoading, setPwLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
 
@@ -64,13 +64,15 @@ export default function AdminPortal() {
 
   async function handleLogin() {
     setPwLoading(true);
-    setPwError(false);
+    setPwError("");
     try {
-      await loginAdmin(pwInput);
+      await loginAdmin(pwInput.trim());
       saveAdminSession();
       setAuthed(true);
-    } catch {
-      setPwError(true);
+    } catch (err) {
+      setPwError(
+        err instanceof Error ? err.message : "Wrong password. Try again."
+      );
       setPwInput("");
     } finally {
       setPwLoading(false);
@@ -324,7 +326,7 @@ export default function AdminPortal() {
                 value={pwInput}
                 onChange={(e) => {
                   setPwInput(e.target.value);
-                  setPwError(false);
+                  setPwError("");
                 }}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
               />
@@ -337,7 +339,7 @@ export default function AdminPortal() {
                 {showPw ? "🙈" : "👁"}
               </button>
             </div>
-            {pwError && <p className="error-msg">Wrong password. Try again.</p>}
+            {pwError && <p className="error-msg">{pwError}</p>}
           </div>
 
           <button
