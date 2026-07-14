@@ -21,6 +21,7 @@ public class ArcadeXBridge : MonoBehaviour
     public event Action<ArcadeXBootstrapData> OnBootstrapReady;
     public event Action<ArcadeXLeaderboardEntry[]> OnLeaderboardReady;
     public event Action<ArcadeXProgressSaveResult> ProgressSaved;
+    public event Action<ArcadeXProgressSaveResult> ProgressReceived;
     public event Action<ArcadeXLeaderboardSubmitResult> LeaderboardSubmitCompleted;
     /// <summary>Legacy bool callback — fired alongside LeaderboardSubmitCompleted.</summary>
     public event Action<bool> OnScoreSubmitComplete;
@@ -154,7 +155,7 @@ public class ArcadeXBridge : MonoBehaviour
         GameId = data.gameId;
         PlayerName = data.playerName;
         WalletAddress = data.walletAddress;
-        HighScore = data.highScore;
+        HighScore = data.highScore > 0 ? data.highScore : data.score;
         Level = data.level;
         HasLeaderboard = data.hasLeaderboard;
         ContestLive = data.contestLive;
@@ -177,7 +178,7 @@ public class ArcadeXBridge : MonoBehaviour
         ArcadeXProgressSaveResult result = JsonUtility.FromJson<ArcadeXProgressSaveResult>(json);
         if (result.success)
         {
-            HighScore = result.highScore;
+            HighScore = result.highScore > 0 ? result.highScore : result.score;
         }
         ProgressSaved?.Invoke(result);
     }
@@ -202,7 +203,20 @@ public class ArcadeXBridge : MonoBehaviour
         ArcadeXProgressSaveResult result = JsonUtility.FromJson<ArcadeXProgressSaveResult>(json);
         if (result.success)
         {
-            HighScore = result.highScore;
+            HighScore = result.highScore > 0 ? result.highScore : result.score;
+            ProgressReceived?.Invoke(result);
+            OnBootstrapReady?.Invoke(new ArcadeXBootstrapData
+            {
+                gameId = GameId,
+                shellOrigin = string.Empty,
+                walletAddress = WalletAddress,
+                playerName = PlayerName,
+                highScore = HighScore,
+                score = HighScore,
+                level = Level,
+                hasLeaderboard = HasLeaderboard,
+                contestLive = ContestLive,
+            });
         }
     }
 
@@ -239,6 +253,7 @@ public class ArcadeXBootstrapData
     public string walletAddress;
     public string playerName;
     public int highScore;
+    public int score;
     public int level;
     public bool hasLeaderboard;
     public bool contestLive;
@@ -267,6 +282,7 @@ public class ArcadeXProgressSaveResult
 {
     public bool success;
     public int highScore;
+    public int score;
     public string error;
 }
 

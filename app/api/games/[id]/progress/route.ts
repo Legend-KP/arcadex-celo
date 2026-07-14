@@ -51,8 +51,14 @@ export async function GET(
       hasLeaderboard,
       { playerName: name }
     );
+    const highScore = progress.score ?? 0;
 
-    return corsJsonResponse(request, { progress, hasLeaderboard });
+    return corsJsonResponse(request, {
+      progress,
+      hasLeaderboard,
+      highScore,
+      score: highScore,
+    });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to load game progress.";
@@ -123,8 +129,15 @@ export async function POST(
       hasLeaderboard,
       { playerName: body.playerName ?? body.name }
     );
+    const highScore = progress.score ?? scoreValue;
 
-    return corsJsonResponse(request, { success: true, progress, hasLeaderboard });
+    return corsJsonResponse(request, {
+      success: true,
+      progress,
+      hasLeaderboard,
+      highScore,
+      score: highScore,
+    });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to save game progress.";

@@ -88,23 +88,73 @@ export default function GameClient({
     progressRetryRef.current = [];
   }, []);
 
+  const deliverProgressToUnity = useCallback(
+    (
+      payload: {
+        highScore: number;
+        level: number;
+        hasLeaderboard: boolean;
+      },
+      opts?: {
+        wallet?: string;
+        playerName?: string;
+        includeBootstrap?: boolean;
+      }
+    ) => {
+      const progressMessage = {
+        success: true,
+        highScore: payload.highScore,
+        score: payload.highScore,
+        level: payload.level,
+        hasLeaderboard: payload.hasLeaderboard,
+      };
+
+      sendToUnity(iframeRef, "OnProgressReceived", progressMessage);
+
+      if (opts?.includeBootstrap !== false) {
+        sendToUnity(iframeRef, "OnBootstrapDataReceived", {
+          gameId: game.id,
+          shellOrigin,
+          walletAddress: opts?.wallet ?? resolvedWallet,
+          playerName: opts?.playerName ?? resolvedName,
+          contestLive,
+          ...payload,
+          score: payload.highScore,
+          hints: 0,
+          tutorialComplete: false,
+          gamePurchased: true,
+        });
+      }
+    },
+    [
+      game.id,
+      shellOrigin,
+      resolvedWallet,
+      resolvedName,
+      contestLive,
+    ]
+  );
+
   const scheduleProgressRetries = useCallback(
-    (payload: {
-      highScore: number;
-      level: number;
-      hasLeaderboard: boolean;
-    }) => {
+    (
+      payload: {
+        highScore: number;
+        level: number;
+        hasLeaderboard: boolean;
+      },
+      opts?: {
+        wallet?: string;
+        playerName?: string;
+      }
+    ) => {
       clearProgressRetries();
       progressRetryRef.current = PROGRESS_RETRY_DELAYS_MS.map((delay) =>
         setTimeout(() => {
-          sendToUnity(iframeRef, "OnProgressReceived", {
-            success: true,
-            ...payload,
-          });
+          deliverProgressToUnity(payload, opts);
         }, delay)
       );
     },
-    [clearProgressRetries]
+    [clearProgressRetries, deliverProgressToUnity]
   );
 
   const markGameReady = useCallback(() => {
@@ -188,6 +238,52 @@ export default function GameClient({
     replayStoredSubmitResult();
   }, [gameReady, replayStoredSubmitResult]);
 
+  useEffect(() => {
+    if (!gameReady || !resolvedWallet) return;
+
+    let cancelled = false;
+
+    async function resyncPersonalBest() {
+      try {
+        const { progress, hasLeaderboard } = await getGameProgress(
+          game.id,
+          resolvedWallet,
+          { playerName: resolvedName || undefined }
+        );
+        if (cancelled) return;
+
+        const highScore = progress.score ?? 0;
+        personalBestRef.current = Math.max(personalBestRef.current, highScore);
+        if (personalBestRef.current <= 0) return;
+
+        deliverProgressToUnity(
+          {
+            highScore: personalBestRef.current,
+            level: progress.level ?? 0,
+            hasLeaderboard,
+          },
+          {
+            wallet: resolvedWallet,
+            playerName: resolvedName,
+          }
+        );
+      } catch {
+        // Best-effort resync for Unity home screen
+      }
+    }
+
+    void resyncPersonalBest();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    gameReady,
+    game.id,
+    resolvedWallet,
+    resolvedName,
+    deliverProgressToUnity,
+  ]);
+
   const handleMessage = useCallback(
     async (event: MessageEvent) => {
       const msg = event.data as UnityMessage;
@@ -234,19 +330,15 @@ export default function GameClient({
             hasLeaderboard: leaderboardEnabled,
           };
 
-          sendToUnity(iframeRef, "OnBootstrapDataReceived", {
-            gameId: game.id,
-            shellOrigin,
-            walletAddress: wallet,
+          deliverProgressToUnity(progressPayload, {
+            wallet,
             playerName: bootstrapName,
-            contestLive,
-            ...progressPayload,
-            hints: 0,
-            tutorialComplete: false,
-            gamePurchased: true,
           });
 
-          scheduleProgressRetries(progressPayload);
+          scheduleProgressRetries(progressPayload, {
+            wallet,
+            playerName: bootstrapName,
+          });
           replayStoredSubmitResult();
           break;
         }
@@ -319,6 +411,7 @@ export default function GameClient({
             sendToUnity(iframeRef, saveCallback, {
               success: true,
               highScore,
+              score: highScore,
             });
           } catch (err) {
             sendToUnity(iframeRef, saveCallback, {
@@ -354,11 +447,14 @@ export default function GameClient({
               hasLeaderboard,
             };
             personalBestRef.current = payload.highScore;
-            sendToUnity(iframeRef, "OnProgressReceived", {
-              success: true,
-              ...payload,
+            deliverProgressToUnity(payload, {
+              wallet,
+              playerName: playerName || profile?.name || "",
             });
-            scheduleProgressRetries(payload);
+            scheduleProgressRetries(payload, {
+              wallet,
+              playerName: playerName || profile?.name || "",
+            });
           } catch (err) {
             sendToUnity(iframeRef, "OnProgressReceived", {
               success: false,
@@ -454,6 +550,7 @@ export default function GameClient({
       updateWalletAddress,
       markGameReady,
       scheduleProgressRetries,
+      deliverProgressToUnity,
       persistScore,
       deliverLeaderboardSubmitResult,
       replayStoredSubmitResult,

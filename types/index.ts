@@ -107,6 +107,10 @@ export interface StoredGameProgress {
   s?: number;
   /** Current level (when hasLeaderboard is false) */
   l?: number;
+  /** @deprecated Legacy RTDB writes */
+  score?: number;
+  /** @deprecated Legacy RTDB writes */
+  highScore?: number;
 }
 
 /** API / client-facing game progress */

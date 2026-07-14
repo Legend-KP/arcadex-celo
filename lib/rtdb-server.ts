@@ -581,7 +581,7 @@ export async function fetchPersonalBestFromServer(
 ): Promise<number> {
   if (!isWalletAddress(walletAddress)) return 0;
   const stored = await fetchGameProgressFromServer(walletAddress, gameId);
-  return stored?.s ?? 0;
+  return readStoredScore(stored);
 }
 
 export async function submitLeaderboardEntryOnServer(
@@ -664,13 +664,22 @@ function gameProgressPath(walletAddress: string, gameId: string): string {
   return `users/${normalizeWalletAddress(walletAddress)}/games/${gameId}`;
 }
 
+export function readStoredScore(stored: StoredGameProgress | null): number {
+  if (!stored) return 0;
+  if (typeof stored.s === "number") return stored.s;
+  if (typeof stored.score === "number") return stored.score;
+  if (typeof stored.highScore === "number") return stored.highScore;
+  return 0;
+}
+
 export function storedProgressToGameProgress(
   stored: StoredGameProgress | null,
   hasLeaderboard: boolean
 ): GameProgress {
   if (!stored) return {};
   if (hasLeaderboard) {
-    return stored.s !== undefined ? { score: stored.s } : {};
+    const score = readStoredScore(stored);
+    return score > 0 ? { score } : {};
   }
   return stored.l !== undefined ? { level: stored.l } : {};
 }
@@ -826,7 +835,9 @@ export async function saveGameProgressOnServer(
   const wallet = normalizeWalletAddress(walletAddress);
   const current = await fetchGameProgressFromServer(wallet, gameId);
   const field: "s" | "l" = hasLeaderboard ? "s" : "l";
-  const currentValue = hasLeaderboard ? (current?.s ?? 0) : (current?.l ?? 0);
+  const currentValue = hasLeaderboard
+    ? readStoredScore(current)
+    : (current?.l ?? 0);
 
   if (value <= currentValue) {
     return storedProgressToGameProgress(current, hasLeaderboard);
