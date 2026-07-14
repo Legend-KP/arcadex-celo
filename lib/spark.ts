@@ -13,12 +13,25 @@ export function defaultSparkState(): StoredSparkState {
 
 function coerceSlotValue(value: unknown): number | null {
   if (value === null || value === undefined) return null;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    // 0 = ready (Firebase RTDB strips nulls, so ready slots are stored as 0).
+    return value <= 0 ? null : value;
+  }
   if (typeof value === "string" && value.trim()) {
     const parsed = Number(value);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    if (Number.isFinite(parsed)) return parsed <= 0 ? null : parsed;
   }
   return null;
+}
+
+/** Ready slots as 0 so Firebase RTDB PUT does not delete them (null = delete). */
+export function sparkStateForRtdb(state: StoredSparkState): StoredSparkState {
+  return {
+    max: state.max,
+    regenMs: state.regenMs,
+    slots: state.slots.map((slot) => (slot === null ? 0 : slot)),
+    ...(state.infiniteUntil ? { infiniteUntil: state.infiniteUntil } : {}),
+  };
 }
 
 /** RTDB may return arrays as `{0:…,1:…}` objects or omit fields entirely. */

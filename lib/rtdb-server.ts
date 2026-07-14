@@ -13,6 +13,7 @@ import {
   defaultSparkState,
   findReadySparkSlotIndex,
   normalizeSparkState,
+  sparkStateForRtdb,
 } from "@/lib/spark";
 import { INFINITE_SPARK_DURATION_MS } from "@/lib/infinite-spark";
 import {
@@ -214,7 +215,7 @@ export async function bootstrapUserOnServer(
       updatedAt: now,
     };
     await writePath(`users/${wallet}`, stored);
-    await writePath(sparksPath(wallet), defaultSparkState());
+    await writePath(sparksPath(wallet), sparkStateForRtdb(defaultSparkState()));
     return toPlayerProfile(wallet, stored)!;
   }
 
@@ -246,13 +247,13 @@ export async function ensureSparkStateOnServer(
       JSON.stringify(normalized) !== JSON.stringify(existing) ||
       JSON.stringify(coerced) !== JSON.stringify(existing);
     if (needsRewrite) {
-      await writePath(sparksPath(wallet), normalized);
+      await writePath(sparksPath(wallet), sparkStateForRtdb(normalized));
     }
     return normalized;
   }
 
   const initial = defaultSparkState();
-  await writePath(sparksPath(wallet), initial);
+  await writePath(sparksPath(wallet), sparkStateForRtdb(initial));
   return initial;
 }
 
@@ -358,7 +359,7 @@ export async function spendSparkOnServer(
     slots,
   };
 
-  await writePath(sparksPath(wallet), nextState);
+  await writePath(sparksPath(wallet), sparkStateForRtdb(nextState));
   return {
     state: nextState,
     sparks: computeSparkSnapshot(nextState),
@@ -425,7 +426,7 @@ export async function activateInfiniteSparkOnServer(
     infiniteUntil,
   };
 
-  await writePath(sparksPath(wallet), nextState);
+  await writePath(sparksPath(wallet), sparkStateForRtdb(nextState));
   await writePath(sparkPaymentPath(normalizedTxHash), {
     wallet,
     activatedAt: now,
@@ -494,7 +495,7 @@ export async function activateSparkRefillOnServer(
     slots: Array.from({ length: state.max }, () => null),
   };
 
-  await writePath(sparksPath(wallet), nextState);
+  await writePath(sparksPath(wallet), sparkStateForRtdb(nextState));
   await writePath(sparkPaymentPath(normalizedTxHash), {
     wallet,
     type: "refill",
@@ -667,7 +668,7 @@ export async function grantStreakInfiniteSparkOnServer(
     infiniteUntil,
   };
 
-  await writePath(sparksPath(wallet), nextState);
+  await writePath(sparksPath(wallet), sparkStateForRtdb(nextState));
   await writePath(streakGrantPath(normalizedTxHash), {
     wallet,
     campaignId,

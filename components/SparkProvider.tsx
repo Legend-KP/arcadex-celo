@@ -15,6 +15,25 @@ import { purchaseSparkRefillOnChain } from "@/lib/spark-refill-purchase";
 import { SparkSnapshot, StoredSparkState } from "@/types";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 
+const ACTIVATE_RETRY_DELAYS_MS = [0, 800, 2000, 4000];
+
+async function activateWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let i = 0; i < ACTIVATE_RETRY_DELAYS_MS.length; i++) {
+    if (i > 0) {
+      await new Promise((r) => setTimeout(r, ACTIVATE_RETRY_DELAYS_MS[i]));
+    }
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Could not credit payment. Please try again.");
+}
+
 interface SparkContextValue {
   sparks: SparkSnapshot;
   loading: boolean;
@@ -76,7 +95,9 @@ export default function SparkProvider({
     }
 
     const { txHash } = await purchaseInfiniteSparkOnChain();
-    const result = await activateInfiniteSpark(walletAddress, txHash);
+    const result = await activateWithRetry(() =>
+      activateInfiniteSpark(walletAddress, txHash)
+    );
     setState(coerceSparkState(result.state));
   }, [walletAddress]);
 
@@ -86,7 +107,9 @@ export default function SparkProvider({
     }
 
     const { txHash } = await purchaseSparkRefillOnChain();
-    const result = await activateSparkRefill(walletAddress, txHash);
+    const result = await activateWithRetry(() =>
+      activateSparkRefill(walletAddress, txHash)
+    );
     setState(coerceSparkState(result.state));
   }, [walletAddress]);
 
