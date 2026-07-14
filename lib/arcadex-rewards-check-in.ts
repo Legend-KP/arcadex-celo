@@ -34,7 +34,7 @@ export async function checkInOnChain(
   }
 
   // Campaigns without requireEligibility ignore these (pass 0 / 0x).
-  const deadline = opts?.deadline ?? 0n;
+  const deadline = opts?.deadline ?? BigInt(0);
   const signature = opts?.signature ?? ("0x" as Hex);
 
   const hash = await walletClient.writeContract({
