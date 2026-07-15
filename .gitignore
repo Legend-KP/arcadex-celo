@@ -29,6 +29,7 @@ yarn-error.log*
 # env files
 .env
 .env*.local
+.env.r2
 .dev.vars
 
 # typescript
