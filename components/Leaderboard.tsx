@@ -2,8 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  CONTEST_DURATION_OPTIONS,
-  ContestDurationDays,
   ContestInfo,
   LEADERBOARD_MAX_ENTRIES,
   LeaderboardEntry,
@@ -26,6 +24,39 @@ interface LeaderboardProps {
 const MEDALS = ["🥇", "🥈", "🥉"];
 const SWIPE_THRESHOLD = 60;
 
+function CoinIcon() {
+  return (
+    <svg
+      className="lb-coin-icon"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="7" fill="#F5C542" stroke="#D4A017" strokeWidth="1.2" />
+      <circle cx="8" cy="8" r="4.5" fill="none" stroke="#E8B923" strokeWidth="0.8" />
+      <text
+        x="8"
+        y="10.5"
+        textAnchor="middle"
+        fontSize="7"
+        fontWeight="700"
+        fill="#9A7209"
+      >
+        $
+      </text>
+    </svg>
+  );
+}
+
+function TrophyHexIcon() {
+  return (
+    <span className="lb-trophy-hex" aria-hidden="true">
+      🏆
+    </span>
+  );
+}
+
 export default function Leaderboard({
   gameId,
   gameName,
@@ -41,11 +72,13 @@ export default function Leaderboard({
   const [submittedBest, setSubmittedBest] = useState(0);
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const touchStartY = useRef<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
+    setDetailsOpen(false);
     getLeaderboard(gameId, {
       walletAddress: walletAddress || undefined,
       playerName: playerName || undefined,
@@ -96,6 +129,7 @@ export default function Leaderboard({
 
   const showContestBoard = Boolean(contest);
   const isLiveContest = contest?.status === "live" || contestLive;
+  const isEndedContest = contest?.status === "ended";
 
   if (!open) return null;
 
@@ -106,7 +140,9 @@ export default function Leaderboard({
       role="presentation"
     >
       <div
-        className={`lb-sheet${isPostSubmit ? " lb-sheet--post-submit" : ""}`}
+        className={`lb-sheet${isPostSubmit ? " lb-sheet--post-submit" : ""}${
+          showContestBoard ? " lb-sheet--contest" : ""
+        }`}
         role="dialog"
         aria-modal="true"
         aria-label={`${gameName} leaderboard`}
@@ -122,42 +158,73 @@ export default function Leaderboard({
 
         <div className="lb-header">
           <div className="lb-title-wrap">
-            {!isPostSubmit && (
-              <span className="lb-trophy" aria-hidden="true">🏆</span>
-            )}
-            <span className="lb-title">{gameName}</span>
+            {!isPostSubmit && <TrophyHexIcon />}
+            <div className="lb-title-stack">
+              <span className="lb-title">{gameName}</span>
+              {showContestBoard && isLiveContest && (
+                <span className="lb-live-badge">
+                  <span className="lb-live-dot" aria-hidden="true" />
+                  CONTEST LIVE
+                </span>
+              )}
+              {showContestBoard && isEndedContest && (
+                <span className="lb-ended-badge">CONTEST ENDED</span>
+              )}
+            </div>
           </div>
           {!isPostSubmit && (
-            <button type="button" className="lb-close" onClick={onClose} aria-label="Close leaderboard">
+            <button
+              type="button"
+              className="lb-close"
+              onClick={onClose}
+              aria-label="Close leaderboard"
+            >
               ✕
             </button>
           )}
         </div>
 
-        {isLiveContest && (
-          <div className="lb-contest-banner" role="status">
-            <span>CONTEST LIVE</span>
-            {countdown && <span className="lb-contest-countdown">{countdown}</span>}
+        {showContestBoard && isLiveContest && (
+          <div className="lb-timer-panel" role="status">
+            <div className="lb-timer-panel__glow" aria-hidden="true" />
+            <div className="lb-timer-panel__content">
+              <p className="lb-timer-panel__label">Time remaining</p>
+              <p className="lb-timer-panel__value">
+                {countdown || "…"}
+              </p>
+            </div>
+            <div className="lb-timer-panel__trophy" aria-hidden="true">
+              🏆
+            </div>
           </div>
         )}
 
-        {contest?.status === "ended" && (
-          <div className="lb-contest-ended" role="status">
-            Contest ended — final top 10
+        {showContestBoard && isEndedContest && (
+          <div className="lb-timer-panel lb-timer-panel--ended" role="status">
+            <div className="lb-timer-panel__content">
+              <p className="lb-timer-panel__label">Contest over</p>
+              <p className="lb-timer-panel__value lb-timer-panel__value--sm">
+                Final top 10
+              </p>
+            </div>
+            <div className="lb-timer-panel__trophy" aria-hidden="true">
+              🏆
+            </div>
           </div>
         )}
 
-        {contest?.task && (
-          <div className="lb-contest-task">
-            <p className="lb-contest-task-label">Contest task</p>
-            <p className="lb-contest-task-text">{contest.task}</p>
-          </div>
-        )}
-
-        {submittedBest > 0 && !showContestBoard && (
+        {!showContestBoard && submittedBest > 0 && (
           <p className="lb-submit-hint">
             Your best submitted score: {submittedBest.toLocaleString()}
           </p>
+        )}
+
+        {showContestBoard && (
+          <div className="lb-table-head" aria-hidden="true">
+            <span className="lb-table-head__rank">#</span>
+            <span className="lb-table-head__player">PLAYER</span>
+            <span className="lb-table-head__score">SCORE</span>
+          </div>
         )}
 
         <div className="lb-list">
@@ -173,18 +240,75 @@ export default function Leaderboard({
             entries.map((e, i) => (
               <div
                 key={`${e.walletAddress ?? e.name}-${i}`}
-                className={`lb-row${i === 0 ? " lb-row--first" : ""}${i < 3 ? " lb-row--podium" : ""}`}
+                className={`lb-row${i === 0 ? " lb-row--first" : ""}${
+                  i < 3 ? " lb-row--podium" : ""
+                }${showContestBoard ? " lb-row--contest" : ""}`}
               >
                 <span
-                  className={`lb-pos ${i < 3 ? ["gold", "silver", "bronze"][i] : "other"}`}
+                  className={`lb-pos ${
+                    i < 3 ? ["gold", "silver", "bronze"][i] : "other"
+                  }`}
                 >
                   {i < 3 ? MEDALS[i] : `#${i + 1}`}
                 </span>
                 <span className="lb-name">{e.name}</span>
-                <span className="lb-score">{e.score.toLocaleString()}</span>
+                <span className="lb-score">
+                  {showContestBoard && <CoinIcon />}
+                  {e.score.toLocaleString()}
+                </span>
               </div>
             ))}
         </div>
+
+        {showContestBoard && !loading && (
+          <div className="lb-stats-bar">
+            <span className="lb-stats-bar__item">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M16 11a4 4 0 1 0-8 0 4 4 0 0 0 8 0ZM4 19a6 6 0 0 1 12 0M15 8a3.5 3.5 0 1 1 5.5 2.9A5 5 0 0 1 22 19"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              {entries.length} Total Participants
+            </span>
+          </div>
+        )}
+
+        {showContestBoard && contest?.task && (
+          <div className="lb-howto">
+            <div className="lb-howto__icon" aria-hidden="true">
+              🎁
+            </div>
+            <div className="lb-howto__body">
+              <p className="lb-howto__text">
+                <strong>How it works:</strong>{" "}
+                {detailsOpen
+                  ? contest.task
+                  : contest.task.length > 72
+                    ? `${contest.task.slice(0, 72).trimEnd()}…`
+                    : contest.task}
+              </p>
+              {contest.task.length > 72 && (
+                <button
+                  type="button"
+                  className="lb-howto__btn"
+                  onClick={() => setDetailsOpen((v) => !v)}
+                >
+                  {detailsOpen ? "Hide Details" : "View Details"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {isPostSubmit && (
           <button
