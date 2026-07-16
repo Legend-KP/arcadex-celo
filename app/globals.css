@@ -2089,6 +2089,85 @@ a { color: inherit; text-decoration: none; }
   animation: lb-submit-banner-in 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.lb-submit-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.lb-submit-confirm__card {
+  width: min(100%, 340px);
+  padding: 22px 20px 18px;
+  border-radius: 18px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
+  text-align: center;
+}
+
+.lb-submit-confirm__title {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: 1.15rem;
+  color: #0f172a;
+}
+
+.lb-submit-confirm__score {
+  margin: 10px 0 6px;
+  font-family: var(--font-head);
+  font-size: 2rem;
+  font-weight: 800;
+  color: #d97706;
+  line-height: 1.1;
+}
+
+.lb-submit-confirm__hint {
+  margin: 0 0 18px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.lb-submit-confirm__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.lb-submit-confirm__cancel,
+.lb-submit-confirm__pay {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.lb-submit-confirm__cancel {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.lb-submit-confirm__pay {
+  border: none;
+  background: #16a34a;
+  color: #fff;
+}
+
+.lb-submit-confirm__pay:disabled,
+.lb-submit-confirm__cancel:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .lb-submit-banner__inner {
   pointer-events: auto;
   display: flex;

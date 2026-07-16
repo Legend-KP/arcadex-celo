@@ -48,6 +48,11 @@ export default function GameClient({
   const [submitToast, setSubmitToast] = useState<LeaderboardSubmitToastState | null>(
     null
   );
+  /** Score waiting for a user tap — MiniPay needs a real gesture, not postMessage. */
+  const [pendingSubmitScore, setPendingSubmitScore] = useState<number | null>(
+    null
+  );
+  const [payingSubmit, setPayingSubmit] = useState(false);
   const personalBestRef = useRef(0);
   const leaderboardEnabled = gameHasLeaderboard(game);
   const contestLive = gameHasContestLive(game);
@@ -187,7 +192,10 @@ export default function GameClient({
 
   const showSubmitFeedback = useCallback((result: LeaderboardSubmitUnityResult) => {
     if (result.success) {
-      setSubmitToast(null);
+      setSubmitToast({
+        phase: "success",
+        message: "Score submitted to the leaderboard!",
+      });
       onScoreSubmitted?.();
       return;
     }
@@ -218,6 +226,83 @@ export default function GameClient({
     },
     [game.id, showSubmitFeedback]
   );
+
+  const cancelPendingSubmit = useCallback(() => {
+    if (payingSubmit) return;
+    const score = pendingSubmitScore;
+    setPendingSubmitScore(null);
+    setSubmitToast(null);
+    if (score != null) {
+      clearPendingLeaderboardSubmit(game.id);
+      deliverLeaderboardSubmitResult({
+        success: false,
+        highScore: personalBestRef.current,
+        error: "Payment cancelled.",
+      });
+    }
+  }, [payingSubmit, pendingSubmitScore, game.id, deliverLeaderboardSubmitResult]);
+
+  const confirmPendingSubmit = useCallback(async () => {
+    if (pendingSubmitScore == null || payingSubmit) return;
+
+    const score = pendingSubmitScore;
+    const wallet = walletAddress || profile?.walletAddress || "";
+    if (!wallet) {
+      setPendingSubmitScore(null);
+      deliverLeaderboardSubmitResult({
+        success: false,
+        highScore: personalBestRef.current,
+        error: "No wallet address available.",
+      });
+      return;
+    }
+
+    // Release Unity pointer lock so MiniPay can show the wallet sheet.
+    try {
+      document.exitPointerLock?.();
+    } catch {
+      /* ignore */
+    }
+
+    setPayingSubmit(true);
+    setPendingSubmitScore(null);
+    setSubmitToast({
+      phase: "submitting",
+      message: "Submitting score… Approve the payment in MiniPay.",
+    });
+    setPendingLeaderboardSubmit(game.id, score);
+
+    try {
+      const { txHash } = await purchaseScoreSubmitOnChain();
+      const result = await submitScoreToLeaderboard(game.id, {
+        walletAddress: wallet,
+        txHash,
+        score,
+      });
+      clearPendingLeaderboardSubmit(game.id);
+      deliverLeaderboardSubmitResult({
+        success: true,
+        highScore: result.highScore,
+        leaderboardScore: result.leaderboardScore,
+      });
+    } catch (err) {
+      clearPendingLeaderboardSubmit(game.id);
+      deliverLeaderboardSubmitResult({
+        success: false,
+        highScore: personalBestRef.current,
+        error: formatChainError(err),
+      });
+    } finally {
+      setPayingSubmit(false);
+    }
+  }, [
+    pendingSubmitScore,
+    payingSubmit,
+    walletAddress,
+    profile?.walletAddress,
+    game.id,
+    deliverLeaderboardSubmitResult,
+  ]);
 
   const replayStoredSubmitResult = useCallback(() => {
     const stored = getLeaderboardSubmitResult(game.id);
@@ -492,28 +577,15 @@ export default function GameClient({
             notifyFailure("score is required.");
             break;
           }
-          setSubmitToast({
-            phase: "submitting",
-            message: "Submitting score… Please approve the payment.",
-          });
-          setPendingLeaderboardSubmit(game.id, score);
+
+          // Don't open MiniPay from postMessage — wait for a user tap on the shell.
           try {
-            const { txHash } = await purchaseScoreSubmitOnChain();
-            const result = await submitScoreToLeaderboard(game.id, {
-              walletAddress: wallet,
-              txHash,
-              score,
-            });
-            clearPendingLeaderboardSubmit(game.id);
-            deliverLeaderboardSubmitResult({
-              success: true,
-              highScore: result.highScore,
-              leaderboardScore: result.leaderboardScore,
-            });
-          } catch (err) {
-            clearPendingLeaderboardSubmit(game.id);
-            notifyFailure(formatChainError(err));
+            document.exitPointerLock?.();
+          } catch {
+            /* ignore */
           }
+          setPendingSubmitScore(score);
+          setSubmitToast(null);
           break;
         }
 
@@ -604,6 +676,38 @@ export default function GameClient({
           toast={submitToast}
           onDismiss={() => setSubmitToast(null)}
         />
+
+        {pendingSubmitScore != null && (
+          <div className="lb-submit-confirm" role="dialog" aria-modal="true">
+            <div className="lb-submit-confirm__card">
+              <h3 className="lb-submit-confirm__title">Submit score?</h3>
+              <p className="lb-submit-confirm__score">
+                {pendingSubmitScore.toLocaleString()}
+              </p>
+              <p className="lb-submit-confirm__hint">
+                Pay a small fee in USDT or USDC. MiniPay will ask you to approve.
+              </p>
+              <div className="lb-submit-confirm__actions">
+                <button
+                  type="button"
+                  className="lb-submit-confirm__cancel"
+                  onClick={cancelPendingSubmit}
+                  disabled={payingSubmit}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="lb-submit-confirm__pay"
+                  onClick={() => void confirmPendingSubmit()}
+                  disabled={payingSubmit}
+                >
+                  {payingSubmit ? "Opening wallet…" : "Pay & submit"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
