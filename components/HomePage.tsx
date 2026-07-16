@@ -5,22 +5,34 @@ import { Game } from "@/types";
 import GameCard from "@/components/GameCard";
 import Logo from "@/components/Logo";
 import SparkBatteryBar from "@/components/SparkBatteryBar";
+import {
+  readCachedGamesList,
+  shouldBackgroundRefreshGamesList,
+  writeCachedGamesList,
+} from "@/lib/games-list-client-cache";
 
 export default function HomePage() {
-  const [games, setGames] = useState<Game[]>([]);
-  const [playCounts, setPlayCounts] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
+  const [games, setGames] = useState<Game[]>(() => {
+    return readCachedGamesList()?.games ?? [];
+  });
+  const [playCounts, setPlayCounts] = useState<Record<string, number>>(() => {
+    return readCachedGamesList()?.playCounts ?? {};
+  });
+  const [loading, setLoading] = useState(() => !readCachedGamesList());
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
+    const hadCache = Boolean(readCachedGamesList());
 
-    async function loadGames() {
-      setLoading(true);
-      setError("");
+    async function loadGames(background = false) {
+      if (!background) {
+        setLoading(true);
+        setError("");
+      }
 
       try {
-        const res = await fetch("/api/games", { cache: "no-store" });
+        const res = await fetch("/api/games");
         const text = await res.text();
         let data: { games?: Game[]; playCounts?: Record<string, number>; error?: string };
         try {
@@ -41,23 +53,45 @@ export default function HomePage() {
 
         if (cancelled) return;
 
-        setGames(data.games ?? []);
-        setPlayCounts(data.playCounts ?? {});
+        const nextGames = data.games ?? [];
+        const nextPlayCounts = data.playCounts ?? {};
+        setGames(nextGames);
+        setPlayCounts(nextPlayCounts);
+        writeCachedGamesList({
+          games: nextGames,
+          playCounts: nextPlayCounts,
+          fetchedAt: Date.now(),
+        });
       } catch (err) {
         if (cancelled) return;
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Could not load games. Check your Firebase configuration."
-        );
+        if (!background || !hadCache) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Could not load games. Check your Firebase configuration."
+          );
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && !background) setLoading(false);
       }
     }
 
-    loadGames();
+    if (hadCache) {
+      void loadGames(true);
+    } else {
+      void loadGames(false);
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && shouldBackgroundRefreshGamesList()) {
+        void loadGames(true);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 

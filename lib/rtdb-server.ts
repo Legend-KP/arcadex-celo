@@ -1,5 +1,6 @@
 import {
   GameProgress,
+  GameGatingFlags,
   LEADERBOARD_MAX_ENTRIES,
   CONTEST_MAX_ENTRIES,
   LeaderboardEntry,
@@ -680,6 +681,44 @@ export async function grantStreakInfiniteSparkOnServer(
     sparks: computeSparkSnapshot(nextState),
     granted: true,
   };
+}
+
+// ─── Game gating flags (Firestore mirror for hot paths) ───────────────────────
+
+function gameFlagsPath(gameId: string): string {
+  return `gameFlags/${gameId}`;
+}
+
+export async function fetchGameGatingFlagsFromRtdb(
+  gameId: string
+): Promise<GameGatingFlags | null> {
+  const data = await readPath<GameGatingFlags>(gameFlagsPath(gameId));
+  if (!data || typeof data !== "object") return null;
+  return {
+    active: data.active !== false,
+    live: data.live !== false,
+    hasLeaderboard: data.hasLeaderboard !== false,
+    contestLive: data.contestLive === true,
+    contestDurationDays: data.contestDurationDays,
+    contestTask: data.contestTask,
+    contestStartedAt: data.contestStartedAt,
+    contestEndsAt: data.contestEndsAt,
+  };
+}
+
+export async function syncGameGatingFlagsToRtdb(
+  gameId: string,
+  flags: GameGatingFlags
+): Promise<void> {
+  await writePath(gameFlagsPath(gameId), flags);
+}
+
+export async function deleteGameGatingFlagsFromRtdb(gameId: string): Promise<void> {
+  const res = await rtdbFetch(gameFlagsPath(gameId), { method: "DELETE" });
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text();
+    throw new Error(`Realtime Database delete failed (${res.status}): ${text}`);
+  }
 }
 
 // ─── Game play counts ──────────────────────────────────────────────────────────

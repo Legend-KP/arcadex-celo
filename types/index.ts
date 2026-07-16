@@ -29,6 +29,18 @@ export interface PlayerProfile {
   updatedAt: number;
 }
 
+/** Gating fields mirrored in RTDB (`gameFlags/{id}`) for hot-path reads. */
+export interface GameGatingFlags {
+  active: boolean;
+  live: boolean;
+  hasLeaderboard: boolean;
+  contestLive?: boolean;
+  contestDurationDays?: ContestDurationDays;
+  contestTask?: string;
+  contestStartedAt?: number;
+  contestEndsAt?: number;
+}
+
 export interface Game {
   id: string;
   name: string;

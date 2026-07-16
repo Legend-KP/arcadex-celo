@@ -1,5 +1,8 @@
-import { fetchGameFromServer } from "@/lib/firestore-server";
 import { isContestActive } from "@/lib/contest";
+import {
+  gamePickFromGatingFlags,
+  resolveGameGating,
+} from "@/lib/game-gating";
 import {
   activateScoreSubmitOnServer,
   ScoreSubmitActivationError,
@@ -8,6 +11,12 @@ import {
   corsJsonResponse,
   handleCorsPreflightRequest,
 } from "@/lib/cors";
+import { recordApiMetric } from "@/lib/api-metrics";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
 import { gameHasLeaderboard } from "@/types";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import { requireWalletAuth } from "@/lib/wallet-session";
@@ -22,9 +31,24 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const started = Date.now();
+  const ip = getClientIp(request);
+
+  if (!checkRateLimit(`leaderboard-submit:ip:${ip}`, 60, 60_000)) {
+    recordApiMetric({
+      endpoint: "/api/games/[id]/leaderboard/submit",
+      method: "POST",
+      status: 429,
+      rateLimited: true,
+      durationMs: Date.now() - started,
+    });
+    return rateLimitResponse();
+  }
+
   try {
     const { id } = await params;
-    const game = await fetchGameFromServer(id);
+    const flags = await resolveGameGating(id);
+    const game = flags ? gamePickFromGatingFlags(id, flags) : null;
     if (!game || !gameHasLeaderboard(game)) {
       return corsJsonResponse(
         request,
@@ -89,6 +113,15 @@ export async function POST(
       { contestStartedAt }
     );
 
+    recordApiMetric({
+      endpoint: "/api/games/[id]/leaderboard/submit",
+      method: "POST",
+      status: 200,
+      gameId: id,
+      durationMs: Date.now() - started,
+      firestoreReads: 0,
+    });
+
     return corsJsonResponse(request, {
       success: true,
       ...result,
@@ -105,6 +138,12 @@ export async function POST(
 
     const message =
       err instanceof Error ? err.message : "Failed to submit score.";
+    recordApiMetric({
+      endpoint: "/api/games/[id]/leaderboard/submit",
+      method: "POST",
+      status: 500,
+      durationMs: Date.now() - started,
+    });
     return corsJsonResponse(request, { error: message }, { status: 500 });
   }
 }

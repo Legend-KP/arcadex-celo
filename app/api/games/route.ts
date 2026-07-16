@@ -4,17 +4,44 @@ import {
   unauthorizedResponse,
   verifyAdminRequest,
 } from "@/lib/admin-auth";
+import { recordApiMetric } from "@/lib/api-metrics";
+import {
+  GAMES_API_MAX_AGE_SEC,
+  GAMES_API_STALE_WHILE_REVALIDATE_SEC,
+} from "@/lib/game-cache";
 import {
   createGameOnServer,
   fetchGamesFromServer,
   isGameVisible,
 } from "@/lib/firestore-server";
 import { fetchAllGamePlayCounts } from "@/lib/rtdb-server";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
 import { Game } from "@/types";
 
 export const dynamic = "force-dynamic";
 
+const GAMES_LIST_IP_LIMIT = 120;
+const GAMES_LIST_WINDOW_MS = 60_000;
+
 export async function GET(request: Request) {
+  const started = Date.now();
+  const ip = getClientIp(request);
+
+  if (!checkRateLimit(`games-list:ip:${ip}`, GAMES_LIST_IP_LIMIT, GAMES_LIST_WINDOW_MS)) {
+    recordApiMetric({
+      endpoint: "/api/games",
+      method: "GET",
+      status: 429,
+      rateLimited: true,
+      durationMs: Date.now() - started,
+    });
+    return rateLimitResponse();
+  }
+
   try {
     const [games, playCounts] = await Promise.all([
       fetchGamesFromServer(),
@@ -28,13 +55,36 @@ export async function GET(request: Request) {
       ? games
       : games.filter(isGameVisible);
 
-    return NextResponse.json({ games: visible, playCounts });
+    recordApiMetric({
+      endpoint: "/api/games",
+      method: "GET",
+      status: 200,
+      durationMs: Date.now() - started,
+      firestoreReads: 0,
+      cacheHit: true,
+      cacheLayer: "list",
+    });
+
+    return NextResponse.json(
+      { games: visible, playCounts },
+      {
+        headers: {
+          "Cache-Control": `public, max-age=${GAMES_API_MAX_AGE_SEC}, stale-while-revalidate=${GAMES_API_STALE_WHILE_REVALIDATE_SEC}`,
+        },
+      }
+    );
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to load games.";
     const hint = message.includes("Cloud Firestore API")
       ? " Enable the Cloud Firestore API in Google Cloud Console, then redeploy."
       : "";
+    recordApiMetric({
+      endpoint: "/api/games",
+      method: "GET",
+      status: 500,
+      durationMs: Date.now() - started,
+    });
     return NextResponse.json(
       { error: `${message}${hint}` },
       { status: 500 }

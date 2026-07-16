@@ -1,6 +1,10 @@
 import { fetchGameFromServer } from "@/lib/firestore-server";
 import { buildContestInfo } from "@/lib/contest";
 import {
+  gamePickFromGatingFlags,
+  resolveGameGating,
+} from "@/lib/game-gating";
+import {
   fetchContestLeaderboardFromServer,
   fetchLeaderboardFromServer,
   fetchPersonalBestFromServer,
@@ -12,6 +16,12 @@ import {
   corsJsonResponse,
   handleCorsPreflightRequest,
 } from "@/lib/cors";
+import { recordApiMetric } from "@/lib/api-metrics";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
 import { gameHasContest, gameHasLeaderboard, LEADERBOARD_MAX_ENTRIES, LeaderboardEntry } from "@/types";
 import { isWalletAddress, tryNormalizeWalletAddress } from "@/lib/wallet-address";
 import { requireWalletAuth } from "@/lib/wallet-session";
@@ -26,8 +36,8 @@ async function assertLeaderboardEnabled(
   request: Request,
   gameId: string
 ) {
-  const game = await fetchGameFromServer(gameId);
-  if (!game || !gameHasLeaderboard(game)) {
+  const flags = await resolveGameGating(gameId);
+  if (!flags || !gameHasLeaderboard(gamePickFromGatingFlags(gameId, flags))) {
     return {
       response: corsJsonResponse(
         request,
@@ -37,7 +47,10 @@ async function assertLeaderboardEnabled(
       game: null,
     };
   }
-  return { response: null, game };
+  return {
+    response: null,
+    game: gamePickFromGatingFlags(gameId, flags),
+  };
 }
 
 function parseScoreBody(body: LeaderboardEntry & { value?: number }) {
@@ -54,6 +67,20 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const started = Date.now();
+  const ip = getClientIp(request);
+
+  if (!checkRateLimit(`leaderboard:ip:${ip}`, 90, 60_000)) {
+    recordApiMetric({
+      endpoint: "/api/games/[id]/leaderboard",
+      method: "GET",
+      status: 429,
+      rateLimited: true,
+      durationMs: Date.now() - started,
+    });
+    return rateLimitResponse();
+  }
+
   try {
     const { id } = await params;
     const { response: disabled, game } = await assertLeaderboardEnabled(request, id);
@@ -98,6 +125,12 @@ export async function GET(
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to load leaderboard.";
+    recordApiMetric({
+      endpoint: "/api/games/[id]/leaderboard",
+      method: "GET",
+      status: 500,
+      durationMs: Date.now() - started,
+    });
     return corsJsonResponse(request, { error: message }, { status: 500 });
   }
 }

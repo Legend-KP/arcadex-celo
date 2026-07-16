@@ -6,28 +6,50 @@ export interface GameProgressResponse {
   hasLeaderboard: boolean;
 }
 
+/** Shell-side throttle — Unity direct HTTP is capped server-side. */
+const PROGRESS_CLIENT_MIN_INTERVAL_MS = 10_000;
+
+const lastProgressFetchAt = new Map<string, number>();
+const lastProgressResponse = new Map<string, GameProgressResponse>();
+
+function progressClientKey(gameId: string, walletAddress: string): string {
+  return `${gameId}:${walletAddress.toLowerCase()}`;
+}
+
 export async function getGameProgress(
   gameId: string,
   walletAddress: string,
-  opts?: { playerName?: string }
+  opts?: { playerName?: string; force?: boolean }
 ): Promise<GameProgressResponse> {
+  const key = progressClientKey(gameId, walletAddress);
+  const now = Date.now();
+  const lastAt = lastProgressFetchAt.get(key) ?? 0;
+
+  if (!opts?.force && now - lastAt < PROGRESS_CLIENT_MIN_INTERVAL_MS) {
+    const cached = lastProgressResponse.get(key);
+    if (cached) return cached;
+  }
+
   const params = new URLSearchParams({ wallet: walletAddress });
   if (opts?.playerName?.trim()) {
     params.set("name", opts.playerName.trim());
   }
-  const res = await fetch(`/api/games/${gameId}/progress?${params}`, {
-    cache: "no-store",
-  });
+  const res = await fetch(`/api/games/${gameId}/progress?${params}`);
   const data = (await res.json()) as GameProgressResponse & { error?: string };
 
   if (!res.ok) {
     throw new Error(data.error ?? "Could not load game progress.");
   }
 
-  return {
+  const result = {
     progress: data.progress ?? {},
     hasLeaderboard: data.hasLeaderboard ?? true,
   };
+
+  lastProgressFetchAt.set(key, now);
+  lastProgressResponse.set(key, result);
+
+  return result;
 }
 
 export async function saveGameProgress(
@@ -58,9 +80,15 @@ export async function saveGameProgress(
     throw new Error(data.error ?? "Could not save game progress.");
   }
 
-  return {
+  const result = {
     success: data.success ?? true,
     progress: data.progress ?? {},
     hasLeaderboard: data.hasLeaderboard ?? true,
   };
+
+  const key = progressClientKey(gameId, walletAddress);
+  lastProgressFetchAt.set(key, Date.now());
+  lastProgressResponse.set(key, result);
+
+  return result;
 }

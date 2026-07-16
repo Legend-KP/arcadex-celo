@@ -315,6 +315,7 @@ export default function GameClient({
             try {
               const { progress } = await getGameProgress(game.id, wallet, {
                 playerName: bootstrapName || undefined,
+                force: true,
               });
               highScore = progress.score ?? 0;
               level = progress.level ?? 0;

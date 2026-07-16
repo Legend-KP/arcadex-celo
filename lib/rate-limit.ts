@@ -29,6 +29,15 @@ export function checkRateLimit(
   return true;
 }
 
+/** Returns false if any key in the group is over limit. */
+export function checkRateLimitGroup(
+  keys: string[],
+  limit: number,
+  windowMs: number
+): boolean {
+  return keys.every((key) => checkRateLimit(key, limit, windowMs));
+}
+
 export function rateLimitResponse(): Response {
   return Response.json(
     { error: "Too many requests. Please try again later." },
