@@ -25,6 +25,15 @@ import { verifyScoreSubmitPaymentTx } from "@/lib/score-submit-verify";
 import type { Hash } from "viem";
 import { getDatabaseUrl } from "./firebase-admin";
 import {
+  bumpCachedPlayCount,
+  getCachedGameFlags,
+  getCachedPlayCounts,
+  invalidateGameFlagsCache,
+  setCachedGameFlags,
+  setCachedPlayCounts,
+} from "@/lib/rtdb-cache";
+import { coalesceProgressWrite } from "@/lib/progress-write-coalesce";
+import {
   isWalletAddress,
   normalizeWalletAddress,
   tryNormalizeWalletAddress,
@@ -32,6 +41,11 @@ import {
 
 type StoredUser = Omit<PlayerProfile, "id">;
 type LeaderboardMap = Record<string, LeaderboardEntry>;
+
+/** Extra slots in the top mirror so a near-miss doesn't thrash the cut line. */
+const LEADERBOARD_TOP_MIRROR_SIZE = 50;
+const CONTEST_TOP_MIRROR_SIZE = 15;
+const RTDB_TRANSACTION_MAX_RETRIES = 8;
 
 function getRtdbAuthQuery(): string {
   const secret = process.env.FIREBASE_DATABASE_SECRET?.trim();
@@ -101,6 +115,30 @@ async function readPath<T>(path: string): Promise<T | null> {
   return data ?? null;
 }
 
+/** GET with ETag for conditional writes (REST transactions). */
+async function readPathWithEtag<T>(
+  path: string
+): Promise<{ data: T | null; etag: string }> {
+  const res = await rtdbFetch(path, {
+    headers: { "X-Firebase-ETag": "true" },
+  });
+  if (res.status === 404) {
+    return { data: null, etag: res.headers.get("ETag") ?? '""' };
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Realtime Database read failed (${res.status}): ${text}`);
+  }
+
+  const etag = res.headers.get("ETag");
+  if (!etag) {
+    throw new Error("Realtime Database ETag missing for transaction read.");
+  }
+
+  const data = (await res.json()) as T | null;
+  return { data: data ?? null, etag };
+}
+
 async function writePath(path: string, data: unknown): Promise<void> {
   const res = await rtdbFetch(path, {
     method: "PUT",
@@ -111,6 +149,25 @@ async function writePath(path: string, data: unknown): Promise<void> {
     const text = await res.text();
     throw new Error(`Realtime Database write failed (${res.status}): ${text}`);
   }
+}
+
+async function writePathIfMatch(
+  path: string,
+  data: unknown,
+  etag: string
+): Promise<"ok" | "conflict"> {
+  const res = await rtdbFetch(path, {
+    method: "PUT",
+    headers: { "if-match": etag },
+    body: JSON.stringify(data),
+  });
+
+  if (res.status === 412) return "conflict";
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Realtime Database write failed (${res.status}): ${text}`);
+  }
+  return "ok";
 }
 
 async function patchPath(path: string, data: unknown): Promise<void> {
@@ -125,6 +182,46 @@ async function patchPath(path: string, data: unknown): Promise<void> {
   }
 }
 
+/** Atomic ServerValue.increment — no read-before-write race. */
+async function incrementPath(path: string, delta = 1): Promise<void> {
+  const res = await rtdbFetch(path, {
+    method: "PUT",
+    body: JSON.stringify({ ".sv": { increment: delta } }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(
+      `Realtime Database increment failed (${res.status}): ${text}`
+    );
+  }
+}
+
+/**
+ * Conditional write with automatic retry (RTDB REST transaction via ETag).
+ * Return `undefined` from `updateFn` to abort without writing.
+ */
+async function runRtdbTransaction<T>(
+  path: string,
+  updateFn: (current: T | null) => T | undefined,
+  maxRetries = RTDB_TRANSACTION_MAX_RETRIES
+): Promise<{ committed: boolean; snapshot: T | null }> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const { data, etag } = await readPathWithEtag<T>(path);
+    const next = updateFn(data);
+    if (next === undefined) {
+      return { committed: false, snapshot: data };
+    }
+
+    const result = await writePathIfMatch(path, next, etag);
+    if (result === "ok") {
+      return { committed: true, snapshot: next };
+    }
+  }
+
+  throw new Error("Realtime Database transaction failed after max retries.");
+}
+
 function toPlayerProfile(id: string, data: StoredUser | null): PlayerProfile | null {
   if (!data) return null;
   return { id, ...data };
@@ -132,7 +229,16 @@ function toPlayerProfile(id: string, data: StoredUser | null): PlayerProfile | n
 
 function mapToLeaderboardEntries(map: LeaderboardMap | null): LeaderboardEntry[] {
   if (!map) return [];
-  return Object.values(map);
+  const entries: LeaderboardEntry[] = [];
+  for (const [key, value] of Object.entries(map)) {
+    // Skip nested mirror/history containers if a parent node was read.
+    if (key === "top" || key === "entries") continue;
+    if (!value || typeof value !== "object") continue;
+    if (typeof (value as LeaderboardEntry).score !== "number") continue;
+    if (typeof (value as LeaderboardEntry).name !== "string") continue;
+    entries.push(value as LeaderboardEntry);
+  }
+  return entries;
 }
 
 /** Stable identity for deduping — wallet preferred, name fallback. */
@@ -338,31 +444,51 @@ export async function spendSparkOnServer(
 
   const wallet = normalizeWalletAddress(walletAddress);
   const now = Date.now();
-  let state = normalizeSparkState(await ensureSparkStateOnServer(wallet), now);
+  let spent = false;
+  let abortNoSparks = false;
 
-  if (state.infiniteUntil && state.infiniteUntil > now) {
-    return { state, sparks: computeSparkSnapshot(state), spent: false };
-  }
+  const { committed, snapshot } = await runRtdbTransaction<unknown>(
+    sparksPath(wallet),
+    (current) => {
+      const state = normalizeSparkState(
+        current ?? defaultSparkState(),
+        now
+      );
 
-  const readyIndex = findReadySparkSlotIndex(state.slots, now);
+      if (state.infiniteUntil && state.infiniteUntil > now) {
+        spent = false;
+        return sparkStateForRtdb(state);
+      }
 
-  if (readyIndex === -1) {
+      const readyIndex = findReadySparkSlotIndex(state.slots, now);
+      if (readyIndex === -1) {
+        abortNoSparks = true;
+        return undefined;
+      }
+
+      const slots = [...state.slots];
+      slots[readyIndex] = now + state.regenMs;
+      spent = true;
+      return sparkStateForRtdb({
+        ...state,
+        slots,
+      });
+    }
+  );
+
+  if (abortNoSparks || (!committed && !snapshot)) {
     throw new SparkSpendError("No Sparks available.", "NO_SPARKS");
   }
 
-  const slots = [...state.slots];
-  slots[readyIndex] = now + state.regenMs;
+  const state = normalizeSparkState(
+    snapshot ?? (await ensureSparkStateOnServer(wallet)),
+    now
+  );
 
-  const nextState: StoredSparkState = {
-    ...state,
-    slots,
-  };
-
-  await writePath(sparksPath(wallet), sparkStateForRtdb(nextState));
   return {
-    state: nextState,
-    sparks: computeSparkSnapshot(nextState),
-    spent: true,
+    state,
+    sparks: computeSparkSnapshot(state),
+    spent,
   };
 }
 
@@ -692,9 +818,12 @@ function gameFlagsPath(gameId: string): string {
 export async function fetchGameGatingFlagsFromRtdb(
   gameId: string
 ): Promise<GameGatingFlags | null> {
+  const cached = getCachedGameFlags(gameId);
+  if (cached) return cached;
+
   const data = await readPath<GameGatingFlags>(gameFlagsPath(gameId));
   if (!data || typeof data !== "object") return null;
-  return {
+  const flags: GameGatingFlags = {
     active: data.active !== false,
     live: data.live !== false,
     hasLeaderboard: data.hasLeaderboard !== false,
@@ -704,6 +833,8 @@ export async function fetchGameGatingFlagsFromRtdb(
     contestStartedAt: data.contestStartedAt,
     contestEndsAt: data.contestEndsAt,
   };
+  setCachedGameFlags(gameId, flags);
+  return flags;
 }
 
 export async function syncGameGatingFlagsToRtdb(
@@ -711,6 +842,7 @@ export async function syncGameGatingFlagsToRtdb(
   flags: GameGatingFlags
 ): Promise<void> {
   await writePath(gameFlagsPath(gameId), flags);
+  setCachedGameFlags(gameId, flags);
 }
 
 export async function deleteGameGatingFlagsFromRtdb(gameId: string): Promise<void> {
@@ -719,43 +851,232 @@ export async function deleteGameGatingFlagsFromRtdb(gameId: string): Promise<voi
     const text = await res.text();
     throw new Error(`Realtime Database delete failed (${res.status}): ${text}`);
   }
+  invalidateGameFlagsCache(gameId);
 }
 
 // ─── Game play counts ──────────────────────────────────────────────────────────
 
 export async function fetchAllGamePlayCounts(): Promise<Record<string, number>> {
+  const cached = getCachedPlayCounts();
+  if (cached) return cached;
+
   const data = await readPath<Record<string, number>>("gamePlays");
-  if (!data) return {};
+  if (!data) {
+    setCachedPlayCounts({});
+    return {};
+  }
 
   const counts: Record<string, number> = {};
   for (const [gameId, value] of Object.entries(data)) {
     counts[gameId] = typeof value === "number" ? value : 0;
   }
+  setCachedPlayCounts(counts);
   return counts;
 }
 
 export async function fetchGamePlayCount(gameId: string): Promise<number> {
+  const cached = getCachedPlayCounts();
+  if (cached && typeof cached[gameId] === "number") {
+    return cached[gameId];
+  }
+
   const count = await readPath<number>(`gamePlays/${gameId}`);
   return typeof count === "number" ? count : 0;
 }
 
+/** Atomic increment — concurrent plays cannot lose counts. */
 export async function incrementGamePlayCount(gameId: string): Promise<number> {
-  const current = await fetchGamePlayCount(gameId);
-  const next = current + 1;
-  await writePath(`gamePlays/${gameId}`, next);
-  return next;
+  await incrementPath(`gamePlays/${gameId}`, 1);
+
+  const bumped = bumpCachedPlayCount(gameId, 1);
+  if (typeof bumped === "number") return bumped;
+
+  const count = await fetchGamePlayCount(gameId);
+  return count;
 }
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────
+//
+// Layout (new):
+//   leaderboards/{gameId}/entries/{wallet|name_*}  — full history (never delete)
+//   leaderboards/{gameId}/top/{wallet|name_*}      — small top-N mirror for reads
+// Legacy flat keys under leaderboards/{gameId}/{wallet} are still read as fallback.
+
+function leaderboardEntriesPath(gameId: string, storageKey: string): string {
+  return `leaderboards/${gameId}/entries/${storageKey}`;
+}
+
+function leaderboardTopPath(gameId: string): string {
+  return `leaderboards/${gameId}/top`;
+}
+
+function leaderboardLegacyEntryPath(gameId: string, storageKey: string): string {
+  return `leaderboards/${gameId}/${storageKey}`;
+}
+
+function contestLeaderboardPath(
+  gameId: string,
+  contestStartedAt: number
+): string {
+  return `contestLeaderboards/${gameId}/${contestStartedAt}`;
+}
+
+function contestEntriesPath(
+  gameId: string,
+  contestStartedAt: number,
+  wallet: string
+): string {
+  return `${contestLeaderboardPath(gameId, contestStartedAt)}/entries/${wallet}`;
+}
+
+function contestTopPath(gameId: string, contestStartedAt: number): string {
+  return `${contestLeaderboardPath(gameId, contestStartedAt)}/top`;
+}
+
+function entriesToTopMap(entries: LeaderboardEntry[]): LeaderboardMap {
+  const map: LeaderboardMap = {};
+  for (const entry of entries) {
+    map[leaderboardStorageKey(entry)] = entry;
+  }
+  return map;
+}
+
+function mergeIntoTopMirror(
+  currentTop: LeaderboardMap | null,
+  payload: LeaderboardEntry,
+  mirrorSize: number
+): LeaderboardMap | null {
+  const ranked = deduplicateLeaderboardEntries(
+    mapToLeaderboardEntries(currentTop)
+  ).sort((a, b) => b.score - a.score);
+
+  const userKey = leaderboardUserKey(payload);
+  const withoutUser = ranked.filter((e) => leaderboardUserKey(e) !== userKey);
+  const lowestKept = withoutUser[mirrorSize - 1];
+
+  const alreadyInTop = ranked.some((e) => leaderboardUserKey(e) === userKey);
+  if (
+    !alreadyInTop &&
+    withoutUser.length >= mirrorSize &&
+    lowestKept &&
+    payload.score < lowestKept.score
+  ) {
+    return null;
+  }
+
+  const next = [...withoutUser, payload]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, mirrorSize);
+
+  return entriesToTopMap(next);
+}
+
+async function loadLegacyLeaderboardMap(
+  gameId: string
+): Promise<LeaderboardMap | null> {
+  const root = await readPath<Record<string, unknown>>(`leaderboards/${gameId}`);
+  if (!root || typeof root !== "object") return null;
+
+  const map: LeaderboardMap = {};
+  for (const [key, value] of Object.entries(root)) {
+    if (key === "top" || key === "entries") continue;
+    if (!value || typeof value !== "object") continue;
+    const entry = value as LeaderboardEntry;
+    if (typeof entry.score !== "number" || typeof entry.name !== "string") {
+      continue;
+    }
+    map[key] = entry;
+  }
+  return Object.keys(map).length > 0 ? map : null;
+}
+
+async function ensureLeaderboardTopMirror(
+  gameId: string
+): Promise<LeaderboardEntry[]> {
+  const top = await readPath<LeaderboardMap>(leaderboardTopPath(gameId));
+  if (top && Object.keys(top).length > 0) {
+    return deduplicateLeaderboardEntries(mapToLeaderboardEntries(top)).sort(
+      (a, b) => b.score - a.score
+    );
+  }
+
+  // One-time rebuild: merge nested entries + legacy flat keys, then seed top.
+  const [nested, legacy] = await Promise.all([
+    readPath<LeaderboardMap>(`leaderboards/${gameId}/entries`),
+    loadLegacyLeaderboardMap(gameId),
+  ]);
+
+  const ranked = deduplicateLeaderboardEntries([
+    ...mapToLeaderboardEntries(nested),
+    ...mapToLeaderboardEntries(legacy),
+  ])
+    .sort((a, b) => b.score - a.score)
+    .slice(0, LEADERBOARD_TOP_MIRROR_SIZE);
+
+  if (ranked.length > 0) {
+    await writePath(leaderboardTopPath(gameId), entriesToTopMap(ranked)).catch(
+      () => {}
+    );
+  }
+
+  return ranked;
+}
+
+async function ensureContestTopMirror(
+  gameId: string,
+  contestStartedAt: number
+): Promise<LeaderboardEntry[]> {
+  const base = contestLeaderboardPath(gameId, contestStartedAt);
+  const top = await readPath<LeaderboardMap>(
+    contestTopPath(gameId, contestStartedAt)
+  );
+  if (top && Object.keys(top).length > 0) {
+    return deduplicateLeaderboardEntries(mapToLeaderboardEntries(top)).sort(
+      (a, b) => b.score - a.score
+    );
+  }
+
+  const [nested, legacyRoot] = await Promise.all([
+    readPath<LeaderboardMap>(`${base}/entries`),
+    readPath<Record<string, unknown>>(base),
+  ]);
+
+  const legacy: LeaderboardMap = {};
+  if (legacyRoot) {
+    for (const [key, value] of Object.entries(legacyRoot)) {
+      if (key === "top" || key === "entries") continue;
+      if (!value || typeof value !== "object") continue;
+      const entry = value as LeaderboardEntry;
+      if (typeof entry.score !== "number" || typeof entry.name !== "string") {
+        continue;
+      }
+      legacy[key] = entry;
+    }
+  }
+
+  const ranked = deduplicateLeaderboardEntries([
+    ...mapToLeaderboardEntries(nested),
+    ...mapToLeaderboardEntries(legacy),
+  ])
+    .sort((a, b) => b.score - a.score)
+    .slice(0, CONTEST_TOP_MIRROR_SIZE);
+
+  if (ranked.length > 0) {
+    await writePath(
+      contestTopPath(gameId, contestStartedAt),
+      entriesToTopMap(ranked)
+    ).catch(() => {});
+  }
+
+  return ranked;
+}
 
 export async function fetchLeaderboardFromServer(
   gameId: string,
   limit = LEADERBOARD_MAX_ENTRIES
 ): Promise<LeaderboardEntry[]> {
-  const map = await readPath<LeaderboardMap>(`leaderboards/${gameId}`);
-  return deduplicateLeaderboardEntries(mapToLeaderboardEntries(map))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+  const ranked = await ensureLeaderboardTopMirror(gameId);
+  return ranked.slice(0, limit);
 }
 
 /** Best score officially submitted to the public leaderboard. */
@@ -763,26 +1084,45 @@ export async function fetchUserSubmittedScoreFromServer(
   gameId: string,
   opts: { walletAddress?: string; playerName?: string }
 ): Promise<number> {
-  const map = await readPath<LeaderboardMap>(`leaderboards/${gameId}`);
-  const entries = deduplicateLeaderboardEntries(mapToLeaderboardEntries(map));
-
   const wallet = tryNormalizeWalletAddress(opts.walletAddress);
   const name = opts.playerName?.trim().toLowerCase();
   if (!wallet && !name) return 0;
 
-  let best = 0;
-  for (const entry of entries) {
-    const entryWallet = tryNormalizeWalletAddress(entry.walletAddress);
-    const matchesWallet = Boolean(wallet && entryWallet === wallet);
-    const matchesName = Boolean(
-      name && entry.name.trim().toLowerCase() === name
+  if (wallet) {
+    const key = wallet;
+    const fromEntries = await readPath<LeaderboardEntry>(
+      leaderboardEntriesPath(gameId, key)
     );
-    if (matchesWallet || matchesName) {
-      best = Math.max(best, entry.score);
+    if (fromEntries && typeof fromEntries.score === "number") {
+      return fromEntries.score;
+    }
+
+    const legacy = await readPath<LeaderboardEntry>(
+      leaderboardLegacyEntryPath(gameId, key)
+    );
+    if (legacy && typeof legacy.score === "number") {
+      return legacy.score;
     }
   }
 
-  return best;
+  if (name) {
+    const key = `name_${name.replace(/[.#$[\]/]/g, "_")}`;
+    const fromEntries = await readPath<LeaderboardEntry>(
+      leaderboardEntriesPath(gameId, key)
+    );
+    if (fromEntries && typeof fromEntries.score === "number") {
+      return fromEntries.score;
+    }
+
+    const legacy = await readPath<LeaderboardEntry>(
+      leaderboardLegacyEntryPath(gameId, key)
+    );
+    if (legacy && typeof legacy.score === "number") {
+      return legacy.score;
+    }
+  }
+
+  return 0;
 }
 
 /** @deprecated Use fetchUserSubmittedScoreFromServer */
@@ -809,24 +1149,30 @@ export async function submitLeaderboardEntryOnServer(
     createdAt: entry.createdAt ?? Date.now(),
   };
 
-  const map = await readPath<LeaderboardMap>(`leaderboards/${gameId}`);
-  const userKey = leaderboardUserKey(payload);
-  const existingBest = deduplicateLeaderboardEntries(
-    mapToLeaderboardEntries(map)
-  ).find((e) => leaderboardUserKey(e) === userKey);
+  const storageKey = leaderboardStorageKey(payload);
+  const existing =
+    (await readPath<LeaderboardEntry>(
+      leaderboardEntriesPath(gameId, storageKey)
+    )) ??
+    (await readPath<LeaderboardEntry>(
+      leaderboardLegacyEntryPath(gameId, storageKey)
+    ));
 
-  if (existingBest && existingBest.score >= payload.score) {
+  if (existing && typeof existing.score === "number" && existing.score >= payload.score) {
     return;
   }
 
-  await writePath(`leaderboards/${gameId}/${leaderboardStorageKey(payload)}`, payload);
-}
+  // Full history under entries/. Top mirror stays O(N) small for reads.
+  await writePath(leaderboardEntriesPath(gameId, storageKey), payload);
 
-function contestLeaderboardPath(
-  gameId: string,
-  contestStartedAt: number
-): string {
-  return `contestLeaderboards/${gameId}/${contestStartedAt}`;
+  const top = await readPath<LeaderboardMap>(leaderboardTopPath(gameId));
+  const nextTop = mergeIntoTopMirror(top, payload, LEADERBOARD_TOP_MIRROR_SIZE);
+  if (nextTop) {
+    await writePath(leaderboardTopPath(gameId), nextTop);
+  } else if (!top || Object.keys(top).length === 0) {
+    // Cold start: seed top from this first qualifying write.
+    await writePath(leaderboardTopPath(gameId), entriesToTopMap([payload]));
+  }
 }
 
 export async function submitContestLeaderboardEntryOnServer(
@@ -844,18 +1190,32 @@ export async function submitContestLeaderboardEntryOnServer(
     createdAt: entry.createdAt ?? Date.now(),
   };
 
-  const basePath = contestLeaderboardPath(gameId, contestStartedAt);
-  const map = await readPath<LeaderboardMap>(basePath);
-  const userKey = leaderboardUserKey(payload);
-  const existingBest = deduplicateLeaderboardEntries(
-    mapToLeaderboardEntries(map)
-  ).find((e) => leaderboardUserKey(e) === userKey);
+  const existing =
+    (await readPath<LeaderboardEntry>(
+      contestEntriesPath(gameId, contestStartedAt, wallet)
+    )) ??
+    (await readPath<LeaderboardEntry>(
+      `${contestLeaderboardPath(gameId, contestStartedAt)}/${wallet}`
+    ));
 
-  if (existingBest && existingBest.score >= payload.score) {
+  if (existing && typeof existing.score === "number" && existing.score >= payload.score) {
     return;
   }
 
-  await writePath(`${basePath}/${wallet}`, payload);
+  await writePath(contestEntriesPath(gameId, contestStartedAt, wallet), payload);
+
+  const top = await readPath<LeaderboardMap>(
+    contestTopPath(gameId, contestStartedAt)
+  );
+  const nextTop = mergeIntoTopMirror(top, payload, CONTEST_TOP_MIRROR_SIZE);
+  if (nextTop) {
+    await writePath(contestTopPath(gameId, contestStartedAt), nextTop);
+  } else if (!top || Object.keys(top).length === 0) {
+    await writePath(
+      contestTopPath(gameId, contestStartedAt),
+      entriesToTopMap([payload])
+    );
+  }
 }
 
 export async function fetchContestLeaderboardFromServer(
@@ -863,12 +1223,8 @@ export async function fetchContestLeaderboardFromServer(
   contestStartedAt: number,
   limit = CONTEST_MAX_ENTRIES
 ): Promise<LeaderboardEntry[]> {
-  const map = await readPath<LeaderboardMap>(
-    contestLeaderboardPath(gameId, contestStartedAt)
-  );
-  return deduplicateLeaderboardEntries(mapToLeaderboardEntries(map))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+  const ranked = await ensureContestTopMirror(gameId, contestStartedAt);
+  return ranked.slice(0, limit);
 }
 
 // ─── Per-user game progress ───────────────────────────────────────────────────
@@ -1046,18 +1402,21 @@ export async function saveGameProgressOnServer(
   }
 
   const wallet = normalizeWalletAddress(walletAddress);
-  const current = await fetchGameProgressFromServer(wallet, gameId);
-  const field: "s" | "l" = hasLeaderboard ? "s" : "l";
-  const currentValue = hasLeaderboard
-    ? readStoredScore(current)
-    : (current?.l ?? 0);
 
-  if (value <= currentValue) {
-    return storedProgressToGameProgress(current, hasLeaderboard);
-  }
+  return coalesceProgressWrite(wallet, gameId, value, async (maxValue) => {
+    const current = await fetchGameProgressFromServer(wallet, gameId);
+    const field: "s" | "l" = hasLeaderboard ? "s" : "l";
+    const currentValue = hasLeaderboard
+      ? readStoredScore(current)
+      : (current?.l ?? 0);
 
-  await patchPath(gameProgressPath(wallet, gameId), { [field]: value });
+    if (maxValue <= currentValue) {
+      return storedProgressToGameProgress(current, hasLeaderboard);
+    }
 
-  const updated: StoredGameProgress = { ...current, [field]: value };
-  return storedProgressToGameProgress(updated, hasLeaderboard);
+    await patchPath(gameProgressPath(wallet, gameId), { [field]: maxValue });
+
+    const updated: StoredGameProgress = { ...current, [field]: maxValue };
+    return storedProgressToGameProgress(updated, hasLeaderboard);
+  });
 }

@@ -1,4 +1,5 @@
 import { Game } from "@/types";
+import { invalidateGameFlagsCache } from "@/lib/rtdb-cache";
 
 /** Full games list — refreshed on admin mutations. */
 export const GAME_LIST_TTL_MS = 60_000;
@@ -95,6 +96,7 @@ export function invalidateGameCache(gameId?: string): void {
     lastGoodGameDocs.clear();
   }
   gameListEntry = null;
+  invalidateGameFlagsCache(gameId);
 }
 
 export function getStaleGameListFallback(): Game[] | null {

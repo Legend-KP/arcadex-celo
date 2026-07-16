@@ -11,6 +11,7 @@ import {
   setCachedGameDoc,
   setCachedGameList,
 } from "@/lib/game-cache";
+import { invalidateGameFlagsCache } from "@/lib/rtdb-cache";
 import {
   deleteGameGatingFlagsFromRtdb,
   syncGameGatingFlagsToRtdb,
@@ -84,6 +85,7 @@ async function syncGatingAfterMutation(
   gameId: string,
   game?: Game | null
 ): Promise<void> {
+  invalidateGameFlagsCache(gameId);
   if (!game) {
     await deleteGameGatingFlagsFromRtdb(gameId).catch(() => {});
     return;

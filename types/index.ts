@@ -125,6 +125,13 @@ export interface StoredGameProgress {
   highScore?: number;
 }
 
+/**
+ * Public leaderboard layout in RTDB:
+ * - `leaderboards/{gameId}/entries/{wallet}` — full history
+ * - `leaderboards/{gameId}/top/{wallet}` — small top-N mirror for hot reads
+ * Contest boards mirror the same pattern under `contestLeaderboards/...`.
+ */
+
 /** API / client-facing game progress */
 export interface GameProgress {
   score?: number;
