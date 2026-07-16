@@ -1,24 +1,31 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "main": ".open-next/worker.js",
-  "name": "arcadex-celo",
-  "compatibility_date": "2026-01-01",
-  "compatibility_flags": [
-    "nodejs_compat",
-    "global_fetch_strictly_public"
-  ],
-  "assets": {
-    "directory": ".open-next/assets",
-    "binding": "ASSETS"
-  },
-  "keep_vars": true,
-  "services": [
-    {
-      "binding": "WORKER_SELF_REFERENCE",
-      "service": "arcadex-celo"
-    }
-  ],
-  "observability": {
-    "enabled": true
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"main": ".open-next/worker.js",
+	"name": "arcadex-celo",
+	"compatibility_date": "2026-01-01",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	"keep_vars": true,
+	"services": [
+		{
+			"binding": "WORKER_SELF_REFERENCE",
+			"service": "arcadex-celo"
+		}
+	],
+	"observability": {
+		"enabled": true
+	},
+	"kv_namespaces": [
+		{
+			"binding": "RATE_LIMIT_KV",
+			"id": "55bfb54188784fac966da56f42c9fce6",
+			"preview_id": "afc93dfed6514875924b2511a39412cb"
+		}
+	]
 }
