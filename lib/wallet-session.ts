@@ -1,24 +1,22 @@
+import {
+  assertRequiredSecrets,
+  assertWalletSessionSecretConfigured,
+} from "@/lib/required-secrets";
 import { SignJWT, jwtVerify } from "jose";
 import { verifyMessage } from "viem";
-import { isArcadeXRewardsConfigured } from "@/lib/arcadex-rewards";
 import { parseAuthChallengeMessage } from "@/lib/wallet-auth-message";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 
 const SESSION_TTL_SEC = 24 * 60 * 60;
-const DEV_WALLET_SESSION_SECRET = "dev-wallet-session-secret-change-me";
 
-/**
- * Enforce wallet sessions once ArcadeXRewards is wired (check-in sign-in)
- * or a dedicated session secret is set.
- */
+/** True when a real session secret is present (never fail-open). */
 export function isWalletAuthEnabled(): boolean {
-  return Boolean(
-    process.env.WALLET_SESSION_SECRET?.trim() || isArcadeXRewardsConfigured()
-  );
+  return Boolean(process.env.WALLET_SESSION_SECRET?.trim());
 }
 
 function getWalletSessionSecret(): Uint8Array {
-  const secret = process.env.WALLET_SESSION_SECRET?.trim() || DEV_WALLET_SESSION_SECRET;
+  assertWalletSessionSecretConfigured();
+  const secret = process.env.WALLET_SESSION_SECRET!.trim();
   return new TextEncoder().encode(secret);
 }
 
@@ -55,15 +53,24 @@ export type WalletAuthResult =
   | { ok: true; wallet: string }
   | { ok: false; error: string; status: number };
 
+/**
+ * Always fail closed: missing secret → 503; missing/invalid token → 401/403.
+ * Never trusts the caller-provided wallet address without a verified session.
+ */
 export async function requireWalletAuth(
   request: Request,
   walletAddress?: string
 ): Promise<WalletAuthResult> {
-  if (!isWalletAuthEnabled()) {
-    if (walletAddress && isWalletAddress(walletAddress)) {
-      return { ok: true, wallet: normalizeWalletAddress(walletAddress) };
-    }
-    return { ok: true, wallet: "" };
+  try {
+    assertRequiredSecrets();
+    assertWalletSessionSecretConfigured();
+  } catch {
+    return {
+      ok: false,
+      error:
+        "Server authentication is not configured. Set WALLET_SESSION_SECRET and redeploy.",
+      status: 503,
+    };
   }
 
   const token = extractBearerToken(request);
@@ -77,6 +84,9 @@ export async function requireWalletAuth(
   }
 
   if (walletAddress) {
+    if (!isWalletAddress(walletAddress)) {
+      return { ok: false, error: "Invalid wallet address.", status: 400 };
+    }
     const expected = normalizeWalletAddress(walletAddress);
     if (sessionWallet !== expected) {
       return {

@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(request: Request) {
   const ip = getClientIp(request);
-  if (!checkRateLimit(`streak-grant:${ip}`, 20, 60_000)) {
+  if (!(await checkRateLimit(`streak-grant:${ip}`, 20, 60_000))) {
     return rateLimitResponse();
   }
 

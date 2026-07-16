@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   const started = Date.now();
   const ip = getClientIp(request);
 
-  if (!checkRateLimit(`games-list:ip:${ip}`, GAMES_LIST_IP_LIMIT, GAMES_LIST_WINDOW_MS)) {
+  if (!(await checkRateLimit(`games-list:ip:${ip}`, GAMES_LIST_IP_LIMIT, GAMES_LIST_WINDOW_MS))) {
     recordApiMetric({
       endpoint: "/api/games",
       method: "GET",

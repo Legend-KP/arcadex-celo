@@ -23,7 +23,7 @@ import {
 import { verifySparkRefillPaymentTx } from "@/lib/spark-refill-verify";
 import { verifyScoreSubmitPaymentTx } from "@/lib/score-submit-verify";
 import type { Hash } from "viem";
-import { getDatabaseUrl } from "./firebase-admin";
+import { getDatabaseUrl, getFirebaseAccessToken, scrubSecrets } from "./firebase-admin";
 import {
   bumpCachedPlayCount,
   getCachedGameFlags,
@@ -47,14 +47,25 @@ const LEADERBOARD_TOP_MIRROR_SIZE = 50;
 const CONTEST_TOP_MIRROR_SIZE = 15;
 const RTDB_TRANSACTION_MAX_RETRIES = 8;
 
-function getRtdbAuthQuery(): string {
-  const secret = process.env.FIREBASE_DATABASE_SECRET?.trim();
-  if (!secret) {
+/** Prefer service-account OAuth; legacy database secret is emergency-only fallback. */
+async function getRtdbAuthQuery(): Promise<string> {
+  try {
+    const token = await getFirebaseAccessToken();
+    return `access_token=${encodeURIComponent(token)}`;
+  } catch (oauthErr) {
+    const secret = process.env.FIREBASE_DATABASE_SECRET?.trim();
+    if (secret) {
+      console.warn(
+        "[ArcadeX] RTDB falling back to FIREBASE_DATABASE_SECRET — migrate fully to service-account OAuth and remove the legacy secret."
+      );
+      return `auth=${encodeURIComponent(secret)}`;
+    }
+    const message =
+      oauthErr instanceof Error ? oauthErr.message : "OAuth token unavailable";
     throw new Error(
-      "FIREBASE_DATABASE_SECRET is missing. Add it to Cloudflare Worker secrets (Firebase Console → Realtime Database → Secrets)."
+      `Realtime Database auth failed (${scrubSecrets(message)}). Configure FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY.`
     );
   }
-  return `auth=${encodeURIComponent(secret)}`;
 }
 
 /** Encode each path segment for RTDB REST (wallet keys, game ids, etc.). */
@@ -90,7 +101,7 @@ async function rtdbFetch(
   path: string,
   init?: RequestInit
 ): Promise<Response> {
-  const auth = getRtdbAuthQuery();
+  const auth = await getRtdbAuthQuery();
   const url = `${getDatabaseUrl()}/${encodeRtdbPath(path)}.json?${auth}`;
 
   return fetch(url, {
@@ -107,7 +118,7 @@ async function readPath<T>(path: string): Promise<T | null> {
   const res = await rtdbFetch(path);
   if (res.status === 404) return null;
   if (!res.ok) {
-    const text = await res.text();
+    const text = scrubSecrets(await res.text());
     throw new Error(`Realtime Database read failed (${res.status}): ${text}`);
   }
 
@@ -126,7 +137,7 @@ async function readPathWithEtag<T>(
     return { data: null, etag: res.headers.get("ETag") ?? '""' };
   }
   if (!res.ok) {
-    const text = await res.text();
+    const text = scrubSecrets(await res.text());
     throw new Error(`Realtime Database read failed (${res.status}): ${text}`);
   }
 
@@ -146,7 +157,7 @@ async function writePath(path: string, data: unknown): Promise<void> {
   });
 
   if (!res.ok) {
-    const text = await res.text();
+    const text = scrubSecrets(await res.text());
     throw new Error(`Realtime Database write failed (${res.status}): ${text}`);
   }
 }
@@ -164,21 +175,17 @@ async function writePathIfMatch(
 
   if (res.status === 412) return "conflict";
   if (!res.ok) {
-    const text = await res.text();
+    const text = scrubSecrets(await res.text());
     throw new Error(`Realtime Database write failed (${res.status}): ${text}`);
   }
   return "ok";
 }
 
-async function patchPath(path: string, data: unknown): Promise<void> {
-  const res = await rtdbFetch(path, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Realtime Database patch failed (${res.status}): ${text}`);
+async function deletePath(path: string): Promise<void> {
+  const res = await rtdbFetch(path, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) {
+    const text = scrubSecrets(await res.text());
+    throw new Error(`Realtime Database delete failed (${res.status}): ${text}`);
   }
 }
 
@@ -190,7 +197,7 @@ async function incrementPath(path: string, delta = 1): Promise<void> {
   });
 
   if (!res.ok) {
-    const text = await res.text();
+    const text = scrubSecrets(await res.text());
     throw new Error(
       `Realtime Database increment failed (${res.status}): ${text}`
     );
@@ -220,6 +227,65 @@ async function runRtdbTransaction<T>(
   }
 
   throw new Error("Realtime Database transaction failed after max retries.");
+}
+
+type GuardRecord = { wallet?: string } & Record<string, unknown>;
+
+type GuardClaimResult<T extends GuardRecord> =
+  | { status: "created"; record: T }
+  | { status: "exists"; record: T }
+  | { status: "conflict_other_wallet" };
+
+/**
+ * Atomically claim a one-time payment/reward guard.
+ * Only one concurrent caller can create the marker for a given tx hash.
+ */
+async function claimGuardRecord<T extends GuardRecord>(
+  path: string,
+  wallet: string,
+  buildRecord: () => T
+): Promise<GuardClaimResult<T>> {
+  let createdRecord: T | null = null;
+  let existsRecord: T | null = null;
+  let conflictOther = false;
+
+  const { committed, snapshot } = await runRtdbTransaction<T>(path, (current) => {
+    if (current?.wallet) {
+      const recorded = normalizeWalletAddress(String(current.wallet));
+      if (recorded === wallet) {
+        existsRecord = current;
+        return undefined;
+      }
+      conflictOther = true;
+      return undefined;
+    }
+
+    const record = buildRecord();
+    createdRecord = record;
+    return record;
+  });
+
+  if (createdRecord && committed) {
+    return { status: "created", record: createdRecord };
+  }
+  if (existsRecord) {
+    return { status: "exists", record: existsRecord };
+  }
+  if (conflictOther) {
+    return { status: "conflict_other_wallet" };
+  }
+
+  // Lost a create race — re-read winner.
+  const existing = snapshot ?? (await readPath<T>(path));
+  if (existing?.wallet) {
+    const recorded = normalizeWalletAddress(String(existing.wallet));
+    if (recorded === wallet) {
+      return { status: "exists", record: existing };
+    }
+    return { status: "conflict_other_wallet" };
+  }
+
+  throw new Error("Failed to claim payment guard.");
 }
 
 function toPlayerProfile(id: string, data: StoredUser | null): PlayerProfile | null {
@@ -517,9 +583,8 @@ export async function activateInfiniteSparkOnServer(
     );
   }
 
-  const existingPayment = await readPath<{ wallet?: string }>(
-    sparkPaymentPath(normalizedTxHash)
-  );
+  const guardPath = sparkPaymentPath(normalizedTxHash);
+  const existingPayment = await readPath<{ wallet?: string }>(guardPath);
 
   if (existingPayment?.wallet) {
     const recordedWallet = normalizeWalletAddress(existingPayment.wallet);
@@ -546,17 +611,39 @@ export async function activateInfiniteSparkOnServer(
     state.infiniteUntil && state.infiniteUntil > now ? state.infiniteUntil : now;
   const infiniteUntil = baseUntil + INFINITE_SPARK_DURATION_MS;
 
+  const claim = await claimGuardRecord(guardPath, wallet, () => ({
+    wallet,
+    activatedAt: now,
+    infiniteUntil,
+  }));
+
+  if (claim.status === "conflict_other_wallet") {
+    throw new InfiniteSparkActivationError(
+      "This payment was already used by another wallet.",
+      "TX_ALREADY_USED"
+    );
+  }
+
+  if (claim.status === "exists") {
+    const current = normalizeSparkState(await ensureSparkStateOnServer(wallet));
+    return {
+      state: current,
+      sparks: computeSparkSnapshot(current),
+      activated: false,
+    };
+  }
+
   const nextState: StoredSparkState = {
     ...state,
     infiniteUntil,
   };
 
-  await writePath(sparksPath(wallet), sparkStateForRtdb(nextState));
-  await writePath(sparkPaymentPath(normalizedTxHash), {
-    wallet,
-    activatedAt: now,
-    infiniteUntil,
-  });
+  try {
+    await writePath(sparksPath(wallet), sparkStateForRtdb(nextState));
+  } catch (err) {
+    await deletePath(guardPath).catch(() => {});
+    throw err;
+  }
 
   return {
     state: nextState,
@@ -590,8 +677,9 @@ export async function activateSparkRefillOnServer(
     );
   }
 
+  const guardPath = sparkPaymentPath(normalizedTxHash);
   const existingPayment = await readPath<{ wallet?: string; type?: string }>(
-    sparkPaymentPath(normalizedTxHash)
+    guardPath
   );
 
   if (existingPayment?.wallet) {
@@ -615,17 +703,40 @@ export async function activateSparkRefillOnServer(
 
   const now = Date.now();
   const state = normalizeSparkState(await ensureSparkStateOnServer(wallet), now);
+
+  const claim = await claimGuardRecord(guardPath, wallet, () => ({
+    wallet,
+    type: "refill",
+    activatedAt: now,
+  }));
+
+  if (claim.status === "conflict_other_wallet") {
+    throw new SparkRefillActivationError(
+      "This payment was already used by another wallet.",
+      "TX_ALREADY_USED"
+    );
+  }
+
+  if (claim.status === "exists") {
+    const current = normalizeSparkState(await ensureSparkStateOnServer(wallet));
+    return {
+      state: current,
+      sparks: computeSparkSnapshot(current),
+      refilled: false,
+    };
+  }
+
   const nextState: StoredSparkState = {
     ...state,
     slots: Array.from({ length: state.max }, () => null),
   };
 
-  await writePath(sparksPath(wallet), sparkStateForRtdb(nextState));
-  await writePath(sparkPaymentPath(normalizedTxHash), {
-    wallet,
-    type: "refill",
-    activatedAt: now,
-  });
+  try {
+    await writePath(sparksPath(wallet), sparkStateForRtdb(nextState));
+  } catch (err) {
+    await deletePath(guardPath).catch(() => {});
+    throw err;
+  }
 
   return {
     state: nextState,
@@ -688,29 +799,25 @@ export async function recordCheckInTxOnServer(
     throw new StreakSyncError("A valid transaction hash is required.", "INVALID_TX");
   }
 
-  const existing = await readPath<{ wallet?: string }>(
-    checkInTxPath(normalizedTxHash)
+  const claim = await claimGuardRecord(
+    checkInTxPath(normalizedTxHash),
+    wallet,
+    () => ({
+      wallet,
+      campaignId,
+      day,
+      syncedAt: Date.now(),
+    })
   );
 
-  if (existing?.wallet) {
-    const recorded = normalizeWalletAddress(existing.wallet);
-    if (recorded !== wallet) {
-      throw new StreakSyncError(
-        "This check-in was already used by another wallet.",
-        "TX_ALREADY_USED"
-      );
-    }
-    return { reused: true };
+  if (claim.status === "conflict_other_wallet") {
+    throw new StreakSyncError(
+      "This check-in was already used by another wallet.",
+      "TX_ALREADY_USED"
+    );
   }
 
-  await writePath(checkInTxPath(normalizedTxHash), {
-    wallet,
-    campaignId,
-    day,
-    syncedAt: Date.now(),
-  });
-
-  return { reused: false };
+  return { reused: claim.status === "exists" };
 }
 
 /**
@@ -743,9 +850,8 @@ export async function grantStreakInfiniteSparkOnServer(
     );
   }
 
-  const existingGrant = await readPath<{ wallet?: string }>(
-    streakGrantPath(normalizedTxHash)
-  );
+  const guardPath = streakGrantPath(normalizedTxHash);
+  const existingGrant = await readPath<{ wallet?: string }>(guardPath);
 
   if (existingGrant?.wallet) {
     const recorded = normalizeWalletAddress(existingGrant.wallet);
@@ -788,19 +894,41 @@ export async function grantStreakInfiniteSparkOnServer(
     state.infiniteUntil && state.infiniteUntil > now ? state.infiniteUntil : now;
   const infiniteUntil = baseUntil + INFINITE_SPARK_DURATION_MS;
 
-  const nextState: StoredSparkState = {
-    ...state,
-    infiniteUntil,
-  };
-
-  await writePath(sparksPath(wallet), sparkStateForRtdb(nextState));
-  await writePath(streakGrantPath(normalizedTxHash), {
+  const claim = await claimGuardRecord(guardPath, wallet, () => ({
     wallet,
     campaignId,
     grantedAt: now,
     infiniteUntil,
     reward: "INFINITE_SPARK_24H",
-  });
+  }));
+
+  if (claim.status === "conflict_other_wallet") {
+    throw new StreakRewardError(
+      "This reward was already used by another wallet.",
+      "TX_ALREADY_USED"
+    );
+  }
+
+  if (claim.status === "exists") {
+    const current = normalizeSparkState(await ensureSparkStateOnServer(wallet));
+    return {
+      state: current,
+      sparks: computeSparkSnapshot(current),
+      granted: false,
+    };
+  }
+
+  const nextState: StoredSparkState = {
+    ...state,
+    infiniteUntil,
+  };
+
+  try {
+    await writePath(sparksPath(wallet), sparkStateForRtdb(nextState));
+  } catch (err) {
+    await deletePath(guardPath).catch(() => {});
+    throw err;
+  }
 
   return {
     state: nextState,
@@ -1165,14 +1293,21 @@ export async function submitLeaderboardEntryOnServer(
   // Full history under entries/. Top mirror stays O(N) small for reads.
   await writePath(leaderboardEntriesPath(gameId, storageKey), payload);
 
-  const top = await readPath<LeaderboardMap>(leaderboardTopPath(gameId));
-  const nextTop = mergeIntoTopMirror(top, payload, LEADERBOARD_TOP_MIRROR_SIZE);
-  if (nextTop) {
-    await writePath(leaderboardTopPath(gameId), nextTop);
-  } else if (!top || Object.keys(top).length === 0) {
-    // Cold start: seed top from this first qualifying write.
-    await writePath(leaderboardTopPath(gameId), entriesToTopMap([payload]));
-  }
+  await runRtdbTransaction<LeaderboardMap>(
+    leaderboardTopPath(gameId),
+    (current) => {
+      const next = mergeIntoTopMirror(
+        current,
+        payload,
+        LEADERBOARD_TOP_MIRROR_SIZE
+      );
+      if (next) return next;
+      if (!current || Object.keys(current).length === 0) {
+        return entriesToTopMap([payload]);
+      }
+      return undefined;
+    }
+  );
 }
 
 export async function submitContestLeaderboardEntryOnServer(
@@ -1204,18 +1339,21 @@ export async function submitContestLeaderboardEntryOnServer(
 
   await writePath(contestEntriesPath(gameId, contestStartedAt, wallet), payload);
 
-  const top = await readPath<LeaderboardMap>(
-    contestTopPath(gameId, contestStartedAt)
+  await runRtdbTransaction<LeaderboardMap>(
+    contestTopPath(gameId, contestStartedAt),
+    (current) => {
+      const next = mergeIntoTopMirror(
+        current,
+        payload,
+        CONTEST_TOP_MIRROR_SIZE
+      );
+      if (next) return next;
+      if (!current || Object.keys(current).length === 0) {
+        return entriesToTopMap([payload]);
+      }
+      return undefined;
+    }
   );
-  const nextTop = mergeIntoTopMirror(top, payload, CONTEST_TOP_MIRROR_SIZE);
-  if (nextTop) {
-    await writePath(contestTopPath(gameId, contestStartedAt), nextTop);
-  } else if (!top || Object.keys(top).length === 0) {
-    await writePath(
-      contestTopPath(gameId, contestStartedAt),
-      entriesToTopMap([payload])
-    );
-  }
 }
 
 export async function fetchContestLeaderboardFromServer(
@@ -1322,12 +1460,13 @@ export async function activateScoreSubmitOnServer(
   }
 
   const highScore = await fetchPersonalBestFromServer(wallet, gameId);
+  const guardPath = scorePaymentPath(normalizedTxHash);
 
   const existingPayment = await readPath<{
     wallet?: string;
     gameId?: string;
     score?: number;
-  }>(scorePaymentPath(normalizedTxHash));
+  }>(guardPath);
 
   if (existingPayment?.wallet) {
     const recordedWallet = normalizeWalletAddress(existingPayment.wallet);
@@ -1352,32 +1491,56 @@ export async function activateScoreSubmitOnServer(
 
   await verifyScoreSubmitPaymentTx(wallet, normalizedTxHash as Hash);
 
-  await submitLeaderboardEntryOnServer(gameId, {
-    name: playerName,
+  const now = Date.now();
+  const claim = await claimGuardRecord(guardPath, wallet, () => ({
+    wallet,
+    gameId,
     score,
-    walletAddress: wallet,
-  });
+    activatedAt: now,
+  }));
 
-  if (typeof opts?.contestStartedAt === "number") {
-    await submitContestLeaderboardEntryOnServer(gameId, opts.contestStartedAt, {
+  if (claim.status === "conflict_other_wallet") {
+    throw new ScoreSubmitActivationError(
+      "This payment was already used by another wallet.",
+      "TX_ALREADY_USED"
+    );
+  }
+
+  if (claim.status === "exists") {
+    const leaderboardScore = await fetchUserSubmittedScoreFromServer(gameId, {
+      walletAddress: wallet,
+      playerName,
+    });
+    return {
+      highScore,
+      leaderboardScore,
+      submitted: false,
+    };
+  }
+
+  try {
+    await submitLeaderboardEntryOnServer(gameId, {
       name: playerName,
       score,
       walletAddress: wallet,
-      createdAt: Date.now(),
     });
+
+    if (typeof opts?.contestStartedAt === "number") {
+      await submitContestLeaderboardEntryOnServer(gameId, opts.contestStartedAt, {
+        name: playerName,
+        score,
+        walletAddress: wallet,
+        createdAt: Date.now(),
+      });
+    }
+  } catch (err) {
+    await deletePath(guardPath).catch(() => {});
+    throw err;
   }
 
   const leaderboardScore = await fetchUserSubmittedScoreFromServer(gameId, {
     walletAddress: wallet,
     playerName,
-  });
-
-  const now = Date.now();
-  await writePath(scorePaymentPath(normalizedTxHash), {
-    wallet,
-    gameId,
-    score,
-    activatedAt: now,
   });
 
   return {
@@ -1404,19 +1567,30 @@ export async function saveGameProgressOnServer(
   const wallet = normalizeWalletAddress(walletAddress);
 
   return coalesceProgressWrite(wallet, gameId, value, async (maxValue) => {
-    const current = await fetchGameProgressFromServer(wallet, gameId);
     const field: "s" | "l" = hasLeaderboard ? "s" : "l";
-    const currentValue = hasLeaderboard
-      ? readStoredScore(current)
-      : (current?.l ?? 0);
 
-    if (maxValue <= currentValue) {
-      return storedProgressToGameProgress(current, hasLeaderboard);
-    }
+    const { committed, snapshot } =
+      await runRtdbTransaction<StoredGameProgress>(
+        gameProgressPath(wallet, gameId),
+        (current) => {
+          const currentValue = hasLeaderboard
+            ? readStoredScore(current)
+            : (current?.l ?? 0);
 
-    await patchPath(gameProgressPath(wallet, gameId), { [field]: maxValue });
+          if (maxValue <= currentValue) {
+            return undefined;
+          }
 
-    const updated: StoredGameProgress = { ...current, [field]: maxValue };
-    return storedProgressToGameProgress(updated, hasLeaderboard);
+          return { ...(current ?? {}), [field]: maxValue };
+        }
+      );
+
+    const stored =
+      snapshot ??
+      (committed
+        ? ({ [field]: maxValue } as StoredGameProgress)
+        : await fetchGameProgressFromServer(wallet, gameId));
+
+    return storedProgressToGameProgress(stored, hasLeaderboard);
   });
 }

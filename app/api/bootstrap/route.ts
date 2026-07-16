@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const ip = getClientIp(request);
-  if (!checkRateLimit(`bootstrap:${ip}`, 30, 60_000)) {
+  if (!(await checkRateLimit(`bootstrap:${ip}`, 30, 60_000))) {
     return rateLimitResponse();
   }
 

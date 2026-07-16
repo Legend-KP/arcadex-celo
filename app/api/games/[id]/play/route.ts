@@ -20,7 +20,7 @@ export async function POST(
   const started = Date.now();
   const ip = getClientIp(request);
 
-  if (!checkRateLimit(`play:ip:${ip}`, 120, 60_000)) {
+  if (!(await checkRateLimit(`play:ip:${ip}`, 120, 60_000))) {
     recordApiMetric({
       endpoint: "/api/games/[id]/play",
       method: "POST",

@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const ip = getClientIp(request);
-  if (!checkRateLimit(`admin-login:${ip}`, 10, 15 * 60_000)) {
+  if (!(await checkRateLimit(`admin-login:${ip}`, 10, 15 * 60_000))) {
     return rateLimitResponse();
   }
 

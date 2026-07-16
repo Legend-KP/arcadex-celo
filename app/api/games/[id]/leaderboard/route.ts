@@ -70,7 +70,7 @@ export async function GET(
   const started = Date.now();
   const ip = getClientIp(request);
 
-  if (!checkRateLimit(`leaderboard:ip:${ip}`, 90, 60_000)) {
+  if (!(await checkRateLimit(`leaderboard:ip:${ip}`, 90, 60_000))) {
     recordApiMetric({
       endpoint: "/api/games/[id]/leaderboard",
       method: "GET",

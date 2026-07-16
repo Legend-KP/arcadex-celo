@@ -57,12 +57,12 @@ export async function GET(
     const wallet = normalizeWalletAddress(walletRaw);
     const ip = getClientIp(request);
 
-    const ipAllowed = checkRateLimit(
+    const ipAllowed = await checkRateLimit(
       `progress:ip:${ip}`,
       PROGRESS_IP_LIMIT,
       PROGRESS_WINDOW_MS
     );
-    const walletAllowed = checkRateLimit(
+    const walletAllowed = await checkRateLimit(
       `progress:wallet:${wallet}:${id}`,
       PROGRESS_WALLET_LIMIT,
       PROGRESS_WINDOW_MS

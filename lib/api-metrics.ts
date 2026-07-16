@@ -1,4 +1,5 @@
 import { getGameCacheStats } from "@/lib/game-cache";
+import { scrubSecrets } from "@/lib/firebase-admin";
 
 export type ApiMetricEvent = {
   endpoint: string;
@@ -21,5 +22,6 @@ export function recordApiMetric(event: ApiMetricEvent): void {
     ...event,
   };
 
-  console.log(JSON.stringify(payload));
+  // Never log secrets/tokens even if a field is ever polluted.
+  console.log(scrubSecrets(JSON.stringify(payload)));
 }

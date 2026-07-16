@@ -1,7 +1,12 @@
 import { SignJWT, importPKCS8 } from "jose";
 
 const FIREBASE_SCOPES =
-  "https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.database";
+  "https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/userinfo.email";
+
+/** Refresh a few minutes before Google's 1h expiry. */
+const ACCESS_TOKEN_TTL_MS = 55 * 60 * 1000;
+
+let cachedAccessToken: { token: string; expiresAt: number } | null = null;
 
 export function getProjectId(): string {
   return (
@@ -39,7 +44,19 @@ export function getDatabaseUrl(): string {
   return `https://${projectId}-default-rtdb.firebaseio.com`;
 }
 
+/** Strip secrets/tokens from strings that may be logged or returned to clients. */
+export function scrubSecrets(text: string): string {
+  return text
+    .replace(/access_token=[^&\s"]+/gi, "access_token=REDACTED")
+    .replace(/auth=[^&\s"]+/gi, "auth=REDACTED")
+    .replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, "Bearer REDACTED");
+}
+
 export async function getFirebaseAccessToken(): Promise<string> {
+  if (cachedAccessToken && Date.now() < cachedAccessToken.expiresAt) {
+    return cachedAccessToken.token;
+  }
+
   const { clientEmail, privateKey } = getServiceAccount();
   const key = await importPKCS8(privateKey, "RS256");
 
@@ -66,6 +83,11 @@ export async function getFirebaseAccessToken(): Promise<string> {
   if (!res.ok || !data.access_token) {
     throw new Error(data.error ?? "Could not obtain Google access token.");
   }
+
+  cachedAccessToken = {
+    token: data.access_token,
+    expiresAt: Date.now() + ACCESS_TOKEN_TTL_MS,
+  };
 
   return data.access_token;
 }

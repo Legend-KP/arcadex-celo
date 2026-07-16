@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const ip = getClientIp(request);
-  if (!checkRateLimit(`sparks-spend:${ip}`, 60, 60_000)) {
+  if (!(await checkRateLimit(`sparks-spend:${ip}`, 60, 60_000))) {
     return rateLimitResponse();
   }
 

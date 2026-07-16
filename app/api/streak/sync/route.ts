@@ -35,7 +35,7 @@ const SESSION_TTL_SEC = 24 * 60 * 60;
  */
 export async function POST(request: Request) {
   const ip = getClientIp(request);
-  if (!checkRateLimit(`streak-sync:${ip}`, 30, 60_000)) {
+  if (!(await checkRateLimit(`streak-sync:${ip}`, 30, 60_000))) {
     return rateLimitResponse();
   }
 

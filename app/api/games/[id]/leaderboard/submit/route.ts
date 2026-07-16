@@ -34,7 +34,7 @@ export async function POST(
   const started = Date.now();
   const ip = getClientIp(request);
 
-  if (!checkRateLimit(`leaderboard-submit:ip:${ip}`, 60, 60_000)) {
+  if (!(await checkRateLimit(`leaderboard-submit:ip:${ip}`, 60, 60_000))) {
     recordApiMetric({
       endpoint: "/api/games/[id]/leaderboard/submit",
       method: "POST",
