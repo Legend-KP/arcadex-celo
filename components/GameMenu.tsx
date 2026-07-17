@@ -138,26 +138,26 @@ export default function GameMenu({
 
       <div className="game-menu-grid" aria-hidden />
 
-      <div className="game-menu-top-actions">
+      <button
+        type="button"
+        className="game-menu-back"
+        onClick={() => router.push("/")}
+        aria-label="Back to home"
+      >
+        ←
+      </button>
+      {tutorialSrc && (
         <button
           type="button"
-          className="game-menu-back"
-          onClick={() => router.push("/")}
-          aria-label="Back to home"
+          className="game-menu-info"
+          onClick={() => setTutorialOpen(true)}
+          aria-label="How to play"
         >
-          ←
-        </button>
-        {tutorialSrc && (
-          <button
-            type="button"
-            className="game-menu-info"
-            onClick={() => setTutorialOpen(true)}
-            aria-label="How to play"
-          >
+          <span className="game-menu-info__glyph" aria-hidden>
             i
-          </button>
-        )}
-      </div>
+          </span>
+        </button>
+      )}
 
       <div className="game-menu-stack">
         {contestLive && (

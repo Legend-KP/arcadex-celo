@@ -85,7 +85,7 @@ export default function Leaderboard({
     })
       .then((data) => {
         setContest(data.contest ?? null);
-        if (data.contest) {
+        if (data.contest?.status === "live") {
           setEntries(data.contest.entries ?? []);
         } else {
           setEntries((data.entries ?? []).slice(0, LEADERBOARD_MAX_ENTRIES));
@@ -119,28 +119,29 @@ export default function Leaderboard({
     touchStartY.current = e.touches[0].clientY;
   };
 
+  const isLiveContest = contest?.status === "live" || (!contest && contestLive);
+  const isEndedContest = contest?.status === "ended";
+  const showContestBoard = Boolean(contest?.status === "live");
+  const showPostSubmit = isPostSubmit && showContestBoard;
+
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (isPostSubmit) return;
+    if (showPostSubmit) return;
     if (touchStartY.current === null) return;
     const delta = e.changedTouches[0].clientY - touchStartY.current;
     touchStartY.current = null;
     if (delta > SWIPE_THRESHOLD) onClose();
   };
 
-  const showContestBoard = Boolean(contest);
-  const isLiveContest = contest?.status === "live" || contestLive;
-  const isEndedContest = contest?.status === "ended";
-
   if (!open) return null;
 
   return (
     <div
       className="lb-backdrop"
-      onClick={isPostSubmit ? undefined : onClose}
+      onClick={showPostSubmit ? undefined : onClose}
       role="presentation"
     >
       <div
-        className={`lb-sheet${isPostSubmit ? " lb-sheet--post-submit" : ""}${
+        className={`lb-sheet${showPostSubmit ? " lb-sheet--post-submit" : ""}${
           showContestBoard ? " lb-sheet--contest" : ""
         }`}
         role="dialog"
@@ -150,7 +151,7 @@ export default function Leaderboard({
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        {isPostSubmit && (
+        {showPostSubmit && (
           <div className="lb-success-header" role="status">
             <span className="lb-success-header__text">Score submitted!</span>
           </div>
@@ -158,7 +159,7 @@ export default function Leaderboard({
 
         <div className="lb-header">
           <div className="lb-title-wrap">
-            {!isPostSubmit && <TrophyHexIcon />}
+            {!showPostSubmit && <TrophyHexIcon />}
             <div className="lb-title-stack">
               <span className="lb-title">{gameName}</span>
               {showContestBoard && isLiveContest && (
@@ -167,12 +168,9 @@ export default function Leaderboard({
                   CONTEST LIVE
                 </span>
               )}
-              {showContestBoard && isEndedContest && (
-                <span className="lb-ended-badge">CONTEST ENDED</span>
-              )}
             </div>
           </div>
-          {!isPostSubmit && (
+          {!showPostSubmit && (
             <button
               type="button"
               className="lb-close"
@@ -199,17 +197,9 @@ export default function Leaderboard({
           </div>
         )}
 
-        {showContestBoard && isEndedContest && (
-          <div className="lb-timer-panel lb-timer-panel--ended" role="status">
-            <div className="lb-timer-panel__content">
-              <p className="lb-timer-panel__label">Contest over</p>
-              <p className="lb-timer-panel__value lb-timer-panel__value--sm">
-                Final top 10
-              </p>
-            </div>
-            <div className="lb-timer-panel__trophy" aria-hidden="true">
-              🏆
-            </div>
+        {isEndedContest && (
+          <div className="lb-contest-coming-soon" role="status">
+            Contest Coming Soon...
           </div>
         )}
 
@@ -310,7 +300,7 @@ export default function Leaderboard({
           </div>
         )}
 
-        {isPostSubmit && (
+        {showPostSubmit && (
           <button
             type="button"
             className="lb-continue-btn"

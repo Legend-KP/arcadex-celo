@@ -1071,17 +1071,11 @@ a { color: inherit; text-decoration: none; }
   gap: 16px;
 }
 
-.game-menu-top-actions {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 .game-menu-back,
 .game-menu-info {
+  position: absolute;
+  top: 20px;
+  z-index: 3;
   width: 44px;
   height: 44px;
   border: none;
@@ -1101,13 +1095,27 @@ a { color: inherit; text-decoration: none; }
   -webkit-tap-highlight-color: transparent;
 }
 .game-menu-back {
+  left: 20px;
   font-size: 22px;
 }
 .game-menu-info {
-  font-family: var(--font-body);
-  font-size: 18px;
-  font-weight: 800;
-  font-style: italic;
+  right: 20px;
+}
+.game-menu-info__glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-size: 14px;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: 0;
+  transform: translateY(-0.5px);
 }
 .game-menu-back:hover,
 .game-menu-info:hover {
@@ -1845,11 +1853,19 @@ a { color: inherit; text-decoration: none; }
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-.lb-timer-panel--ended {
-  background:
-    radial-gradient(ellipse at 78% 45%, rgba(96, 165, 250, 0.2) 0%, transparent 55%),
-    linear-gradient(135deg, #1e3a5f 0%, #172554 60%, #0f172a 100%);
-  border-color: rgba(147, 197, 253, 0.55);
+.lb-contest-coming-soon {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(109, 40, 217, 0.2);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.12), rgba(59, 130, 246, 0.08));
+  color: #5b21b6;
+  font-family: var(--font-head);
+  font-size: 17px;
+  letter-spacing: 0.3px;
+  text-align: center;
 }
 
 .lb-timer-panel__glow {
@@ -1884,10 +1900,6 @@ a { color: inherit; text-decoration: none; }
   color: #fff;
   letter-spacing: 0.5px;
   text-shadow: 0 2px 12px rgba(245, 197, 66, 0.35);
-}
-
-.lb-timer-panel__value--sm {
-  font-size: 22px;
 }
 
 .lb-timer-panel__trophy {
