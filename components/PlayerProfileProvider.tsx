@@ -38,9 +38,14 @@ import {
 import { isArcadeXRewardsConfigured } from "@/lib/arcadex-rewards";
 import {
   fetchStreakStatus,
+  refreshSessionFromCheckIn,
+  SessionRefreshError,
   type StreakStatus,
 } from "@/lib/streak-client";
-import { hasValidWalletSession } from "@/lib/wallet-session-client";
+import {
+  clearWalletSessionToken,
+  hasValidWalletSession,
+} from "@/lib/wallet-session-client";
 import { PlayerProfile } from "@/types";
 
 interface PlayerProfileContextValue {
@@ -179,14 +184,27 @@ export default function PlayerProfileProvider({
           setStreakStatus(status);
 
           if (status.canCheckIn) {
+            clearWalletSessionToken();
             setShowCheckIn(true);
             setIsReady(true);
             return;
           }
 
-          if (!hasValidWalletSession(wallet)) {
-            // Already checked in today — refresh session via message sign fallback.
-            await ensureWalletSession(wallet);
+          // Already checked in today — mint a fresh JWT from on-chain check-in.
+          // Do not trust a stale local token (e.g. after WALLET_SESSION_SECRET change).
+          try {
+            await refreshSessionFromCheckIn(wallet);
+          } catch (err) {
+            if (
+              err instanceof SessionRefreshError &&
+              err.code === "NEED_CHECKIN"
+            ) {
+              clearWalletSessionToken();
+              setShowCheckIn(true);
+              setIsReady(true);
+              return;
+            }
+            throw err;
           }
         } else if (!hasValidWalletSession(wallet)) {
           try {

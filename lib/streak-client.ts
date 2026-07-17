@@ -94,6 +94,48 @@ export async function syncStreakCheckIn(opts: {
   return data;
 }
 
+export class SessionRefreshError extends Error {
+  constructor(
+    message: string,
+    public readonly code?: string
+  ) {
+    super(message);
+    this.name = "SessionRefreshError";
+  }
+}
+
+/**
+ * Silent session mint from a recent on-chain daily check-in.
+ * Prefer this over personal_sign when the user already checked in today.
+ */
+export async function refreshSessionFromCheckIn(
+  walletAddress: string,
+  campaignId: number = DEFAULT_STREAK_CAMPAIGN_ID
+): Promise<string> {
+  const res = await fetch("/api/streak/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ walletAddress, campaignId }),
+    cache: "no-store",
+  });
+
+  const data = (await res.json().catch(() => ({}))) as {
+    token?: string;
+    error?: string;
+    code?: string;
+  };
+
+  if (!res.ok || !data.token) {
+    throw new SessionRefreshError(
+      data.error ?? "Could not restore your session from daily check-in.",
+      data.code
+    );
+  }
+
+  setWalletSessionToken(data.token);
+  return data.token;
+}
+
 /**
  * Primary MiniPay sign-in: on-chain `checkIn` on ArcadeXRewards
  * (`0x0139e8CF3Cd43b0c0Cc8b4d75DAE6C6b3e41DE85`) + `/api/streak/sync` JWT.

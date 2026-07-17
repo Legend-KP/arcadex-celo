@@ -1,5 +1,10 @@
 import { SparkSnapshot, StoredSparkState } from "@/types";
 import { defaultSparkState, computeSparkSnapshot } from "@/lib/spark";
+import {
+  refreshSessionFromCheckIn,
+  SessionRefreshError,
+} from "@/lib/streak-client";
+import { isArcadeXRewardsConfigured } from "@/lib/arcadex-rewards";
 import { walletAuthHeaders } from "@/lib/wallet-session-client";
 
 export interface SparkApiResponse {
@@ -32,9 +37,9 @@ export interface SparkSpendResponse extends SparkApiResponse {
   spent: boolean;
 }
 
-export async function spendSpark(
+async function spendSparkOnce(
   walletAddress: string
-): Promise<SparkSpendResponse> {
+): Promise<{ ok: true; data: SparkSpendResponse } | { ok: false; error: string; status: number; code?: string }> {
   const res = await fetch("/api/sparks/spend", {
     method: "POST",
     headers: walletAuthHeaders(),
@@ -48,10 +53,43 @@ export async function spendSpark(
   };
 
   if (!res.ok) {
-    throw new Error(data.error ?? "Could not spend Spark.");
+    return {
+      ok: false,
+      error: data.error ?? "Could not spend Spark.",
+      status: res.status,
+      code: data.code,
+    };
   }
 
-  return data;
+  return { ok: true, data };
+}
+
+export async function spendSpark(
+  walletAddress: string
+): Promise<SparkSpendResponse> {
+  let result = await spendSparkOnce(walletAddress);
+
+  if (
+    !result.ok &&
+    (result.status === 401 || result.code === "UNAUTHORIZED") &&
+    isArcadeXRewardsConfigured()
+  ) {
+    try {
+      await refreshSessionFromCheckIn(walletAddress);
+      result = await spendSparkOnce(walletAddress);
+    } catch (err) {
+      if (err instanceof SessionRefreshError && err.code === "NEED_CHECKIN") {
+        throw new Error("Daily check-in required. Please check in to continue.");
+      }
+      // Fall through to original spend error below
+    }
+  }
+
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+
+  return result.data;
 }
 
 export interface InfiniteSparkActivateResponse extends SparkApiResponse {

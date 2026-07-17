@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Game } from "@/types";
+import AppFooter from "@/components/AppFooter";
 import GameCard from "@/components/GameCard";
 import Logo from "@/components/Logo";
 import SparkBatteryBar from "@/components/SparkBatteryBar";
@@ -124,6 +125,8 @@ export default function HomePage() {
             ))}
           </div>
         )}
+
+        <AppFooter />
       </div>
     </div>
   );
