@@ -685,7 +685,7 @@ export default function GameClient({
                 {pendingSubmitScore.toLocaleString()}
               </p>
               <p className="lb-submit-confirm__hint">
-                Pay a small fee in USDT or USDC. MiniPay will ask you to approve.
+                Pay $0.05 in USDT or USDC. MiniPay will ask you to approve.
               </p>
               <div className="lb-submit-confirm__actions">
                 <button
