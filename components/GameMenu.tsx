@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   gameMenuBackgroundCandidates,
   gameMenuImageCandidates,
+  getGameTutorialSeenKey,
+  getGameTutorialUrl,
   preloadGameMenuAssets,
 } from "@/lib/game-assets";
 import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
@@ -35,16 +38,83 @@ export default function GameMenu({
     () => gameMenuImageCandidates(game),
     [game]
   );
+  const tutorialSrc = useMemo(() => getGameTutorialUrl(game), [game]);
+  const tutorialSeenKey = useMemo(() => getGameTutorialSeenKey(game), [game]);
 
   const [bgIdx, setBgIdx] = useState(0);
   const [logoIdx, setLogoIdx] = useState(0);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
 
   const bgSrc = bgCandidates[bgIdx];
   const menuImageSrc = logoCandidates[logoIdx];
 
+  const dismissTutorial = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(tutorialSeenKey, "1");
+    }
+    setTutorialOpen(false);
+  }, [tutorialSeenKey]);
+
   useEffect(() => {
     preloadGameMenuAssets(game);
   }, [game]);
+
+  useEffect(() => {
+    if (!tutorialSrc || typeof window === "undefined") {
+      setTutorialOpen(false);
+      return;
+    }
+
+    const seen = window.localStorage.getItem(tutorialSeenKey) === "1";
+    setTutorialOpen(!seen);
+  }, [tutorialSrc, tutorialSeenKey]);
+
+  useEffect(() => {
+    if (!tutorialOpen) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") dismissTutorial();
+    }
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [tutorialOpen, dismissTutorial]);
+
+  const tutorialModal =
+    tutorialOpen && tutorialSrc ? (
+      <div className="game-tutorial-backdrop" role="presentation">
+        <div
+          className="game-tutorial"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${game.name} tutorial`}
+        >
+          <div className="game-tutorial-media">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={tutorialSrc}
+              alt={`${game.name} how to play`}
+              className="game-tutorial-img"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+            />
+          </div>
+          <button
+            type="button"
+            className="game-tutorial-btn"
+            onClick={dismissTutorial}
+          >
+            Let&apos;s Go
+          </button>
+        </div>
+      </div>
+    ) : null;
 
   return (
     <div className="game-menu">
@@ -68,14 +138,26 @@ export default function GameMenu({
 
       <div className="game-menu-grid" aria-hidden />
 
-      <button
-        type="button"
-        className="game-menu-back"
-        onClick={() => router.push("/")}
-        aria-label="Back to home"
-      >
-        ←
-      </button>
+      <div className="game-menu-top-actions">
+        <button
+          type="button"
+          className="game-menu-back"
+          onClick={() => router.push("/")}
+          aria-label="Back to home"
+        >
+          ←
+        </button>
+        {tutorialSrc && (
+          <button
+            type="button"
+            className="game-menu-info"
+            onClick={() => setTutorialOpen(true)}
+            aria-label="How to play"
+          >
+            i
+          </button>
+        )}
+      </div>
 
       <div className="game-menu-stack">
         {contestLive && (
@@ -140,6 +222,10 @@ export default function GameMenu({
           )}
         </div>
       </div>
+
+      {typeof document !== "undefined"
+        ? tutorialModal && createPortal(tutorialModal, document.body)
+        : tutorialModal}
     </div>
   );
 }

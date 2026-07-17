@@ -177,6 +177,9 @@ export function preloadGameMenuAssets(game: Game): void {
     ...gameMenuImageCandidates(game),
   ];
 
+  const tutorialUrl = getGameTutorialUrl(game);
+  if (tutorialUrl) urls.unshift(tutorialUrl);
+
   for (const url of urls) {
     if (!url || seen.has(url)) continue;
     seen.add(url);
@@ -186,4 +189,27 @@ export function preloadGameMenuAssets(game: Game): void {
     img.src = url;
     if (seen.size >= 5) break;
   }
+}
+
+/** Local tutorial images under public/tutorials/, keyed by game folder slug. */
+const GAME_TUTORIAL_BY_FOLDER: Record<string, string> = {
+  "coin-sort": "/tutorials/cointut.webp",
+  "dot-connect": "/tutorials/dotconnecttut.webp",
+  "math-run": "/tutorials/mathtut.webp",
+  "orbit-flow": "/tutorials/orbittut.webp",
+};
+
+function resolveTutorialKey(game: Game): string {
+  return resolveLocalGameFolder(game) ?? (slugifyGameName(game.name) || game.id);
+}
+
+/** Tutorial image URL for a game, or null when none is prepared yet. */
+export function getGameTutorialUrl(game: Game): string | null {
+  const key = resolveTutorialKey(game);
+  return GAME_TUTORIAL_BY_FOLDER[key] ?? null;
+}
+
+/** localStorage key for per-game first-time tutorial seen state. */
+export function getGameTutorialSeenKey(game: Game): string {
+  return `arcadex_tutorial_seen:${resolveTutorialKey(game)}`;
 }
