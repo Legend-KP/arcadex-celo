@@ -1039,14 +1039,6 @@ a { color: inherit; text-decoration: none; }
   color: #2563eb;
 }
 
-.app-footer__link--button {
-  background: none;
-  border: none;
-  padding: 0;
-  font-family: var(--font-body);
-  cursor: pointer;
-}
-
 .app-footer__sep {
   color: #c5d0e0;
   font-size: 12px;
@@ -1059,112 +1051,6 @@ a { color: inherit; text-decoration: none; }
   font-weight: 600;
   color: #9ca3af;
   letter-spacing: 0.02em;
-}
-
-.app-footer-faq-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  background: rgba(15, 23, 42, 0.45);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 0;
-}
-
-.app-footer-faq {
-  width: 100%;
-  max-width: 520px;
-  max-height: min(88dvh, 720px);
-  background: #fff;
-  border-radius: 20px 20px 0 0;
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.12);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.app-footer-faq__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 18px 18px 12px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.app-footer-faq__title {
-  font-family: var(--font-head);
-  font-size: 22px;
-  font-weight: 400;
-  color: var(--text);
-}
-
-.app-footer-faq__close {
-  width: 36px;
-  height: 36px;
-  border: none;
-  border-radius: 50%;
-  background: var(--surface2);
-  color: var(--muted);
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.app-footer-faq__list {
-  overflow-y: auto;
-  padding: 8px 12px 24px;
-  -webkit-overflow-scrolling: touch;
-}
-
-.app-footer-faq__item {
-  border-bottom: 1px solid var(--border);
-}
-
-.app-footer-faq__item--open {
-  background: #f8fbff;
-}
-
-.app-footer-faq__question {
-  width: 100%;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 6px;
-  border: none;
-  background: none;
-  text-align: left;
-  font-family: var(--font-body);
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.app-footer-faq__chevron {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #e8f2ff;
-  color: var(--accent3);
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.app-footer-faq__answer {
-  padding: 0 6px 14px;
-  font-size: 14px;
-  line-height: 1.55;
-  color: var(--muted);
 }
 
 /* ── Game menu (pre-play screen) ──────────────────────── */
