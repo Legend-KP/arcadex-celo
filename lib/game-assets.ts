@@ -193,10 +193,14 @@ export function preloadGameMenuAssets(game: Game): void {
 
 /** Local tutorial images under public/tutorials/, keyed by game folder slug. */
 const GAME_TUTORIAL_BY_FOLDER: Record<string, string> = {
-  "coin-sort": "/tutorials/cointut.webp",
-  "dot-connect": "/tutorials/dotconnecttut.webp",
-  "math-run": "/tutorials/mathtut.webp",
-  "orbit-flow": "/tutorials/orbittut.webp",
+  basedrop: "/tutorials/BASE-DROP.webp",
+  "base-drop": "/tutorials/BASE-DROP.webp",
+  "block-blast": "/tutorials/BLOCK-BLAST.webp",
+  "coin-sort": "/tutorials/COIN-SORT.webp",
+  "dot-connect": "/tutorials/DOT-CONNECT.webp",
+  "line-link": "/tutorials/LINE-LINK.webp",
+  "math-run": "/tutorials/MATH-RUN.webp",
+  "orbit-flow": "/tutorials/ORBIT-FLOW.webp",
 };
 
 function resolveTutorialKey(game: Game): string {
