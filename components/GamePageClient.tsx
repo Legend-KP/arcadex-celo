@@ -10,7 +10,10 @@ import LoadingScreen from "@/components/LoadingScreen";
 import NoSparksModal from "@/components/NoSparksModal";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { useSparks } from "@/components/SparkProvider";
-import { preloadGameMenuAssets } from "@/lib/game-assets";
+import {
+  loadPrimaryGameMenuImage,
+  preloadGameMenuAssets,
+} from "@/lib/game-assets";
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
@@ -18,6 +21,8 @@ export default function GamePageClient() {
   const { walletAddress } = usePlayerProfile();
   const { sparks, spendForGame } = useSparks();
   const [game, setGame] = useState<Game | null>(null);
+  const [menuImageSrc, setMenuImageSrc] = useState<string | null>(null);
+  const [menuReady, setMenuReady] = useState(false);
   const [started, setStarted] = useState(false);
   const [lbOpen, setLbOpen] = useState(false);
   const [lbMode, setLbMode] = useState<LeaderboardMode>("default");
@@ -32,6 +37,8 @@ export default function GamePageClient() {
 
     async function loadGame() {
       setLoading(true);
+      setMenuReady(false);
+      setMenuImageSrc(null);
       setError("");
 
       try {
@@ -42,18 +49,30 @@ export default function GamePageClient() {
           throw new Error(data.error ?? "Game not found.");
         }
 
-        if (!cancelled) {
-          setGame(data.game ?? null);
-          if (data.game && gameIsLive(data.game)) {
-            fetch(`/api/games/${id}/play`, { method: "POST" }).catch(() => {
-              // Play tracking is best-effort
-            });
-          }
+        const nextGame = data.game ?? null;
+        if (cancelled) return;
+
+        setGame(nextGame);
+
+        if (nextGame && gameIsLive(nextGame)) {
+          fetch(`/api/games/${id}/play`, { method: "POST" }).catch(() => {
+            // Play tracking is best-effort
+          });
+
+          // Decode fallback art before revealing the menu UI.
+          const primary = await loadPrimaryGameMenuImage(nextGame);
+          if (cancelled) return;
+          setMenuImageSrc(primary);
+          preloadGameMenuAssets(nextGame, { includeTutorial: true });
+          setMenuReady(true);
+        } else if (!cancelled) {
+          setMenuReady(true);
         }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Game not found.");
           setGame(null);
+          setMenuReady(true);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -65,10 +84,6 @@ export default function GamePageClient() {
       cancelled = true;
     };
   }, [id]);
-
-  useEffect(() => {
-    if (game) preloadGameMenuAssets(game);
-  }, [game]);
 
   const handleStart = useCallback(async () => {
     setSparkError("");
@@ -96,7 +111,7 @@ export default function GamePageClient() {
     }
   }, [walletAddress, sparks.hasInfinite, sparks.available, spendForGame]);
 
-  if (loading) {
+  if (loading || (game && gameIsLive(game) && !menuReady && !started)) {
     return <LoadingScreen message="Loading game" />;
   }
 
@@ -112,7 +127,9 @@ export default function GamePageClient() {
     return (
       <div className="coming-soon-screen">
         <p className="coming-soon-screen__title">Coming Soon</p>
-        <p className="coming-soon-screen__subtitle">{game.name} is not available yet.</p>
+        <p className="coming-soon-screen__subtitle">
+          {game.name} is not available yet.
+        </p>
         <button
           type="button"
           className="game-menu-btn game-menu-btn--back"
@@ -145,6 +162,7 @@ export default function GamePageClient() {
       {!started ? (
         <GameMenu
           game={game}
+          primaryImageSrc={menuImageSrc}
           onStart={handleStart}
           onLeaderboard={() => openLeaderboard("default")}
           starting={starting}

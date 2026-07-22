@@ -179,11 +179,9 @@ export default function PlayerProfileProvider({
       try {
         // Sign-in: ArcadeXRewards checkIn → session JWT (campaign 1 by default).
         if (isArcadeXRewardsConfigured()) {
-          // Fresh read — stale canCheckIn:true after a CeloScan-confirmed
-          // check-in would trap the user on the daily modal.
-          const status = await fetchStreakStatus(wallet, undefined, {
-            fresh: true,
-          });
+          // Prefer cached streak for fast home paint. Session mint still
+          // does a fresh on-chain read when canCheckIn is false.
+          const status = await fetchStreakStatus(wallet);
           if (cancelled) return;
           setStreakStatus(status);
 

@@ -11,10 +11,8 @@ import {
   shouldBackgroundRefreshGamesList,
   writeCachedGamesList,
 } from "@/lib/games-list-client-cache";
-import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 
 export default function HomePage() {
-  const { isReady } = usePlayerProfile();
   const [games, setGames] = useState<Game[]>(() => {
     return readCachedGamesList()?.games ?? [];
   });
@@ -24,9 +22,8 @@ export default function HomePage() {
   const [loading, setLoading] = useState(() => !readCachedGamesList());
   const [error, setError] = useState("");
 
+  // Fetch games immediately — do not wait for wallet / streak / profile.
   useEffect(() => {
-    if (!isReady) return;
-
     let cancelled = false;
     const hadCache = Boolean(readCachedGamesList());
 
@@ -39,7 +36,11 @@ export default function HomePage() {
       try {
         const res = await fetch("/api/games");
         const text = await res.text();
-        let data: { games?: Game[]; playCounts?: Record<string, number>; error?: string };
+        let data: {
+          games?: Game[];
+          playCounts?: Record<string, number>;
+          error?: string;
+        };
         try {
           data = JSON.parse(text) as {
             games?: Game[];
@@ -88,7 +89,10 @@ export default function HomePage() {
     }
 
     const onVisible = () => {
-      if (document.visibilityState === "visible" && shouldBackgroundRefreshGamesList()) {
+      if (
+        document.visibilityState === "visible" &&
+        shouldBackgroundRefreshGamesList()
+      ) {
         void loadGames(true);
       }
     };
@@ -98,7 +102,7 @@ export default function HomePage() {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [isReady]);
+  }, []);
 
   return (
     <div className="home">
@@ -111,7 +115,11 @@ export default function HomePage() {
         {error ? (
           <p className="no-games">{error}</p>
         ) : loading ? (
-          <div className="games-grid games-grid--loading" aria-busy="true" aria-label="Loading games">
+          <div
+            className="games-grid games-grid--loading"
+            aria-busy="true"
+            aria-label="Loading games"
+          >
             {Array.from({ length: 4 }, (_, i) => (
               <div key={i} className="game-card-skeleton" aria-hidden />
             ))}
@@ -120,11 +128,12 @@ export default function HomePage() {
           <p className="no-games">No games yet. Check back soon!</p>
         ) : (
           <div className="games-grid">
-            {games.map((game) => (
+            {games.map((game, index) => (
               <GameCard
                 key={game.id}
                 game={game}
                 playCount={playCounts[game.id] ?? 0}
+                priority={index < 4}
               />
             ))}
           </div>

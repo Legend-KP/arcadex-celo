@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   gameAssetCandidates,
   gameFallbackCandidates,
@@ -13,9 +13,15 @@ import { Game, gameHasContestLive, gameIsLive } from "@/types";
 interface GameCardProps {
   game: Game;
   playCount?: number;
+  /** Eager-load above-the-fold thumbs; lazy-load the rest. */
+  priority?: boolean;
 }
 
-export default function GameCard({ game, playCount = 0 }: GameCardProps) {
+export default function GameCard({
+  game,
+  playCount = 0,
+  priority = false,
+}: GameCardProps) {
   const isLive = gameIsLive(game);
   const contestLive = gameHasContestLive(game);
 
@@ -36,13 +42,16 @@ export default function GameCard({ game, playCount = 0 }: GameCardProps) {
   const [logoIdx, setLogoIdx] = useState(0);
   const [fallbackIdx, setFallbackIdx] = useState(0);
 
-  useEffect(() => {
-    preloadGameMenuAssets(game);
-  }, [game]);
-
   const thumbSrc = thumbCandidates[thumbIdx];
   const logoSrc = logoCandidates[logoIdx];
   const fallbackSrc = fallbackCandidates[fallbackIdx];
+
+  const imgLoading = priority ? "eager" : "lazy";
+  const imgPriority = priority ? ("high" as const) : ("auto" as const);
+
+  const warmMenu = () => {
+    if (isLive) preloadGameMenuAssets(game);
+  };
 
   const thumbContent = thumbSrc ? (
     // eslint-disable-next-line @next/next/no-img-element
@@ -50,6 +59,9 @@ export default function GameCard({ game, playCount = 0 }: GameCardProps) {
       src={thumbSrc}
       alt={game.name}
       className="thumb-img"
+      loading={imgLoading}
+      fetchPriority={imgPriority}
+      decoding="async"
       onError={() => setThumbIdx((i) => i + 1)}
     />
   ) : logoSrc ? (
@@ -58,6 +70,9 @@ export default function GameCard({ game, playCount = 0 }: GameCardProps) {
       src={logoSrc}
       alt={game.name}
       className="thumb-img"
+      loading={imgLoading}
+      fetchPriority={imgPriority}
+      decoding="async"
       onError={() => setLogoIdx((i) => i + 1)}
     />
   ) : fallbackSrc ? (
@@ -66,10 +81,13 @@ export default function GameCard({ game, playCount = 0 }: GameCardProps) {
       src={fallbackSrc}
       alt={game.name}
       className="thumb-img"
+      loading={imgLoading}
+      fetchPriority={imgPriority}
+      decoding="async"
       onError={() => setFallbackIdx((i) => i + 1)}
     />
   ) : (
-    <div className="thumb-placeholder">🎮</div>
+    <div className="thumb-placeholder" aria-hidden />
   );
 
   const cardBody = (
@@ -112,7 +130,13 @@ export default function GameCard({ game, playCount = 0 }: GameCardProps) {
   }
 
   return (
-    <Link href={`/game/${game.id}`} className={cardClass}>
+    <Link
+      href={`/game/${game.id}`}
+      className={cardClass}
+      prefetch={false}
+      onPointerEnter={warmMenu}
+      onTouchStart={warmMenu}
+    >
       {cardBody}
     </Link>
   );

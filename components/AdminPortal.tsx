@@ -14,6 +14,7 @@ import {
   updateAdminGame,
 } from "@/lib/admin-api";
 import { sortGames } from "@/lib/game-sort";
+import { normalizeImageAssetUrl } from "@/lib/game-assets";
 import { getContestStatus } from "@/lib/contest";
 import {
   Game,
@@ -122,7 +123,7 @@ export default function AdminPortal() {
         thumbnail: thumbnail.trim(),
         url: url.trim(),
         plays: plays.trim() || "0",
-        fallbackImage: fallbackImage.trim(),
+        fallbackImage: normalizeImageAssetUrl(fallbackImage),
         active: true,
         live,
         hasLeaderboard,
@@ -198,7 +199,7 @@ export default function AdminPortal() {
     setEditThumbnail(game.thumbnail);
     setEditUrl(game.url);
     setEditPlays(game.plays);
-    setEditFallbackImage(game.fallbackImage || "");
+    setEditFallbackImage(normalizeImageAssetUrl(game.fallbackImage));
     setEditHasLeaderboard(gameHasLeaderboard(game));
     setEditLive(gameIsLive(game));
   }
@@ -222,7 +223,7 @@ export default function AdminPortal() {
         thumbnail: editThumbnail.trim(),
         url: editUrl.trim(),
         plays: editPlays.trim() || "0",
-        fallbackImage: editFallbackImage.trim(),
+        fallbackImage: normalizeImageAssetUrl(editFallbackImage),
         hasLeaderboard: editHasLeaderboard,
         live: editLive,
       });
@@ -425,12 +426,15 @@ export default function AdminPortal() {
               value={fallbackImage}
               onChange={(e) => setFallbackImage(e.target.value)}
             />
-            {fallbackImage && (
+            {normalizeImageAssetUrl(fallbackImage) ? (
               <div className="thumb-preview-wrap">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={fallbackImage} alt="fallback preview" />
+                <img
+                  src={normalizeImageAssetUrl(fallbackImage)}
+                  alt="fallback preview"
+                />
               </div>
-            )}
+            ) : null}
           </div>
           <label className="form-checkbox">
             <input
@@ -537,12 +541,15 @@ export default function AdminPortal() {
                       value={editFallbackImage}
                       onChange={(e) => setEditFallbackImage(e.target.value)}
                     />
-                    {editFallbackImage && (
+                    {normalizeImageAssetUrl(editFallbackImage) ? (
                       <div className="thumb-preview-wrap">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={editFallbackImage} alt="fallback preview" />
+                        <img
+                          src={normalizeImageAssetUrl(editFallbackImage)}
+                          alt="fallback preview"
+                        />
                       </div>
-                    )}
+                    ) : null}
                   </div>
                   <label className="form-checkbox">
                     <input
@@ -599,15 +606,16 @@ export default function AdminPortal() {
                     ⠿
                   </button>
                   <div className="admin-thumb">
-                    {g.thumbnail ? (
+                    {normalizeImageAssetUrl(g.thumbnail) ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={g.thumbnail} alt={g.name} />
-                    ) : g.fallbackImage ? (
+                      <img src={normalizeImageAssetUrl(g.thumbnail)} alt={g.name} />
+                    ) : normalizeImageAssetUrl(g.fallbackImage) ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={g.fallbackImage} alt={g.name} />
-                    ) : (
-                      <span>🎮</span>
-                    )}
+                      <img
+                        src={normalizeImageAssetUrl(g.fallbackImage)}
+                        alt={g.name}
+                      />
+                    ) : null}
                   </div>
                   <div className="admin-game-info">
                     <p className="admin-game-name">{g.name}</p>

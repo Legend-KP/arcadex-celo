@@ -11,8 +11,44 @@ const LOCAL_GAME_FOLDERS = [
   "orbit-flow",
 ] as const;
 
+/** Root-level logos under public/games/ for titles without a folder. */
+const ROOT_GAME_LOGOS: Record<string, string> = {
+  "arrow-out": "/games/arrowout-logo.webp",
+  arrowout: "/games/arrowout-logo.webp",
+  burger: "/games/burger-logo.webp",
+  "burger-game": "/games/burger-logo.webp",
+  cake: "/games/cake-logo.webp",
+  "cake-sort": "/games/cake-logo.webp",
+  dunk: "/games/Dunk-logo.webp",
+  "dunk-master": "/games/Dunk-logo.webp",
+  sanddrop: "/games/sanddrop-logo.webp",
+  "sand-drop": "/games/sanddrop-logo.webp",
+};
+
 export function slugifyGameName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+/**
+ * Accept only real image paths/URLs. Rejects legacy emoji values (e.g. "🎮")
+ * that were previously stored in Firestore as fallbackImage / emoji.
+ */
+export function normalizeImageAssetUrl(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  // Paths and absolute URLs only — never emoji / plain text.
+  if (
+    trimmed.startsWith("/") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("data:image/")
+  ) {
+    return trimmed;
+  }
+
+  return "";
 }
 
 function isFirestoreAutoId(id: string): boolean {
@@ -44,10 +80,13 @@ function pushLocalGameAssets(
     push(`/thumbnails/${folder}.webp`);
   }
 
+  // Prefer webp; only fall through to png when webp is absent (e.g. block-blast).
   push(`/games/${folder}/logo.webp`);
   push(`/games/${folder}/logo.png`);
-  push(`/games/${folder}/thumbnail.webp`);
-  push(`/games/${folder}/thumbnail.png`);
+  if (kind === "thumbnail") {
+    push(`/games/${folder}/thumbnail.webp`);
+    push(`/games/${folder}/thumbnail.png`);
+  }
 }
 
 /** Local / remote asset URLs to try, in priority order. */
@@ -60,9 +99,10 @@ export function gameAssetCandidates(
   const out: string[] = [];
 
   const push = (url?: string) => {
-    if (!url?.trim() || seen.has(url)) return;
-    seen.add(url);
-    out.push(url);
+    const normalized = normalizeImageAssetUrl(url);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    out.push(normalized);
   };
 
   const localFolder = resolveLocalGameFolder(game);
@@ -85,24 +125,29 @@ export function gameAssetCandidates(
   const nameSlug = slugifyGameName(game.name);
   if (nameSlug) {
     pushLocalGameAssets(push, nameSlug, kind);
+    push(ROOT_GAME_LOGOS[nameSlug]);
   }
 
   const id = game.id.trim().toLowerCase();
   if (id && !isFirestoreAutoId(id)) {
     pushLocalGameAssets(push, id, kind);
+    push(ROOT_GAME_LOGOS[id]);
   }
 
   return out;
 }
 
+/**
+ * Menu / card fallback URLs — prefer known-good files first to avoid
+ * multi-step 404 cascades before the image appears.
+ */
 function pushLocalMenuAssets(push: (url?: string) => void, folder: string) {
   const prefix = folder.split("-")[0];
+  // Real assets on disk today: coin-logo / line-logo, else logo.webp|.png
   push(`/games/${folder}/${prefix}-logo.webp`);
-  push(`/games/${folder}/${prefix}-logo.png`);
-  push(`/games/${folder}/fallback.webp`);
-  push(`/games/${folder}/fallback.png`);
   push(`/games/${folder}/logo.webp`);
   push(`/games/${folder}/logo.png`);
+  push(`/games/${folder}/fallback.webp`);
 }
 
 /** Fallback image URLs when thumbnail and logo are unavailable. */
@@ -111,10 +156,14 @@ export function gameFallbackCandidates(game: Game): string[] {
   const out: string[] = [];
 
   const push = (url?: string) => {
-    if (!url?.trim() || seen.has(url)) return;
-    seen.add(url);
-    out.push(url);
+    const normalized = normalizeImageAssetUrl(url);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    out.push(normalized);
   };
+
+  // Admin-configured fallback is the fastest path when set.
+  push(game.fallbackImage);
 
   const localFolder = resolveLocalGameFolder(game);
   if (localFolder) {
@@ -124,9 +173,13 @@ export function gameFallbackCandidates(game: Game): string[] {
   const nameSlug = slugifyGameName(game.name);
   if (nameSlug && nameSlug !== localFolder) {
     pushLocalMenuAssets(push, nameSlug);
+    push(ROOT_GAME_LOGOS[nameSlug]);
   }
 
-  push(game.fallbackImage);
+  const id = game.id.trim().toLowerCase();
+  if (id && !isFirestoreAutoId(id) && id !== localFolder && id !== nameSlug) {
+    push(ROOT_GAME_LOGOS[id]);
+  }
 
   return out;
 }
@@ -137,9 +190,10 @@ export function gameMenuImageCandidates(game: Game): string[] {
   const out: string[] = [];
 
   const push = (url?: string) => {
-    if (!url?.trim() || seen.has(url)) return;
-    seen.add(url);
-    out.push(url);
+    const normalized = normalizeImageAssetUrl(url);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    out.push(normalized);
   };
 
   for (const url of gameFallbackCandidates(game)) push(url);
@@ -155,9 +209,10 @@ export function gameMenuBackgroundCandidates(game: Game): string[] {
   const out: string[] = [];
 
   const push = (url?: string) => {
-    if (!url?.trim() || seen.has(url)) return;
-    seen.add(url);
-    out.push(url);
+    const normalized = normalizeImageAssetUrl(url);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    out.push(normalized);
   };
 
   for (const url of gameFallbackCandidates(game)) push(url);
@@ -167,27 +222,90 @@ export function gameMenuBackgroundCandidates(game: Game): string[] {
   return out;
 }
 
-/** Warm the browser cache for menu images before the menu mounts. */
-export function preloadGameMenuAssets(game: Game): void {
+/** Primary menu hero image — load this before revealing the game menu. */
+export function getPrimaryGameMenuImage(game: Game): string | null {
+  return gameMenuImageCandidates(game)[0] ?? null;
+}
+
+/**
+ * Decode the primary fallback/menu image. Resolves once the bytes are ready
+ * (or after a short timeout / error) so the menu can paint with art first.
+ */
+export function loadPrimaryGameMenuImage(game: Game): Promise<string | null> {
+  if (typeof window === "undefined") {
+    return Promise.resolve(getPrimaryGameMenuImage(game));
+  }
+
+  const urls = gameMenuImageCandidates(game);
+  if (urls.length === 0) return Promise.resolve(null);
+
+  return new Promise((resolve) => {
+    let cancelled = false;
+    let idx = 0;
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) {
+        cancelled = true;
+        resolve(urls[0] ?? null);
+      }
+    }, 2500);
+
+    const tryNext = () => {
+      if (cancelled) return;
+      const url = urls[idx];
+      if (!url) {
+        window.clearTimeout(timeout);
+        cancelled = true;
+        resolve(null);
+        return;
+      }
+
+      const img = new Image();
+      img.decoding = "async";
+      img.fetchPriority = "high";
+      img.onload = () => {
+        if (cancelled) return;
+        window.clearTimeout(timeout);
+        cancelled = true;
+        resolve(url);
+      };
+      img.onerror = () => {
+        if (cancelled) return;
+        idx += 1;
+        tryNext();
+      };
+      img.src = url;
+    };
+
+    tryNext();
+  });
+}
+
+/**
+ * Warm only the primary menu image (and optional tutorial on the game page).
+ * Keep this light — calling from the home grid was starving card thumbnails.
+ */
+export function preloadGameMenuAssets(
+  game: Game,
+  opts?: { includeTutorial?: boolean }
+): void {
   if (typeof window === "undefined") return;
 
-  const seen = new Set<string>();
-  const urls = [
-    ...gameMenuBackgroundCandidates(game),
-    ...gameMenuImageCandidates(game),
-  ];
-
-  const tutorialUrl = getGameTutorialUrl(game);
-  if (tutorialUrl) urls.unshift(tutorialUrl);
-
-  for (const url of urls) {
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
+  const primary = getPrimaryGameMenuImage(game);
+  if (primary) {
     const img = new Image();
     img.fetchPriority = "high";
     img.decoding = "async";
-    img.src = url;
-    if (seen.size >= 5) break;
+    img.src = primary;
+  }
+
+  if (opts?.includeTutorial) {
+    const tutorialUrl = getGameTutorialUrl(game);
+    if (tutorialUrl && tutorialUrl !== primary) {
+      const img = new Image();
+      img.fetchPriority = "low";
+      img.decoding = "async";
+      img.src = tutorialUrl;
+    }
   }
 }
 

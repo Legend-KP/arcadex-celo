@@ -18,6 +18,7 @@ import {
 } from "@/lib/rtdb-server";
 import { Game, GameGatingFlags } from "@/types";
 import { getFirebaseAccessToken, getProjectId, getServiceAccount } from "@/lib/firebase-admin";
+import { normalizeImageAssetUrl } from "@/lib/game-assets";
 
 type FirestoreValue = {
   stringValue?: string;
@@ -50,8 +51,8 @@ function docToGame(doc: FirestoreDocument): Game {
     logo: parseField(fields.logo) as string | undefined,
     url: String(parseField(fields.url) ?? ""),
     plays: String(parseField(fields.plays) ?? "0"),
-    fallbackImage: String(
-      parseField(fields.fallbackImage) ?? parseField(fields.emoji) ?? ""
+    fallbackImage: normalizeImageAssetUrl(
+      parseField(fields.fallbackImage)
     ),
     active: parseField(fields.active) !== false,
     live: parseField(fields.live) !== false,

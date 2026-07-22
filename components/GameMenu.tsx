@@ -8,12 +8,13 @@ import {
   gameMenuImageCandidates,
   getGameTutorialSeenKey,
   getGameTutorialUrl,
-  preloadGameMenuAssets,
 } from "@/lib/game-assets";
 import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
 
 interface GameMenuProps {
   game: Game;
+  /** Pre-decoded fallback/hero image — preferred over candidate cascade. */
+  primaryImageSrc?: string | null;
   onStart: () => void | Promise<void>;
   onLeaderboard: () => void;
   starting?: boolean;
@@ -22,6 +23,7 @@ interface GameMenuProps {
 
 export default function GameMenu({
   game,
+  primaryImageSrc = null,
   onStart,
   onLeaderboard,
   starting = false,
@@ -30,14 +32,22 @@ export default function GameMenu({
   const router = useRouter();
   const contestLive = gameHasContestLive(game);
 
-  const bgCandidates = useMemo(
-    () => gameMenuBackgroundCandidates(game),
-    [game]
-  );
-  const logoCandidates = useMemo(
-    () => gameMenuImageCandidates(game),
-    [game]
-  );
+  const bgCandidates = useMemo(() => {
+    const list = gameMenuBackgroundCandidates(game);
+    if (primaryImageSrc) {
+      return [primaryImageSrc, ...list.filter((u) => u !== primaryImageSrc)];
+    }
+    return list;
+  }, [game, primaryImageSrc]);
+
+  const logoCandidates = useMemo(() => {
+    const list = gameMenuImageCandidates(game);
+    if (primaryImageSrc) {
+      return [primaryImageSrc, ...list.filter((u) => u !== primaryImageSrc)];
+    }
+    return list;
+  }, [game, primaryImageSrc]);
+
   const tutorialSrc = useMemo(() => getGameTutorialUrl(game), [game]);
   const tutorialSeenKey = useMemo(() => getGameTutorialSeenKey(game), [game]);
 
@@ -56,8 +66,9 @@ export default function GameMenu({
   }, [tutorialSeenKey]);
 
   useEffect(() => {
-    preloadGameMenuAssets(game);
-  }, [game]);
+    setBgIdx(0);
+    setLogoIdx(0);
+  }, [game.id, primaryImageSrc]);
 
   useEffect(() => {
     if (!tutorialSrc || typeof window === "undefined") {
@@ -186,7 +197,7 @@ export default function GameMenu({
                 onError={() => setLogoIdx((i) => i + 1)}
               />
             ) : (
-              <span className="game-menu-logo-fallback">🎮</span>
+              <span className="game-menu-logo-fallback" aria-hidden />
             )}
           </div>
         </div>

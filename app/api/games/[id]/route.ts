@@ -10,6 +10,7 @@ import {
   isGameVisible,
   updateGameOnServer,
 } from "@/lib/firestore-server";
+import { normalizeImageAssetUrl } from "@/lib/game-assets";
 import { Game } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +44,15 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = (await request.json()) as Partial<Omit<Game, "id">>;
+    if ("fallbackImage" in body) {
+      body.fallbackImage = normalizeImageAssetUrl(body.fallbackImage);
+    }
+    if ("thumbnail" in body) {
+      body.thumbnail = normalizeImageAssetUrl(body.thumbnail);
+    }
+    if ("logo" in body) {
+      body.logo = normalizeImageAssetUrl(body.logo) || undefined;
+    }
     await updateGameOnServer(id, body);
     return NextResponse.json({ ok: true });
   } catch (err) {

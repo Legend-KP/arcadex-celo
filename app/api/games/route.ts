@@ -14,6 +14,7 @@ import {
   fetchGamesFromServer,
   isGameVisible,
 } from "@/lib/firestore-server";
+import { normalizeImageAssetUrl } from "@/lib/game-assets";
 import { fetchAllGamePlayCounts } from "@/lib/rtdb-server";
 import {
   checkRateLimit,
@@ -110,7 +111,7 @@ export async function POST(request: Request) {
       thumbnail: body.thumbnail?.trim() ?? "",
       url: body.url.trim(),
       plays: body.plays?.trim() || "0",
-      fallbackImage: body.fallbackImage?.trim() ?? "",
+      fallbackImage: normalizeImageAssetUrl(body.fallbackImage),
       active: body.active ?? true,
       live: body.live !== false,
       hasLeaderboard: body.hasLeaderboard !== false,

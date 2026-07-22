@@ -983,10 +983,7 @@ a { color: inherit; text-decoration: none; }
 .thumb-placeholder {
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 52px;
+  background: linear-gradient(160deg, #e8eaf0 0%, #f4f5f8 55%, #eceef3 100%);
 }
 
 .card-info {
@@ -1315,8 +1312,12 @@ a { color: inherit; text-decoration: none; }
   display: block;
 }
 .game-menu-logo-fallback {
-  font-size: 80px;
-  line-height: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 160px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #e8eaf0 0%, #f4f5f8 55%, #eceef3 100%);
 }
 
 .game-menu-actions {
@@ -3161,7 +3162,6 @@ a { color: inherit; text-decoration: none; }
   background: var(--surface2);
   flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 22px;
 }
 .admin-thumb img { width: 100%; height: 100%; object-fit: cover; }
 
