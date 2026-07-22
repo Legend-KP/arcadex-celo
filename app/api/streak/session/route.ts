@@ -3,7 +3,7 @@ import {
   DEFAULT_STREAK_CAMPAIGN_ID,
   isArcadeXRewardsConfigured,
 } from "@/lib/arcadex-rewards";
-import { readStreakProgress } from "@/lib/arcadex-rewards-verify";
+import { getStreakProgressCached } from "@/lib/streak-progress-cache";
 import {
   checkRateLimit,
   getClientIp,
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       return rateLimitResponse();
     }
 
-    const status = await readStreakProgress(wallet, campaignId);
+    const status = await getStreakProgressCached(wallet, campaignId);
     const nowSec = Math.floor(Date.now() / 1000);
     const lastCheckInAt = Number(status.lastCheckInAt) || 0;
     const ageSec = lastCheckInAt > 0 ? nowSec - lastCheckInAt : Number.POSITIVE_INFINITY;

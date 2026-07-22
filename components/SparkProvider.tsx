@@ -58,7 +58,7 @@ export default function SparkProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { walletAddress } = usePlayerProfile();
+  const { walletAddress, isReady } = usePlayerProfile();
   const [state, setState] = useState<StoredSparkState>(
     () => localSparkData().state
   );
@@ -114,9 +114,11 @@ export default function SparkProvider({
   }, [walletAddress]);
 
   useEffect(() => {
-    if (!walletAddress) {
-      setState(localSparkData().state);
-      setLoading(false);
+    if (!walletAddress || !isReady) {
+      if (!walletAddress) {
+        setState(localSparkData().state);
+      }
+      setLoading(!isReady && Boolean(walletAddress));
       return;
     }
 
@@ -138,7 +140,7 @@ export default function SparkProvider({
     return () => {
       cancelled = true;
     };
-  }, [walletAddress]);
+  }, [walletAddress, isReady]);
 
   useEffect(() => {
     if (!walletAddress) return;

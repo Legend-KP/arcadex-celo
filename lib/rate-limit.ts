@@ -3,30 +3,19 @@
  * Falls back to per-isolate memory for local `next dev` only.
  */
 
+import { getWorkerKv } from "@/lib/worker-kv";
+
 type RateBucket = { count: number; resetAt: number };
 
 const memoryBuckets = new Map<string, RateBucket>();
 
-type KvLike = {
-  get(key: string): Promise<string | null>;
-  put(
-    key: string,
-    value: string,
-    options?: { expirationTtl?: number }
-  ): Promise<void>;
-};
+type KvLike = NonNullable<Awaited<ReturnType<typeof getWorkerKv>>>;
 
 let warnedMissingKv = false;
 
 async function getRateLimitKv(): Promise<KvLike | null> {
-  try {
-    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-    const ctx = await getCloudflareContext({ async: true });
-    const env = ctx.env as { RATE_LIMIT_KV?: KvLike };
-    if (env.RATE_LIMIT_KV) return env.RATE_LIMIT_KV;
-  } catch {
-    // Not running inside a Cloudflare Worker (e.g. local next dev).
-  }
+  const kv = await getWorkerKv();
+  if (kv) return kv;
 
   if (process.env.NODE_ENV === "production" && !warnedMissingKv) {
     warnedMissingKv = true;

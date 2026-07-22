@@ -190,21 +190,21 @@ export default function PlayerProfileProvider({
             return;
           }
 
-          // Already checked in today — mint a fresh JWT from on-chain check-in.
-          // Do not trust a stale local token (e.g. after WALLET_SESSION_SECRET change).
-          try {
-            await refreshSessionFromCheckIn(wallet);
-          } catch (err) {
-            if (
-              err instanceof SessionRefreshError &&
-              err.code === "NEED_CHECKIN"
-            ) {
-              clearWalletSessionToken();
-              setShowCheckIn(true);
-              setIsReady(true);
-              return;
+          if (!hasValidWalletSession(wallet)) {
+            try {
+              await refreshSessionFromCheckIn(wallet);
+            } catch (err) {
+              if (
+                err instanceof SessionRefreshError &&
+                err.code === "NEED_CHECKIN"
+              ) {
+                clearWalletSessionToken();
+                setShowCheckIn(true);
+                setIsReady(true);
+                return;
+              }
+              throw err;
             }
-            throw err;
           }
         } else if (!hasValidWalletSession(wallet)) {
           try {

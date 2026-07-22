@@ -11,8 +11,10 @@ import {
   shouldBackgroundRefreshGamesList,
   writeCachedGamesList,
 } from "@/lib/games-list-client-cache";
+import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 
 export default function HomePage() {
+  const { isReady } = usePlayerProfile();
   const [games, setGames] = useState<Game[]>(() => {
     return readCachedGamesList()?.games ?? [];
   });
@@ -23,6 +25,8 @@ export default function HomePage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!isReady) return;
+
     let cancelled = false;
     const hadCache = Boolean(readCachedGamesList());
 
@@ -94,7 +98,7 @@ export default function HomePage() {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+  }, [isReady]);
 
   return (
     <div className="home">

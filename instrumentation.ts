@@ -1,20 +1,18 @@
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME === "edge") {
-    // Edge middleware must stay lightweight; full secret assert runs on Node/Worker handlers.
     return;
   }
 
-  try {
-    const { assertRequiredSecrets } = await import("@/lib/required-secrets");
-    assertRequiredSecrets();
-  } catch (err) {
-    // Surface clearly in Worker/logs; production routes still fail closed via requireWalletAuth.
+  // Keep instrumentation lightweight — full secret assert runs in API routes
+  // (requireWalletAuth). Avoids heavy dynamic imports during page SSR boot.
+  const missing: string[] = [];
+  if (!process.env.WALLET_SESSION_SECRET?.trim()) {
+    missing.push("WALLET_SESSION_SECRET");
+  }
+
+  if (missing.length > 0 && process.env.NODE_ENV === "production") {
     console.error(
-      "[ArcadeX] Startup secret check failed:",
-      err instanceof Error ? err.message : err
+      `[ArcadeX] Missing secrets: ${missing.join(", ")}. Auth routes will return 503 until configured.`
     );
-    if (process.env.NODE_ENV === "production") {
-      throw err;
-    }
   }
 }

@@ -21,6 +21,10 @@
 	"observability": {
 		"enabled": true
 	},
+	// Requires Workers Paid — raises CPU from 10 ms (Free) to 30 s default.
+	"limits": {
+		"cpu_ms": 30000
+	},
 	"kv_namespaces": [
 		{
 			"binding": "RATE_LIMIT_KV",

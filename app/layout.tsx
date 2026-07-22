@@ -3,8 +3,6 @@ import "./globals.css";
 import AppProviders from "@/components/AppProviders";
 import { readFirebaseConfigFromEnv } from "@/lib/firebase-config";
 
-export const dynamic = "force-dynamic";
-
 export const metadata: Metadata = {
   title: "ArcadeX",
   description: "Play fun mini-games on ArcadeX",

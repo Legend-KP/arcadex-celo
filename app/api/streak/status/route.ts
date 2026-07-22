@@ -3,7 +3,7 @@ import {
   DEFAULT_STREAK_CAMPAIGN_ID,
   isArcadeXRewardsConfigured,
 } from "@/lib/arcadex-rewards";
-import { readStreakProgress } from "@/lib/arcadex-rewards-verify";
+import { STREAK_PROGRESS_CACHE_MS, getStreakProgressCached } from "@/lib/streak-progress-cache";
 import {
   checkRateLimit,
   getClientIp,
@@ -48,8 +48,17 @@ export async function GET(request: Request) {
     }
 
     const wallet = normalizeWalletAddress(rawWallet);
-    const status = await readStreakProgress(wallet, campaignId);
-    return NextResponse.json({ configured: true, ...status });
+    const status = await getStreakProgressCached(wallet, campaignId);
+    const maxAgeSec = Math.floor(STREAK_PROGRESS_CACHE_MS / 1000);
+
+    return NextResponse.json(
+      { configured: true, ...status },
+      {
+        headers: {
+          "Cache-Control": `private, max-age=${maxAgeSec}`,
+        },
+      }
+    );
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to load streak status.";

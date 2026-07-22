@@ -4,6 +4,12 @@ import {
   DEFAULT_STREAK_CAMPAIGN_ID,
 } from "@/lib/arcadex-rewards";
 import { checkInOnChain } from "@/lib/arcadex-rewards-check-in";
+import {
+  clearCachedStreakStatus,
+  readCachedStreakStatus,
+  shouldUseCachedStreakStatus,
+  writeCachedStreakStatus,
+} from "@/lib/streak-client-cache";
 import { setWalletSessionToken, walletAuthHeaders } from "@/lib/wallet-session-client";
 import type { SparkSnapshot, StoredSparkState } from "@/types";
 
@@ -35,6 +41,11 @@ export async function fetchStreakStatus(
   walletAddress: string,
   campaignId: number = DEFAULT_STREAK_CAMPAIGN_ID
 ): Promise<StreakStatus> {
+  const cached = readCachedStreakStatus(walletAddress);
+  if (cached && shouldUseCachedStreakStatus(cached)) {
+    return cached;
+  }
+
   const params = new URLSearchParams({
     walletAddress,
     campaignId: String(campaignId),
@@ -48,6 +59,7 @@ export async function fetchStreakStatus(
     throw new Error(data.error ?? "Could not load streak status.");
   }
 
+  writeCachedStreakStatus(walletAddress, data);
   return data;
 }
 
@@ -91,6 +103,7 @@ export async function syncStreakCheckIn(opts: {
   }
 
   setWalletSessionToken(data.token);
+  clearCachedStreakStatus();
   return data;
 }
 
