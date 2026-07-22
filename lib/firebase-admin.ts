@@ -97,7 +97,6 @@ export async function getFirebaseAccessToken(): Promise<string> {
 
   const data = (await res.json()) as {
     access_token?: string;
-    scope?: string;
     error?: string;
     error_description?: string;
   };
@@ -110,13 +109,9 @@ export async function getFirebaseAccessToken(): Promise<string> {
     );
   }
 
-  // Defensive scope check to catch IAM/scope regressions early.
-  const grantedScopes = String(data.scope ?? "");
-  if (!grantedScopes.includes("https://www.googleapis.com/auth/firebase.database")) {
-    throw new Error(
-      "Google access token is missing firebase.database scope. Ensure service-account IAM + OAuth scopes are configured correctly."
-    );
-  }
+  // Scopes are requested in the JWT assertion above. Google's token response often
+  // omits the `scope` field for service-account flows, so we validate success by
+  // token issuance rather than parsing an optional response field.
 
   cachedAccessToken = {
     token: data.access_token,
