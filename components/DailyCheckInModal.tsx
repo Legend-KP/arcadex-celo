@@ -21,11 +21,6 @@ interface DailyCheckInModalProps {
   }) => void;
 }
 
-type Landmark = {
-  day: number;
-  kind: "start" | "next" | "milestone";
-};
-
 function FlameIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -53,16 +48,16 @@ function CheckIcon() {
 
 function GiftIcon() {
   return (
-    <svg viewBox="0 0 32 32" fill="none" aria-hidden>
-      <rect x="6" y="14" width="20" height="14" rx="3" fill="#a78bfa" />
-      <rect x="5" y="10" width="22" height="6" rx="2" fill="#8b5cf6" />
-      <rect x="14.5" y="10" width="3" height="18" fill="#fbbf24" />
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4" y="10" width="16" height="11" rx="2" fill="#fbbf24" />
+      <rect x="3.5" y="7" width="17" height="4.5" rx="1.5" fill="#f59e0b" />
+      <rect x="10.75" y="7" width="2.5" height="14" fill="#fde68a" />
       <path
-        d="M16 10c-2.2-3.5-5.5-3.2-5.5-.4C10.5 12 13.2 12.8 16 10z"
+        d="M12 7c-1.8-2.8-4.4-2.5-4.4-.2C7.6 8.6 9.8 9.2 12 7z"
         fill="#f472b6"
       />
       <path
-        d="M16 10c2.2-3.5 5.5-3.2 5.5-.4C21.5 12 18.8 12.8 16 10z"
+        d="M12 7c1.8-2.8 4.4-2.5 4.4-.2C16.4 8.6 14.2 9.2 12 7z"
         fill="#f472b6"
       />
     </svg>
@@ -122,36 +117,18 @@ function ShieldCheckIcon() {
   );
 }
 
-function buildLandmarks(
-  requiredDays: number,
+function dayNodeState(
+  day: number,
   currentDay: number,
-  wouldReset: boolean,
-  checkInDay: number
-): Landmark[] {
-  const start: Landmark = { day: 1, kind: "start" };
-  const milestone: Landmark = { day: requiredDays, kind: "milestone" };
-
-  if (wouldReset || currentDay <= 0) {
-    return [
-      start,
-      { day: Math.min(2, requiredDays), kind: "next" },
-      milestone,
-    ];
+  checkInDay: number,
+  wouldReset: boolean
+): "done" | "today" | "upcoming" {
+  if (wouldReset) {
+    return day === 1 ? "today" : "upcoming";
   }
-
-  if (checkInDay >= requiredDays) {
-    return [
-      start,
-      { day: Math.max(2, requiredDays - 1), kind: "next" },
-      milestone,
-    ];
-  }
-
-  if (checkInDay === 1) {
-    return [start, { day: 1, kind: "next" }, milestone];
-  }
-
-  return [start, { day: checkInDay, kind: "next" }, milestone];
+  if (currentDay >= day) return "done";
+  if (checkInDay === day) return "today";
+  return "upcoming";
 }
 
 export default function DailyCheckInModal({
@@ -215,17 +192,8 @@ export default function DailyCheckInModal({
       : Math.min(currentDay + 1, requiredDays);
   const displayStreak = wouldReset ? 0 : currentDay;
   const isFinalDay = checkInDay >= requiredDays;
-  const landmarks = buildLandmarks(
-    requiredDays,
-    currentDay,
-    wouldReset,
-    checkInDay
-  );
-
-  const streakHeadline =
-    displayStreak <= 0
-      ? "Start your streak"
-      : `${displayStreak} Day${displayStreak === 1 ? "" : "s"} Streak`;
+  const days = Array.from({ length: requiredDays }, (_, i) => i + 1);
+  const giftDay = Math.min(3, requiredDays);
 
   const streakHint = wouldReset
     ? "You missed a day — check in to start fresh."
@@ -233,7 +201,9 @@ export default function DailyCheckInModal({
       ? "Check in today to begin your 7-day run."
       : isFinalDay
         ? "Final check-in unlocks Infinite Spark!"
-        : "Come back tomorrow to keep it going!";
+        : displayStreak === 1
+          ? "Nice! Come back tomorrow 🔥"
+          : "Good start! Keep it going! 🔥";
 
   const nextRewardTitle = isFinalDay
     ? `Day ${requiredDays} Reward`
@@ -242,21 +212,8 @@ export default function DailyCheckInModal({
   const nextRewardBadge = isFinalDay
     ? "Today"
     : displayStreak > 0
-      ? `${requiredDays - displayStreak} left`
+      ? `${requiredDays - displayStreak} days left`
       : `Day ${requiredDays}`;
-
-  function landmarkState(day: number): "done" | "active" | "upcoming" {
-    if (wouldReset) {
-      return day === 1 ? "active" : "upcoming";
-    }
-    if (currentDay >= day) return "done";
-    if (checkInDay === day) return "active";
-    return "upcoming";
-  }
-
-  const progressRatio = wouldReset
-    ? 0
-    : Math.min(currentDay / requiredDays, 1);
 
   async function handleCheckIn() {
     setLoading(true);
@@ -278,96 +235,98 @@ export default function DailyCheckInModal({
   return createPortal(
     <div className="player-modal-backdrop" role="dialog" aria-modal="true">
       <div className="player-modal daily-checkin-modal">
-        <div className="daily-checkin-hero-icon" aria-hidden>
-          <FlameIcon />
-        </div>
-
         <h2 className="daily-checkin-heading">
-          <span aria-hidden>🔥</span> Daily Streak{" "}
-          <span aria-hidden>🔥</span>
+          <FlameIcon className="daily-checkin-heading-flame" />
+          Daily Streak
+          <FlameIcon className="daily-checkin-heading-flame" />
         </h2>
         <p className="daily-checkin-sub">
-          Check in daily, build your streak, and unlock Infinite Spark.
+          Check in daily to keep your streak alive and earn{" "}
+          <span className="daily-checkin-sub-accent">Infinite Spark.</span>
         </p>
 
-        <section className="daily-checkin-streak-card">
-          <p className="daily-checkin-section-label daily-checkin-section-label--light">
-            Your streak
-          </p>
-          <p className="daily-checkin-streak-value">
-            <span aria-hidden>🔥</span>{" "}
-            {displayStreak > 0 ? (
-              <>
-                <span className="daily-checkin-streak-num">
-                  {displayStreak}
-                </span>{" "}
-                Day{displayStreak === 1 ? "" : "s"} Streak
-              </>
-            ) : (
-              streakHeadline
-            )}
-          </p>
-          <p className="daily-checkin-streak-hint">{streakHint}</p>
-
-          <div className="daily-checkin-landmarks">
-            {landmarks.map((landmark) => {
-              const state = landmarkState(landmark.day);
-              const isMilestone = landmark.kind === "milestone";
-              return (
-                <div
-                  key={`${landmark.kind}-${landmark.day}`}
-                  className={`daily-checkin-landmark daily-checkin-landmark--${state}${
-                    isMilestone ? " daily-checkin-landmark--milestone" : ""
-                  }`}
-                >
-                  <div className="daily-checkin-landmark-icon">
-                    {state === "done" ? (
-                      <span className="daily-checkin-check">
-                        <CheckIcon />
-                      </span>
-                    ) : isMilestone ? (
-                      <ChestIcon />
-                    ) : (
-                      <GiftIcon />
-                    )}
-                  </div>
-                  <p className="daily-checkin-landmark-day">
-                    Day {landmark.day}
-                  </p>
-                  <p className="daily-checkin-landmark-reward">
-                    {isMilestone ? "∞ Spark" : "Progress"}
-                  </p>
-                </div>
-              );
-            })}
+        <section className="daily-checkin-hero-card">
+          <div className="daily-checkin-hero-flame" aria-hidden>
+            <FlameIcon />
           </div>
-
-          <div className="daily-checkin-track" aria-hidden>
-            <div
-              className="daily-checkin-track-fill"
-              style={{ width: `${Math.max(progressRatio * 100, 4)}%` }}
-            />
-            {landmarks.map((landmark) => {
-              const left = ((landmark.day - 1) / (requiredDays - 1)) * 100;
-              const state = landmarkState(landmark.day);
-              return (
-                <span
-                  key={`node-${landmark.kind}-${landmark.day}`}
-                  className={`daily-checkin-track-node daily-checkin-track-node--${state}`}
-                  style={{ left: `${left}%` }}
-                />
-              );
-            })}
+          <div className="daily-checkin-hero-copy">
+            <p className="daily-checkin-section-label daily-checkin-section-label--light">
+              Your streak
+            </p>
+            <p className="daily-checkin-streak-value">
+              {displayStreak > 0 ? (
+                <>
+                  <span className="daily-checkin-streak-num">
+                    {displayStreak}
+                  </span>{" "}
+                  <span className="daily-checkin-streak-unit">
+                    Day{displayStreak === 1 ? "" : "s"}
+                  </span>
+                </>
+              ) : (
+                <span className="daily-checkin-streak-unit">Start today</span>
+              )}
+            </p>
+            <p className="daily-checkin-streak-hint">{streakHint}</p>
           </div>
         </section>
 
+        <section
+          className="daily-checkin-timeline"
+          aria-label={`${requiredDays}-day streak progress`}
+        >
+          {days.map((day) => {
+            const state = dayNodeState(
+              day,
+              currentDay,
+              checkInDay,
+              wouldReset
+            );
+            const isMilestone = day === requiredDays;
+            const showGift = day === giftDay && state !== "done";
+
+            return (
+              <div
+                key={day}
+                className={`daily-checkin-day daily-checkin-day--${state}${
+                  isMilestone ? " daily-checkin-day--milestone" : ""
+                }`}
+              >
+                {showGift ? (
+                  <span className="daily-checkin-day-gift" aria-hidden>
+                    <GiftIcon />
+                  </span>
+                ) : null}
+                <div className="daily-checkin-day-node">
+                  {state === "done" ? (
+                    <span className="daily-checkin-check">
+                      <CheckIcon />
+                    </span>
+                  ) : isMilestone ? (
+                    <span className="daily-checkin-day-chest" aria-hidden>
+                      <ChestIcon />
+                    </span>
+                  ) : (
+                    <span className="daily-checkin-day-num">{day}</span>
+                  )}
+                </div>
+                {state === "today" ? (
+                  <span className="daily-checkin-day-today">Today</span>
+                ) : (
+                  <span className="daily-checkin-day-label">Day {day}</span>
+                )}
+              </div>
+            );
+          })}
+        </section>
+
         <section className="daily-checkin-reward-card">
-          <p className="daily-checkin-section-label">Next reward</p>
           <div className="daily-checkin-reward-row">
             <div className="daily-checkin-reward-icon">
               <InfinitySparkIcon gradientId={`inf-${infinityGradId}`} />
             </div>
             <div className="daily-checkin-reward-copy">
+              <p className="daily-checkin-section-label">Next reward</p>
               <p className="daily-checkin-reward-title">{nextRewardTitle}</p>
               <p className="daily-checkin-reward-detail">{nextRewardDetail}</p>
             </div>
@@ -375,23 +334,22 @@ export default function DailyCheckInModal({
           </div>
         </section>
 
-        
-          {error ? <p className="daily-checkin-error">{error}</p> : null}
+        {error ? <p className="daily-checkin-error">{error}</p> : null}
 
-          <button
-            type="button"
-            className="daily-checkin-btn"
-            disabled={loading || !walletAddress}
-            onClick={handleCheckIn}
-          >
-            <span className="daily-checkin-btn-main">
-              <ShieldCheckIcon />
-              {loading ? "Unlocking…" : "Daily Check In(Free)"}
-            </span>
-            <span className="daily-checkin-btn-sub">Non-fee transaction</span>
-          </button>
-        </div>
-      </div>,
+        <button
+          type="button"
+          className="daily-checkin-btn"
+          disabled={loading || !walletAddress}
+          onClick={handleCheckIn}
+        >
+          <span className="daily-checkin-btn-main">
+            <ShieldCheckIcon />
+            {loading ? "Unlocking…" : "Daily Check In(Free)"}
+          </span>
+          <span className="daily-checkin-btn-sub">Non-fee transaction</span>
+        </button>
+      </div>
+    </div>,
     document.body
   );
 }
