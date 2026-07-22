@@ -13,9 +13,10 @@ import {
   REWARD_OFFCHAIN,
   isArcadeXRewardsConfigured,
 } from "@/lib/arcadex-rewards";
-import { getCeloPublicClient } from "@/lib/celo-public-client";
-
-const publicClient = getCeloPublicClient();
+import {
+  getCeloPublicClient,
+  waitForCeloTransactionReceipt,
+} from "@/lib/celo-public-client";
 
 export interface VerifiedCheckIn {
   player: Address;
@@ -47,7 +48,9 @@ export async function verifyCheckInTx(
 ): Promise<VerifiedCheckIn> {
   assertConfigured();
   const expectedPlayer = getAddress(walletAddress);
-  const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+  const receipt = await waitForCeloTransactionReceipt(txHash, {
+    timeoutMs: 20_000,
+  });
 
   if (receipt.status !== "success") {
     throw new Error("Check-in transaction did not succeed.");
@@ -183,6 +186,7 @@ export async function readStreakProgress(
 ) {
   assertConfigured();
   const player = getAddress(walletAddress);
+  const publicClient = getCeloPublicClient();
 
   const [progress, campaign] = await Promise.all([
     publicClient.readContract({

@@ -17,30 +17,35 @@ function cacheKey(wallet: string, campaignId: number): string {
 
 export async function getStreakProgressCached(
   wallet: string,
-  campaignId: number
+  campaignId: number,
+  opts?: { fresh?: boolean }
 ): Promise<StreakProgress> {
   const key = cacheKey(wallet, campaignId);
   const now = Date.now();
 
-  const mem = memoryCache.get(key);
-  if (mem && now < mem.expiresAt) {
-    return mem.value;
-  }
-
-  const kv = await getWorkerKv();
-  if (kv) {
-    try {
-      const raw = await kv.get(`streak:${key}`);
-      if (raw) {
-        const parsed = JSON.parse(raw) as CacheEntry;
-        if (parsed.expiresAt > now) {
-          memoryCache.set(key, parsed);
-          return parsed.value;
-        }
-      }
-    } catch {
-      // Ignore corrupt cache entries
+  if (!opts?.fresh) {
+    const mem = memoryCache.get(key);
+    if (mem && now < mem.expiresAt) {
+      return mem.value;
     }
+
+    const kv = await getWorkerKv();
+    if (kv) {
+      try {
+        const raw = await kv.get(`streak:${key}`);
+        if (raw) {
+          const parsed = JSON.parse(raw) as CacheEntry;
+          if (parsed.expiresAt > now) {
+            memoryCache.set(key, parsed);
+            return parsed.value;
+          }
+        }
+      } catch {
+        // Ignore corrupt cache entries
+      }
+    }
+  } else {
+    memoryCache.delete(key);
   }
 
   const value = await readStreakProgress(wallet, campaignId);
@@ -50,6 +55,7 @@ export async function getStreakProgressCached(
   };
   memoryCache.set(key, entry);
 
+  const kv = await getWorkerKv();
   if (kv) {
     try {
       await kv.put(`streak:${key}`, JSON.stringify(entry), {

@@ -2,7 +2,7 @@
 
 import type { Hash, Hex } from "viem";
 import { celo } from "viem/chains";
-import { getCeloPublicClient } from "@/lib/celo-public-client";
+import { waitForCeloTransactionReceipt } from "@/lib/celo-public-client";
 import { createMiniPayWalletClient } from "@/lib/minipay";
 import {
   ARCADEX_REWARDS_ABI,
@@ -14,6 +14,9 @@ import {
 /**
  * MiniPay write of ArcadeXRewards.checkIn at
  * 0x0139e8CF3Cd43b0c0Cc8b4d75DAE6C6b3e41DE85 (campaigns without eligibility use deadline=0, signature=0x).
+ *
+ * Returns the tx hash even when local receipt polling flakes — `/api/streak/sync`
+ * re-verifies on the server so a CeloScan-confirmed check-in still unlocks the app.
  */
 export async function checkInOnChain(
   campaignId: number = DEFAULT_STREAK_CAMPAIGN_ID,
@@ -46,11 +49,19 @@ export async function checkInOnChain(
     args: [BigInt(campaignId), deadline, signature],
   });
 
-  const publicClient = getCeloPublicClient();
-  const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-  if (receipt.status !== "success") {
-    throw new Error("Check-in transaction failed.");
+  try {
+    const receipt = await waitForCeloTransactionReceipt(hash);
+    if (receipt.status !== "success") {
+      throw new Error("Check-in transaction failed.");
+    }
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      err.message.includes("Check-in transaction failed.")
+    ) {
+      throw err;
+    }
+    // Tx was submitted — sync endpoint verifies the receipt server-side.
   }
 
   return { txHash: hash };

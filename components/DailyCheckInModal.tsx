@@ -1,9 +1,14 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatChainError } from "@/lib/celo-public-client";
-import { performDailyCheckIn, type StreakStatus } from "@/lib/streak-client";
+import {
+  fetchStreakStatus,
+  performDailyCheckIn,
+  refreshSessionFromCheckIn,
+  type StreakStatus,
+} from "@/lib/streak-client";
 
 interface DailyCheckInModalProps {
   open: boolean;
@@ -158,6 +163,45 @@ export default function DailyCheckInModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const infinityGradId = useId().replace(/:/g, "");
+  const recoverAttemptedRef = useRef(false);
+
+  // If the on-chain check-in already landed but session sync failed, unlock
+  // without asking the user to send another tx (which would revert TooSoon).
+  useEffect(() => {
+    if (!open || !walletAddress || recoverAttemptedRef.current) return;
+    recoverAttemptedRef.current = true;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const fresh = await fetchStreakStatus(walletAddress, undefined, {
+          fresh: true,
+        });
+        if (cancelled || fresh.canCheckIn) return;
+
+        setLoading(true);
+        await refreshSessionFromCheckIn(walletAddress);
+        if (cancelled) return;
+        onComplete({
+          day: fresh.currentDay,
+          milestone: fresh.milestoneReached,
+          infiniteSparkGranted: false,
+        });
+      } catch {
+        // Still need a check-in / user action
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, walletAddress, onComplete]);
+
+  useEffect(() => {
+    if (!open) recoverAttemptedRef.current = false;
+  }, [open]);
 
   if (!open || typeof document === "undefined") return null;
 
@@ -342,7 +386,7 @@ export default function DailyCheckInModal({
           >
             <span className="daily-checkin-btn-main">
               <ShieldCheckIcon />
-              {loading ? "Confirming…" : "Daily Check In(Free)"}
+              {loading ? "Unlocking…" : "Daily Check In(Free)"}
             </span>
             <span className="daily-checkin-btn-sub">Non-fee transaction</span>
           </button>

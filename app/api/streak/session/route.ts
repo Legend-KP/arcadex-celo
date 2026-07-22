@@ -65,7 +65,10 @@ export async function POST(request: Request) {
       return rateLimitResponse();
     }
 
-    const status = await getStreakProgressCached(wallet, campaignId);
+    // Auth gate must not use a stale canCheckIn after an on-chain check-in.
+    const status = await getStreakProgressCached(wallet, campaignId, {
+      fresh: true,
+    });
     const nowSec = Math.floor(Date.now() / 1000);
     const lastCheckInAt = Number(status.lastCheckInAt) || 0;
     const ageSec = lastCheckInAt > 0 ? nowSec - lastCheckInAt : Number.POSITIVE_INFINITY;

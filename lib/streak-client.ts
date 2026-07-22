@@ -39,17 +39,24 @@ export interface StreakStatus {
 
 export async function fetchStreakStatus(
   walletAddress: string,
-  campaignId: number = DEFAULT_STREAK_CAMPAIGN_ID
+  campaignId: number = DEFAULT_STREAK_CAMPAIGN_ID,
+  opts?: { fresh?: boolean }
 ): Promise<StreakStatus> {
-  const cached = readCachedStreakStatus(walletAddress);
-  if (cached && shouldUseCachedStreakStatus(cached)) {
-    return cached;
+  if (!opts?.fresh) {
+    const cached = readCachedStreakStatus(walletAddress);
+    if (cached && shouldUseCachedStreakStatus(cached)) {
+      return cached;
+    }
+  } else {
+    clearCachedStreakStatus();
   }
 
   const params = new URLSearchParams({
     walletAddress,
     campaignId: String(campaignId),
   });
+  if (opts?.fresh) params.set("fresh", "1");
+
   const res = await fetch(`/api/streak/status?${params}`, { cache: "no-store" });
   const data = (await res.json().catch(() => ({}))) as StreakStatus & {
     error?: string;
@@ -61,6 +68,22 @@ export async function fetchStreakStatus(
 
   writeCachedStreakStatus(walletAddress, data);
   return data;
+}
+
+/** True when the wallet already checked in today (TooSoon / interval not elapsed). */
+export function isAlreadyCheckedInError(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? `${error.message} ${error.cause instanceof Error ? error.cause.message : ""}`
+      : String(error);
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("toosoon") ||
+    lower.includes("too soon") ||
+    lower.includes("already checked") ||
+    lower.includes("streakcomplete") ||
+    lower.includes("streak complete")
+  );
 }
 
 export interface StreakSyncResult {
@@ -149,16 +172,61 @@ export async function refreshSessionFromCheckIn(
   return data.token;
 }
 
+async function sessionFromExistingCheckIn(
+  walletAddress: string,
+  campaignId: number
+): Promise<StreakSyncResult> {
+  const token = await refreshSessionFromCheckIn(walletAddress, campaignId);
+  const status = await fetchStreakStatus(walletAddress, campaignId, {
+    fresh: true,
+  });
+
+  return {
+    ok: true,
+    walletAddress,
+    day: status.currentDay,
+    campaignId,
+    milestone: status.milestoneReached,
+    token,
+    expiresIn: 24 * 60 * 60,
+    reward: null,
+  };
+}
+
 /**
  * Primary MiniPay sign-in: on-chain `checkIn` on ArcadeXRewards
  * (`0x0139e8CF3Cd43b0c0Cc8b4d75DAE6C6b3e41DE85`) + `/api/streak/sync` JWT.
+ *
+ * If the wallet already checked in today (tx on CeloScan but app never got a
+ * session), recovers via `/api/streak/session` instead of trapping the user.
  */
 export async function performDailyCheckIn(
   walletAddress: string,
   campaignId: number = DEFAULT_STREAK_CAMPAIGN_ID
 ): Promise<StreakSyncResult> {
-  const { txHash } = await checkInOnChain(campaignId);
-  return syncStreakCheckIn({ walletAddress, txHash, campaignId });
+  try {
+    const { txHash } = await checkInOnChain(campaignId);
+    return await syncStreakCheckIn({ walletAddress, txHash, campaignId });
+  } catch (err) {
+    if (isAlreadyCheckedInError(err)) {
+      return sessionFromExistingCheckIn(walletAddress, campaignId);
+    }
+
+    // RPC flake after a successful MiniPay submit, or sync failure: if chain
+    // already shows today's check-in, mint the session and let them in.
+    try {
+      const status = await fetchStreakStatus(walletAddress, campaignId, {
+        fresh: true,
+      });
+      if (!status.canCheckIn && status.lastCheckInAt > 0) {
+        return await sessionFromExistingCheckIn(walletAddress, campaignId);
+      }
+    } catch {
+      // Fall through to original error
+    }
+
+    throw err;
+  }
 }
 
 /** Alias — daily streak check-in is the app's wallet sign-in. */

@@ -179,7 +179,11 @@ export default function PlayerProfileProvider({
       try {
         // Sign-in: ArcadeXRewards checkIn → session JWT (campaign 1 by default).
         if (isArcadeXRewardsConfigured()) {
-          const status = await fetchStreakStatus(wallet);
+          // Fresh read — stale canCheckIn:true after a CeloScan-confirmed
+          // check-in would trap the user on the daily modal.
+          const status = await fetchStreakStatus(wallet, undefined, {
+            fresh: true,
+          });
           if (cancelled) return;
           setStreakStatus(status);
 

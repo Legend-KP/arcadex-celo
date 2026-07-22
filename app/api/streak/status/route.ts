@@ -48,14 +48,19 @@ export async function GET(request: Request) {
     }
 
     const wallet = normalizeWalletAddress(rawWallet);
-    const status = await getStreakProgressCached(wallet, campaignId);
-    const maxAgeSec = Math.floor(STREAK_PROGRESS_CACHE_MS / 1000);
+    const fresh = searchParams.get("fresh") === "1";
+    const status = await getStreakProgressCached(wallet, campaignId, {
+      fresh,
+    });
+    const maxAgeSec = fresh ? 0 : Math.floor(STREAK_PROGRESS_CACHE_MS / 1000);
 
     return NextResponse.json(
       { configured: true, ...status },
       {
         headers: {
-          "Cache-Control": `private, max-age=${maxAgeSec}`,
+          "Cache-Control": fresh
+            ? "private, no-store"
+            : `private, max-age=${maxAgeSec}`,
         },
       }
     );
