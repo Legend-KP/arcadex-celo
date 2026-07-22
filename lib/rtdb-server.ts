@@ -47,23 +47,24 @@ const LEADERBOARD_TOP_MIRROR_SIZE = 50;
 const CONTEST_TOP_MIRROR_SIZE = 15;
 const RTDB_TRANSACTION_MAX_RETRIES = 8;
 
-/** Prefer service-account OAuth; legacy database secret is emergency-only fallback. */
+/** Service-account OAuth only; fail closed on auth errors. */
 async function getRtdbAuthQuery(): Promise<string> {
   try {
     const token = await getFirebaseAccessToken();
     return `access_token=${encodeURIComponent(token)}`;
   } catch (oauthErr) {
-    const secret = process.env.FIREBASE_DATABASE_SECRET?.trim();
-    if (secret) {
-      console.warn(
-        "[ArcadeX] RTDB falling back to FIREBASE_DATABASE_SECRET — migrate fully to service-account OAuth and remove the legacy secret."
-      );
-      return `auth=${encodeURIComponent(secret)}`;
-    }
     const message =
       oauthErr instanceof Error ? oauthErr.message : "OAuth token unavailable";
+    // Alert-friendly security marker for log pipelines.
+    console.error(
+      `[ArcadeX][SECURITY][RTDB_AUTH] OAuth token acquisition failed: ${scrubSecrets(
+        message
+      )}`
+    );
     throw new Error(
-      `Realtime Database auth failed (${scrubSecrets(message)}). Configure FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY.`
+      `Realtime Database auth failed (${scrubSecrets(
+        message
+      )}). Configure FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, and IAM access to Firebase RTDB.`
     );
   }
 }

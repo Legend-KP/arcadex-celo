@@ -7,6 +7,7 @@ const FIREBASE_SCOPES =
 const ACCESS_TOKEN_TTL_MS = 55 * 60 * 1000;
 
 let cachedAccessToken: { token: string; expiresAt: number } | null = null;
+let warnedLegacyRtdbSecretConfigured = false;
 
 export function getProjectId(): string {
   return (
@@ -52,7 +53,22 @@ export function scrubSecrets(text: string): string {
     .replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, "Bearer REDACTED");
 }
 
+/**
+ * Legacy RTDB database secrets are a high-risk credential.
+ * Keep this as an operational warning until the secret is fully removed.
+ */
+export function warnIfLegacyRtdbSecretConfigured(): void {
+  const secret = process.env.FIREBASE_DATABASE_SECRET?.trim();
+  if (!secret || warnedLegacyRtdbSecretConfigured) return;
+  warnedLegacyRtdbSecretConfigured = true;
+  console.error(
+    "[ArcadeX][SECURITY][RTDB_AUTH] FIREBASE_DATABASE_SECRET is still configured. Rotate and remove it; OAuth service-account auth is required."
+  );
+}
+
 export async function getFirebaseAccessToken(): Promise<string> {
+  warnIfLegacyRtdbSecretConfigured();
+
   if (cachedAccessToken && Date.now() < cachedAccessToken.expiresAt) {
     return cachedAccessToken.token;
   }
@@ -79,9 +95,27 @@ export async function getFirebaseAccessToken(): Promise<string> {
     cache: "no-store",
   });
 
-  const data = (await res.json()) as { access_token?: string; error?: string };
+  const data = (await res.json()) as {
+    access_token?: string;
+    scope?: string;
+    error?: string;
+    error_description?: string;
+  };
   if (!res.ok || !data.access_token) {
-    throw new Error(data.error ?? "Could not obtain Google access token.");
+    const status = res.status;
+    const err = data.error ?? "oauth_token_request_failed";
+    const desc = data.error_description ?? "No OAuth error description provided.";
+    throw new Error(
+      `Could not obtain Google access token (${status} ${err}): ${scrubSecrets(desc)}`
+    );
+  }
+
+  // Defensive scope check to catch IAM/scope regressions early.
+  const grantedScopes = String(data.scope ?? "");
+  if (!grantedScopes.includes("https://www.googleapis.com/auth/firebase.database")) {
+    throw new Error(
+      "Google access token is missing firebase.database scope. Ensure service-account IAM + OAuth scopes are configured correctly."
+    );
   }
 
   cachedAccessToken = {

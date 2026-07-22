@@ -15,4 +15,10 @@ export async function register(): Promise<void> {
       `[ArcadeX] Missing secrets: ${missing.join(", ")}. Auth routes will return 503 until configured.`
     );
   }
+
+  if (process.env.FIREBASE_DATABASE_SECRET?.trim() && process.env.NODE_ENV === "production") {
+    console.error(
+      "[ArcadeX][SECURITY][RTDB_AUTH] FIREBASE_DATABASE_SECRET is configured. Rotate and remove this legacy credential."
+    );
+  }
 }
