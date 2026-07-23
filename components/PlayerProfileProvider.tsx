@@ -12,7 +12,8 @@ import {
 import DailyCheckInModal from "@/components/DailyCheckInModal";
 import DailyShuffleModal from "@/components/DailyShuffleModal";
 import PlayerNameModal from "@/components/PlayerNameModal";
-import { isShuffleDailyPlay } from "@/lib/daily-play-mode";
+import { fetchDailyPlayConfig } from "@/lib/daily-play-config-client";
+import type { DailyPlayMode } from "@/lib/daily-play-mode";
 import {
   bootstrapPlayerProfile,
   fetchPlayerProfile,
@@ -100,6 +101,8 @@ export default function PlayerProfileProvider({
   const [isReady, setIsReady] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
+  const [dailyPlayMode, setDailyPlayMode] = useState<DailyPlayMode>("streak");
+  const [dailyCampaignId, setDailyCampaignId] = useState(1);
   const [streakStatus, setStreakStatus] = useState<StreakStatus | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -113,7 +116,12 @@ export default function PlayerProfileProvider({
       return;
     }
     try {
-      const status = await fetchStreakStatus(wallet);
+      const config = await fetchDailyPlayConfig();
+      setDailyPlayMode(config.mode);
+      setDailyCampaignId(config.campaignId);
+      const status = await fetchStreakStatus(wallet, config.campaignId, {
+        fresh: config.shuffle,
+      });
       setStreakStatus(status);
     } catch {
       // Status is best-effort for UI
@@ -181,10 +189,14 @@ export default function PlayerProfileProvider({
       try {
         // Sign-in: ArcadeXRewards checkIn/spin → session JWT.
         if (isArcadeXRewardsConfigured()) {
-          // Always fresh when switching campaigns/modes so streak cache
-          // cannot hide the shuffle gate after a prior campaign-1 check-in.
-          const status = await fetchStreakStatus(wallet, undefined, {
-            fresh: isShuffleDailyPlay(),
+          // Runtime config (Cloudflare vars) — do not rely on build-time NEXT_PUBLIC alone.
+          const config = await fetchDailyPlayConfig({ fresh: true });
+          if (cancelled) return;
+          setDailyPlayMode(config.mode);
+          setDailyCampaignId(config.campaignId);
+
+          const status = await fetchStreakStatus(wallet, config.campaignId, {
+            fresh: true,
           });
           if (cancelled) return;
           setStreakStatus(status);
@@ -198,7 +210,7 @@ export default function PlayerProfileProvider({
 
           if (!hasValidWalletSession(wallet)) {
             try {
-              await refreshSessionFromCheckIn(wallet);
+              await refreshSessionFromCheckIn(wallet, config.campaignId);
             } catch (err) {
               if (
                 err instanceof SessionRefreshError &&
@@ -312,11 +324,20 @@ export default function PlayerProfileProvider({
 
         if (!hasValidWalletSession(wallet)) {
           if (isArcadeXRewardsConfigured()) {
-            const status = await fetchStreakStatus(wallet);
+            const config = await fetchDailyPlayConfig();
+            setDailyPlayMode(config.mode);
+            setDailyCampaignId(config.campaignId);
+            const status = await fetchStreakStatus(wallet, config.campaignId, {
+              fresh: true,
+            });
             setStreakStatus(status);
             if (status.canCheckIn) {
               setShowCheckIn(true);
-              throw new Error("Complete today's check-in first.");
+              throw new Error(
+                config.shuffle
+                  ? "Complete today's shuffle first."
+                  : "Complete today's check-in first."
+              );
             }
           }
           await ensureWalletSession(wallet);
@@ -390,13 +411,13 @@ export default function PlayerProfileProvider({
     <PlayerProfileContext.Provider value={value}>
       {children}
       <DailyCheckInModal
-        open={showCheckIn && !isShuffleDailyPlay()}
+        open={showCheckIn && dailyPlayMode !== "shuffle"}
         walletAddress={walletAddress}
         status={streakStatus}
         onComplete={handleCheckInComplete}
       />
       <DailyShuffleModal
-        open={showCheckIn && isShuffleDailyPlay()}
+        open={showCheckIn && dailyPlayMode === "shuffle"}
         walletAddress={walletAddress}
         status={streakStatus}
         onComplete={handleCheckInComplete}

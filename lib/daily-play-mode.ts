@@ -4,9 +4,17 @@ import {
 
 export type DailyPlayMode = "streak" | "shuffle";
 
-/** Test toggle — keep streak code; switch back to `streak` for launch. */
+/**
+ * Server + build-time mode.
+ * Cloudflare: set `DAILY_PLAY_MODE=shuffle` (runtime) and/or
+ * `NEXT_PUBLIC_DAILY_PLAY_MODE=shuffle` (must rebuild for client inlining).
+ */
 export function getDailyPlayMode(): DailyPlayMode {
-  const mode = process.env.NEXT_PUBLIC_DAILY_PLAY_MODE?.trim().toLowerCase();
+  const mode = (
+    process.env.DAILY_PLAY_MODE?.trim() ||
+    process.env.NEXT_PUBLIC_DAILY_PLAY_MODE?.trim() ||
+    ""
+  ).toLowerCase();
   return mode === "shuffle" ? "shuffle" : "streak";
 }
 
@@ -15,7 +23,9 @@ export function isShuffleDailyPlay(): boolean {
 }
 
 export const DEFAULT_SHUFFLE_CAMPAIGN_ID = Number(
-  process.env.NEXT_PUBLIC_SHUFFLE_CAMPAIGN_ID?.trim() || "2"
+  process.env.SHUFFLE_CAMPAIGN_ID?.trim() ||
+    process.env.NEXT_PUBLIC_SHUFFLE_CAMPAIGN_ID?.trim() ||
+    "2"
 );
 
 /** Campaign used for today's daily sign-in ceremony. */
@@ -24,3 +34,9 @@ export function getDailyCampaignId(): number {
     ? DEFAULT_SHUFFLE_CAMPAIGN_ID
     : DEFAULT_STREAK_CAMPAIGN_ID;
 }
+
+export type DailyPlayConfig = {
+  mode: DailyPlayMode;
+  campaignId: number;
+  shuffle: boolean;
+};
