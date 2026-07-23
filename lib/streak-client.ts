@@ -27,6 +27,7 @@ export interface StreakStatus {
     active: boolean;
     cancelled?: boolean;
     requireEligibility?: boolean;
+    campaignType?: number;
     requiredDays: number;
     minIntervalSeconds: number;
     maxClaims?: number;
@@ -34,6 +35,7 @@ export interface StreakStatus {
     endTime?: number;
     rewardMode: number;
     resetAfterMilestone: boolean;
+    maxSinglePayout?: string;
   };
 }
 
@@ -195,7 +197,7 @@ async function sessionFromExistingCheckIn(
 
 /**
  * Primary MiniPay sign-in: on-chain `checkIn` on ArcadeXRewards
- * (`0x0139e8CF3Cd43b0c0Cc8b4d75DAE6C6b3e41DE85`) + `/api/streak/sync` JWT.
+ * (`0xc5BE4773D5B4a8e3C6f3E7a4C5f7cfBC38986ccF`) + `/api/streak/sync` JWT.
  *
  * If the wallet already checked in today (tx on CeloScan but app never got a
  * session), recovers via `/api/streak/session` instead of trapping the user.

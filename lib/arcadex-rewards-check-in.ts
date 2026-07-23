@@ -13,7 +13,7 @@ import {
 
 /**
  * MiniPay write of ArcadeXRewards.checkIn at
- * 0x0139e8CF3Cd43b0c0Cc8b4d75DAE6C6b3e41DE85 (campaigns without eligibility use deadline=0, signature=0x).
+ * 0xc5BE4773D5B4a8e3C6f3E7a4C5f7cfBC38986ccF (campaigns without eligibility use deadline=0, signature=0x).
  *
  * Returns the tx hash even when local receipt polling flakes — `/api/streak/sync`
  * re-verifies on the server so a CeloScan-confirmed check-in still unlocks the app.

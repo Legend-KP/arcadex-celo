@@ -6,6 +6,7 @@ const SECONDS_PER_DAY = 24 * 60 * 60;
 const CAMPAIGN_ID = 1;
 const REQUIRED_DAYS = 7;
 const REWARD_OFFCHAIN = 0;
+const CAMPAIGN_TYPE_STREAK = 0;
 
 async function main() {
   const [deployer] = await hre.ethers.getSigners();
@@ -30,6 +31,7 @@ async function main() {
 
   const tx = await contract.setCampaign(
     CAMPAIGN_ID,
+    CAMPAIGN_TYPE_STREAK,
     true, // active
     REQUIRED_DAYS,
     SECONDS_PER_DAY,
@@ -41,14 +43,16 @@ async function main() {
     0,
     rewardMeta,
     true, // resetAfterMilestone
-    false // requireEligibility — open for v1 Infinite Spark streak
+    false, // requireEligibility — open for v1 Infinite Spark streak
+    0 // maxSinglePayout (STREAK only; must be 0)
   );
   await tx.wait();
 
-  console.log("Campaign", CAMPAIGN_ID, "configured (7-day OFFCHAIN Infinite Spark)");
+  console.log("Campaign", CAMPAIGN_ID, "configured (7-day OFFCHAIN Infinite Spark STREAK)");
   console.log("  startTime:", startTime);
   console.log("  endTime:", endTime);
   console.log("  requireEligibility: false");
+  console.log("  campaignType: STREAK");
 
   const outDir = resolve(__dirname, "../../deployments");
   mkdirSync(outDir, { recursive: true });
@@ -59,15 +63,18 @@ async function main() {
     chainId: 42220,
     address,
     campaignId: CAMPAIGN_ID,
+    campaignType: "STREAK",
     requiredDays: REQUIRED_DAYS,
     minIntervalSeconds: SECONDS_PER_DAY,
     rewardMode: REWARD_OFFCHAIN,
     rewardMeta,
     resetAfterMilestone: true,
     requireEligibility: false,
+    maxSinglePayout: 0,
     startTime,
     endTime,
     eligibilitySigner: deployer.address,
+    spinResultSigner: hre.ethers.ZeroAddress,
     constructorArgs: [deployer.address],
     deployer: deployer.address,
     deployedAt: new Date().toISOString(),

@@ -217,6 +217,7 @@ export async function readStreakProgress(
     active,
     cancelled,
     requireEligibility,
+    campaignType,
     requiredDays,
     minIntervalSeconds,
     maxClaims,
@@ -227,6 +228,7 @@ export async function readStreakProgress(
     rewardAmount,
     rewardMeta,
     resetAfterMilestone,
+    maxSinglePayout,
   ] = campaign;
 
   return {
@@ -242,6 +244,7 @@ export async function readStreakProgress(
       active,
       cancelled,
       requireEligibility,
+      campaignType: Number(campaignType),
       requiredDays: Number(requiredDays),
       minIntervalSeconds: Number(minIntervalSeconds),
       maxClaims: Number(maxClaims),
@@ -252,6 +255,7 @@ export async function readStreakProgress(
       rewardAmount: rewardAmount.toString(),
       rewardMeta: rewardMeta as Hex,
       resetAfterMilestone,
+      maxSinglePayout: maxSinglePayout.toString(),
     },
   };
 }

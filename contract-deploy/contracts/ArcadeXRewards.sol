@@ -9,17 +9,23 @@ import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Recei
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 
+interface IMintable {
+    function mintReward(address to) external;
+}
+
 /**
  * @title ArcadeXRewards
- * @notice One MiniPay-whitelisted hub: daily on-chain check-in + milestones + future claims.
+ * @notice MiniPay hub: STREAK daily check-in + SHUFFLE signed spins + shared claim path.
  *
  * @dev Hardened for safe deployment:
- *      - Interval enforcement after first-ever check-in (no post-reset bypass)
+ *      - Interval enforcement after first-ever check-in/spin (no post-reset bypass)
  *      - Campaign core params freeze after first participant
  *      - startTime / endTime windows
- *      - Treasury reservation for USDT/USDC milestones
+ *      - Treasury reservation for USDT/USDC (fixed streak or per-spin won amount)
  *      - cancelCampaign keeps claim() open for earners
- *      - Optional EIP-712 eligibility (Sybil gate)
+ *      - Optional EIP-712 eligibility (Sybil gate) separate from spin-result signatures
+ *      - maxClaims enforced at reward reservation time
+ *      - maxSinglePayout caps signed shuffle amounts on-chain
  */
 contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
     using SafeERC20 for IERC20;
@@ -30,21 +36,33 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
     uint8 public constant REWARD_USDT = 2;
     uint8 public constant REWARD_USDC = 3;
 
+    enum CampaignType {
+        STREAK,
+        SHUFFLE
+    }
+
     address public constant USDT = 0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e;
     address public constant USDC = 0xcebA9300f2b948710d2653dD7B07f33A8B32118C;
 
     bytes32 private constant _ELIGIBLE_TYPEHASH =
         keccak256("Eligible(address player,uint256 campaignId,uint256 deadline)");
 
+    bytes32 private constant _SPIN_TYPEHASH = keccak256(
+        "Spin(address player,uint256 campaignId,uint8 rewardMode,address rewardTarget,uint256 rewardAmount,uint256 nonce,uint256 deadline)"
+    );
+
     address public owner;
     address public pendingOwner;
     address public eligibilitySigner;
+    /// @notice Dedicated key for authorizing shuffle spin outcomes (separate from eligibility).
+    address public spinResultSigner;
     bool public paused;
 
     struct Campaign {
         bool active;
         bool cancelled;
         bool requireEligibility;
+        CampaignType campaignType;
         uint16 requiredDays;
         uint32 minIntervalSeconds;
         uint32 maxClaims;
@@ -55,6 +73,8 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
         uint256 rewardAmount;
         bytes32 rewardMeta;
         bool resetAfterMilestone;
+        /// @notice On-chain ceiling for a single shuffle payout (USDT/USDC). Ignored for STREAK.
+        uint256 maxSinglePayout;
     }
 
     struct Progress {
@@ -65,10 +85,22 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
         bool initialized;
     }
 
+    struct WonReward {
+        bool pending;
+        uint8 rewardMode;
+        address rewardTarget;
+        uint256 rewardAmount;
+    }
+
     mapping(uint256 => Campaign) public campaigns;
     mapping(address => mapping(uint256 => Progress)) public progress;
+    mapping(address => mapping(uint256 => WonReward)) public wonRewards;
     mapping(uint256 => bool) public hasParticipants;
     mapping(uint256 => uint32) public claimCount;
+    /// @notice Replay protection for spin digests.
+    mapping(bytes32 => bool) public usedSignatures;
+    /// @notice Per-player per-campaign spin nonce (must match signed payload).
+    mapping(address => mapping(uint256 => uint256)) public spinNonce;
 
     uint256 public reservedUSDT;
     uint256 public reservedUSDC;
@@ -81,6 +113,7 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
     error CampaignEnded();
     error CampaignMisconfigured();
     error TooSoon();
+    error SpinTooSoon();
     error StreakComplete();
     error ClaimPending();
     error OffchainNoClaim();
@@ -99,7 +132,15 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
     error NotPaused();
     error UnsupportedReward();
     error NftContractRequired();
-    error InvalidAsset();
+    error InvalidCampaignType();
+    error MaxClaimsReached();
+    error SignatureAlreadyUsed();
+    error InvalidSpinSignature();
+    error SpinExpired();
+    error InvalidSpinNonce();
+    error ExceedsMaxPayout();
+    error NoWonReward();
+    error SpinSignerRequired();
 
     event CheckedIn(
         address indexed player,
@@ -115,6 +156,15 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
         bytes32 rewardMeta,
         uint256 timestamp
     );
+    event SpinResultGranted(
+        address indexed player,
+        uint256 indexed campaignId,
+        uint8 rewardMode,
+        address rewardTarget,
+        uint256 rewardAmount,
+        uint256 timestamp
+    );
+    event SpinSignatureUsed(bytes32 indexed signatureHash);
     event StreakReset(
         address indexed player,
         uint256 indexed campaignId,
@@ -145,6 +195,7 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
         uint256 amount
     );
     event EligibilitySignerUpdated(address indexed previousSigner, address indexed newSigner);
+    event SpinResultSignerUpdated(address indexed previousSigner, address indexed newSigner);
     event Paused(address indexed by);
     event Unpaused(address indexed by);
     event OwnershipTransferStarted(address indexed previousOwner, address indexed pendingOwner);
@@ -169,10 +220,10 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
         }
     }
 
-    // ─── Daily check-in ──────────────────────────────────────────────────────────
+    // ─── Daily check-in (STREAK) ─────────────────────────────────────────────────
 
     /**
-     * @param campaignId Campaign id
+     * @param campaignId Campaign id (must be STREAK)
      * @param deadline EIP-712 eligibility deadline (ignored if campaign does not require it)
      * @param signature Backend eligibility signature (empty if not required)
      */
@@ -181,6 +232,7 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
         whenNotPaused
     {
         Campaign memory cfg = campaigns[campaignId];
+        if (cfg.campaignType != CampaignType.STREAK) revert InvalidCampaignType();
         if (!cfg.active) revert CampaignInactive();
         if (cfg.cancelled) revert CampaignIsCancelled();
         if (cfg.requiredDays == 0 || cfg.minIntervalSeconds == 0) revert CampaignMisconfigured();
@@ -230,6 +282,8 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
         emit CheckedIn(msg.sender, campaignId, p.currentDay, nowTs);
 
         if (p.currentDay >= cfg.requiredDays) {
+            _assertMaxClaimsAvailable(cfg, campaignId);
+
             p.milestoneReached = true;
             emit MilestoneReached(
                 msg.sender,
@@ -239,6 +293,10 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
                 cfg.rewardMeta,
                 nowTs
             );
+
+            unchecked {
+                claimCount[campaignId] += 1;
+            }
 
             if (cfg.rewardMode == REWARD_USDT) {
                 reservedUSDT += cfg.rewardAmount;
@@ -255,38 +313,166 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
         }
     }
 
+    // ─── Shuffle spin ────────────────────────────────────────────────────────────
+
     /**
-     * @notice Claim on-chain rewards after streak. Allowed even if campaign was cancelled.
+     * @notice Record a signed shuffle outcome. Does not pay out — use claim().
+     * @dev EIP-712 Spin typed data must be signed by spinResultSigner.
+     */
+    function spin(
+        uint256 campaignId,
+        uint8 rewardMode,
+        address rewardTarget,
+        uint256 rewardAmount,
+        uint256 nonce,
+        uint256 deadline,
+        bytes calldata signature
+    ) external whenNotPaused {
+        Campaign memory cfg = campaigns[campaignId];
+        if (cfg.campaignType != CampaignType.SHUFFLE) revert InvalidCampaignType();
+        if (!cfg.active) revert CampaignInactive();
+        if (cfg.cancelled) revert CampaignIsCancelled();
+        if (cfg.minIntervalSeconds == 0) revert CampaignMisconfigured();
+        if (block.timestamp < cfg.startTime) revert CampaignNotStarted();
+        if (cfg.endTime != 0 && block.timestamp > cfg.endTime) revert CampaignEnded();
+        if (block.timestamp > deadline) revert SpinExpired();
+        if (rewardMode > REWARD_USDC) revert UnknownRewardMode();
+
+        Progress storage p = progress[msg.sender][campaignId];
+        WonReward storage won = wonRewards[msg.sender][campaignId];
+
+        if (won.pending || (p.milestoneReached && !p.onChainClaimed)) {
+            revert ClaimPending();
+        }
+
+        uint64 nowTs = uint64(block.timestamp);
+        if (p.initialized) {
+            if (nowTs < p.lastCheckInAt + cfg.minIntervalSeconds) revert SpinTooSoon();
+        }
+
+        if (nonce != spinNonce[msg.sender][campaignId]) revert InvalidSpinNonce();
+
+        _normalizeAndValidateSpinReward(cfg, rewardMode, rewardTarget, rewardAmount);
+
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    _SPIN_TYPEHASH,
+                    msg.sender,
+                    campaignId,
+                    rewardMode,
+                    rewardTarget,
+                    rewardAmount,
+                    nonce,
+                    deadline
+                )
+            )
+        );
+        if (usedSignatures[digest]) revert SignatureAlreadyUsed();
+
+        if (spinResultSigner == address(0)) revert SpinSignerRequired();
+        address recovered = digest.recover(signature);
+        if (recovered != spinResultSigner) revert InvalidSpinSignature();
+
+        usedSignatures[digest] = true;
+        unchecked {
+            spinNonce[msg.sender][campaignId] = nonce + 1;
+        }
+        emit SpinSignatureUsed(digest);
+
+        // Resolve targets for storage (USDT/USDC pinned; ERC721 uses signed target).
+        address resolvedTarget = rewardTarget;
+        if (rewardMode == REWARD_USDT) resolvedTarget = USDT;
+        else if (rewardMode == REWARD_USDC) resolvedTarget = USDC;
+        else if (rewardMode == REWARD_OFFCHAIN) resolvedTarget = address(0);
+
+        if (!p.initialized) {
+            p.initialized = true;
+            if (!hasParticipants[campaignId]) {
+                hasParticipants[campaignId] = true;
+            }
+        }
+
+        p.lastCheckInAt = nowTs;
+        p.onChainClaimed = false;
+
+        if (rewardMode == REWARD_OFFCHAIN) {
+            // Non-winning / off-chain result never goes through claim() — always clear
+            // so the next interval can spin (do not depend on resetAfterMilestone).
+            p.milestoneReached = false;
+            delete wonRewards[msg.sender][campaignId];
+        } else {
+            _assertMaxClaimsAvailable(cfg, campaignId);
+            unchecked {
+                claimCount[campaignId] += 1;
+            }
+
+            if (rewardMode == REWARD_USDT) {
+                reservedUSDT += rewardAmount;
+            } else if (rewardMode == REWARD_USDC) {
+                reservedUSDC += rewardAmount;
+            }
+
+            p.milestoneReached = true;
+            won.pending = true;
+            won.rewardMode = rewardMode;
+            won.rewardTarget = resolvedTarget;
+            won.rewardAmount = rewardAmount;
+        }
+
+        emit SpinResultGranted(
+            msg.sender, campaignId, rewardMode, resolvedTarget, rewardAmount, nowTs
+        );
+    }
+
+    /**
+     * @notice Claim on-chain rewards. STREAK uses campaign defaults; SHUFFLE uses wonRewards.
+     * @dev Allowed even if campaign was cancelled.
      */
     function claim(uint256 campaignId) external nonReentrant whenNotPaused {
         Campaign memory cfg = campaigns[campaignId];
-        if (cfg.rewardMode == REWARD_OFFCHAIN) revert OffchainNoClaim();
-
         Progress storage p = progress[msg.sender][campaignId];
-        if (!p.milestoneReached) revert StreakIncomplete();
-        if (p.onChainClaimed) revert AlreadyClaimed();
-        if (p.currentDay < cfg.requiredDays) revert StreakIncomplete();
+
+        uint8 mode;
+        address target;
+        uint256 amount;
+
+        if (cfg.campaignType == CampaignType.SHUFFLE) {
+            WonReward storage won = wonRewards[msg.sender][campaignId];
+            if (!won.pending) revert NoWonReward();
+            if (p.onChainClaimed) revert AlreadyClaimed();
+            if (won.rewardMode == REWARD_OFFCHAIN) revert OffchainNoClaim();
+
+            mode = won.rewardMode;
+            target = won.rewardTarget;
+            amount = won.rewardAmount;
+
+            won.pending = false;
+        } else if (cfg.campaignType == CampaignType.STREAK) {
+            if (cfg.rewardMode == REWARD_OFFCHAIN) revert OffchainNoClaim();
+            if (!p.milestoneReached) revert StreakIncomplete();
+            if (p.onChainClaimed) revert AlreadyClaimed();
+            if (p.currentDay < cfg.requiredDays) revert StreakIncomplete();
+
+            mode = cfg.rewardMode;
+            target = cfg.rewardTarget;
+            amount = cfg.rewardAmount;
+        } else {
+            revert InvalidCampaignType();
+        }
 
         p.onChainClaimed = true;
-        unchecked {
-            claimCount[campaignId] += 1;
+
+        if (mode == REWARD_USDT) {
+            reservedUSDT -= amount;
+        } else if (mode == REWARD_USDC) {
+            reservedUSDC -= amount;
         }
 
-        if (cfg.rewardMode == REWARD_USDT) {
-            reservedUSDT -= cfg.rewardAmount;
-        } else if (cfg.rewardMode == REWARD_USDC) {
-            reservedUSDC -= cfg.rewardAmount;
-        }
-
-        _payout(msg.sender, cfg);
+        _payout(msg.sender, mode, target, amount);
 
         emit OnChainRewardClaimed(
-            msg.sender,
-            campaignId,
-            cfg.rewardMode,
-            cfg.rewardTarget,
-            cfg.rewardAmount,
-            block.timestamp
+            msg.sender, campaignId, mode, target, amount, block.timestamp
         );
 
         if (cfg.resetAfterMilestone) {
@@ -294,6 +480,9 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
             p.currentDay = 0;
             p.milestoneReached = false;
             p.onChainClaimed = false;
+            if (cfg.campaignType == CampaignType.SHUFFLE) {
+                delete wonRewards[msg.sender][campaignId];
+            }
         }
     }
 
@@ -305,16 +494,32 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
         Progress storage p = progress[player][campaignId];
 
         if (!p.milestoneReached || p.onChainClaimed) revert NothingToExpire();
-        if (cfg.rewardMode != REWARD_USDT && cfg.rewardMode != REWARD_USDC) {
-            revert NothingToExpire();
-        }
         if (cfg.endTime == 0 || block.timestamp <= cfg.endTime) revert NothingToExpire();
+
+        uint8 mode;
+        uint256 amount;
+
+        if (cfg.campaignType == CampaignType.SHUFFLE) {
+            WonReward storage won = wonRewards[player][campaignId];
+            if (!won.pending) revert NothingToExpire();
+            if (won.rewardMode != REWARD_USDT && won.rewardMode != REWARD_USDC) {
+                revert NothingToExpire();
+            }
+            mode = won.rewardMode;
+            amount = won.rewardAmount;
+            won.pending = false;
+        } else {
+            if (cfg.rewardMode != REWARD_USDT && cfg.rewardMode != REWARD_USDC) {
+                revert NothingToExpire();
+            }
+            mode = cfg.rewardMode;
+            amount = cfg.rewardAmount;
+        }
 
         p.onChainClaimed = true; // lock — cannot claim after expiry sweep
         p.milestoneReached = false;
 
-        uint256 amount = cfg.rewardAmount;
-        if (cfg.rewardMode == REWARD_USDT) {
+        if (mode == REWARD_USDT) {
             reservedUSDT -= amount;
             emit ReservationReleased(player, campaignId, USDT, amount);
         } else {
@@ -327,6 +532,7 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
 
     function setCampaign(
         uint256 campaignId,
+        CampaignType campaignType,
         bool active,
         uint16 requiredDays,
         uint32 minIntervalSeconds,
@@ -338,25 +544,43 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
         uint256 rewardAmount,
         bytes32 rewardMeta,
         bool resetAfterMilestone,
-        bool requireEligibility
+        bool requireEligibility,
+        uint256 maxSinglePayout
     ) external onlyOwner {
-        if (requiredDays == 0 || minIntervalSeconds == 0) revert CampaignMisconfigured();
         if (endTime != 0 && endTime < startTime) revert CampaignMisconfigured();
         if (rewardMode > REWARD_USDC) revert UnknownRewardMode();
+        if (minIntervalSeconds == 0) revert CampaignMisconfigured();
 
-        if (rewardMode == REWARD_ERC721) {
-            if (rewardTarget == address(0)) revert NftContractRequired();
-        }
-        if (rewardMode == REWARD_USDT) {
-            rewardTarget = USDT;
-            if (rewardAmount == 0) revert ZeroAmount();
-        }
-        if (rewardMode == REWARD_USDC) {
-            rewardTarget = USDC;
-            if (rewardAmount == 0) revert ZeroAmount();
-        }
-        if (rewardMode == REWARD_OFFCHAIN) {
+        if (campaignType == CampaignType.STREAK) {
+            if (requiredDays == 0) revert CampaignMisconfigured();
+            if (maxSinglePayout != 0) revert CampaignMisconfigured();
+        } else if (campaignType == CampaignType.SHUFFLE) {
+            // requiredDays unused; per-spin rewards come from signatures, not campaign defaults.
+            if (spinResultSigner == address(0)) revert SpinSignerRequired();
+            rewardMode = REWARD_OFFCHAIN;
             rewardTarget = address(0);
+            rewardAmount = 0;
+        } else {
+            revert InvalidCampaignType();
+        }
+
+        // Campaign-level reward fields apply to STREAK only (SHUFFLE forced OFFCHAIN above).
+        if (campaignType == CampaignType.STREAK) {
+            if (rewardMode == REWARD_ERC721) {
+                if (rewardTarget == address(0)) revert NftContractRequired();
+                if (rewardTarget.code.length == 0) revert NftContractRequired();
+            }
+            if (rewardMode == REWARD_USDT) {
+                rewardTarget = USDT;
+                if (rewardAmount == 0) revert ZeroAmount();
+            }
+            if (rewardMode == REWARD_USDC) {
+                rewardTarget = USDC;
+                if (rewardAmount == 0) revert ZeroAmount();
+            }
+            if (rewardMode == REWARD_OFFCHAIN) {
+                rewardTarget = address(0);
+            }
         }
         if (requireEligibility && eligibilitySigner == address(0)) {
             revert InvalidEligibility();
@@ -369,6 +593,7 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
         if (hasParticipants[campaignId]) {
             // Core economics frozen after first participant. New rules => new campaignId.
             if (
+                campaignType != existing.campaignType ||
                 requiredDays != existing.requiredDays ||
                 minIntervalSeconds != existing.minIntervalSeconds ||
                 rewardMode != existing.rewardMode ||
@@ -378,6 +603,7 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
                 resetAfterMilestone != existing.resetAfterMilestone ||
                 requireEligibility != existing.requireEligibility ||
                 maxClaims != existing.maxClaims ||
+                maxSinglePayout != existing.maxSinglePayout ||
                 startTime != existing.startTime
             ) {
                 revert ParamsFrozen();
@@ -396,19 +622,31 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
             return;
         }
 
-        if (rewardMode == REWARD_USDT || rewardMode == REWARD_USDC) {
-            uint256 available = _availableBalance(rewardTarget);
-            uint256 needed = rewardAmount;
-            if (maxClaims > 0) {
-                needed = rewardAmount * uint256(maxClaims);
+        // STREAK: fund fixed reward × maxClaims. SHUFFLE: fund maxSinglePayout × maxClaims
+        // (actual token chosen per spin; require either stable can cover the ceiling).
+        if (campaignType == CampaignType.STREAK) {
+            if (rewardMode == REWARD_USDT || rewardMode == REWARD_USDC) {
+                uint256 available = _availableBalance(rewardTarget);
+                uint256 needed = rewardAmount;
+                if (maxClaims > 0) {
+                    needed = rewardAmount * uint256(maxClaims);
+                }
+                if (available < needed) revert InsufficientTreasury();
             }
-            if (available < needed) revert InsufficientTreasury();
+        } else if (maxSinglePayout > 0 && maxClaims > 0) {
+            uint256 needed = maxSinglePayout * uint256(maxClaims);
+            if (
+                _availableBalance(USDT) < needed && _availableBalance(USDC) < needed
+            ) {
+                revert InsufficientTreasury();
+            }
         }
 
         campaigns[campaignId] = Campaign({
             active: active,
             cancelled: false,
             requireEligibility: requireEligibility,
+            campaignType: campaignType,
             requiredDays: requiredDays,
             minIntervalSeconds: minIntervalSeconds,
             maxClaims: maxClaims,
@@ -418,14 +656,15 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
             rewardTarget: rewardTarget,
             rewardAmount: rewardAmount,
             rewardMeta: rewardMeta,
-            resetAfterMilestone: resetAfterMilestone
+            resetAfterMilestone: resetAfterMilestone,
+            maxSinglePayout: maxSinglePayout
         });
 
         emit CampaignUpdated(campaignId, active, requiredDays, rewardMode, startTime, endTime);
     }
 
     /**
-     * @notice Stop new check-ins; earners can still claim() reserved on-chain rewards.
+     * @notice Stop new check-ins/spins; earners can still claim() reserved on-chain rewards.
      */
     function cancelCampaign(uint256 campaignId) external onlyOwner {
         Campaign storage cfg = campaigns[campaignId];
@@ -437,6 +676,11 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
     function setEligibilitySigner(address newSigner) external onlyOwner {
         emit EligibilitySignerUpdated(eligibilitySigner, newSigner);
         eligibilitySigner = newSigner;
+    }
+
+    function setSpinResultSigner(address newSigner) external onlyOwner {
+        emit SpinResultSignerUpdated(spinResultSigner, newSigner);
+        spinResultSigner = newSigner;
     }
 
     function pause() external onlyOwner {
@@ -499,6 +743,7 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
             bool active,
             bool cancelled,
             bool requireEligibility,
+            CampaignType campaignType,
             uint16 requiredDays,
             uint32 minIntervalSeconds,
             uint32 maxClaims,
@@ -508,7 +753,8 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
             address rewardTarget,
             uint256 rewardAmount,
             bytes32 rewardMeta,
-            bool resetAfterMilestone
+            bool resetAfterMilestone,
+            uint256 maxSinglePayout
         )
     {
         Campaign memory cfg = campaigns[campaignId];
@@ -516,6 +762,7 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
             cfg.active,
             cfg.cancelled,
             cfg.requireEligibility,
+            cfg.campaignType,
             cfg.requiredDays,
             cfg.minIntervalSeconds,
             cfg.maxClaims,
@@ -525,8 +772,18 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
             cfg.rewardTarget,
             cfg.rewardAmount,
             cfg.rewardMeta,
-            cfg.resetAfterMilestone
+            cfg.resetAfterMilestone,
+            cfg.maxSinglePayout
         );
+    }
+
+    function getWonReward(address player, uint256 campaignId)
+        external
+        view
+        returns (bool pending, uint8 rewardMode, address rewardTarget, uint256 rewardAmount)
+    {
+        WonReward memory won = wonRewards[player][campaignId];
+        return (won.pending, won.rewardMode, won.rewardTarget, won.rewardAmount);
     }
 
     function getProgress(address player, uint256 campaignId)
@@ -571,7 +828,9 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
             );
         }
 
-        if (p.milestoneReached && cfg.rewardMode != REWARD_OFFCHAIN) {
+        WonReward memory won = wonRewards[player][campaignId];
+        if (won.pending || (p.milestoneReached && cfg.rewardMode != REWARD_OFFCHAIN)) {
+            // Pending claim blocks another check-in / spin.
             return (
                 currentDay,
                 lastCheckInAt,
@@ -599,7 +858,8 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
         uint256 nextAllowed = uint256(p.lastCheckInAt) + cfg.minIntervalSeconds;
         uint256 missAfter = uint256(p.lastCheckInAt) + (uint256(cfg.minIntervalSeconds) * 2);
         canCheckIn = block.timestamp >= nextAllowed;
-        streakWouldReset = canCheckIn && block.timestamp >= missAfter && p.currentDay > 0;
+        streakWouldReset = cfg.campaignType == CampaignType.STREAK && canCheckIn
+            && block.timestamp >= missAfter && p.currentDay > 0;
     }
 
     function availableUSDT() external view returns (uint256) {
@@ -615,6 +875,40 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
     }
 
     // ─── Internal ───────────────────────────────────────────────────────────────
+
+    function _assertMaxClaimsAvailable(Campaign memory cfg, uint256 campaignId) internal view {
+        if (cfg.maxClaims > 0 && claimCount[campaignId] >= cfg.maxClaims) {
+            revert MaxClaimsReached();
+        }
+    }
+
+    function _normalizeAndValidateSpinReward(
+        Campaign memory cfg,
+        uint8 rewardMode,
+        address rewardTarget,
+        uint256 rewardAmount
+    ) internal view {
+        if (rewardMode == REWARD_OFFCHAIN) {
+            return;
+        }
+        if (rewardMode == REWARD_ERC721) {
+            if (rewardTarget == address(0) || rewardTarget.code.length == 0) {
+                revert NftContractRequired();
+            }
+            return;
+        }
+        if (rewardMode == REWARD_USDT || rewardMode == REWARD_USDC) {
+            if (rewardAmount == 0) revert ZeroAmount();
+            if (cfg.maxSinglePayout == 0 || rewardAmount > cfg.maxSinglePayout) {
+                revert ExceedsMaxPayout();
+            }
+            // Ensure treasury can cover this variable reservation.
+            address token = rewardMode == REWARD_USDT ? USDT : USDC;
+            if (_availableBalance(token) < rewardAmount) revert InsufficientTreasury();
+            return;
+        }
+        revert UnknownRewardMode();
+    }
 
     function _verifyEligibility(
         address player,
@@ -639,26 +933,28 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
         return bal - reserved;
     }
 
-    function _payout(address player, Campaign memory cfg) internal {
-        if (cfg.rewardMode == REWARD_ERC721) {
-            if (cfg.rewardAmount == 0) {
-                _safeMintReward(cfg.rewardTarget, player);
+    function _payout(address player, uint8 rewardMode, address rewardTarget, uint256 rewardAmount)
+        internal
+    {
+        if (rewardMode == REWARD_ERC721) {
+            if (rewardAmount == 0) {
+                _safeMintReward(rewardTarget, player);
             } else {
-                IERC721(cfg.rewardTarget).safeTransferFrom(address(this), player, cfg.rewardAmount);
+                IERC721(rewardTarget).safeTransferFrom(address(this), player, rewardAmount);
             }
             return;
         }
-        if (cfg.rewardMode == REWARD_USDT || cfg.rewardMode == REWARD_USDC) {
-            if (cfg.rewardAmount == 0) revert ZeroAmount();
-            IERC20(cfg.rewardTarget).safeTransfer(player, cfg.rewardAmount);
+        if (rewardMode == REWARD_USDT || rewardMode == REWARD_USDC) {
+            if (rewardAmount == 0) revert ZeroAmount();
+            IERC20(rewardTarget).safeTransfer(player, rewardAmount);
             return;
         }
         revert UnsupportedReward();
     }
 
     function _safeMintReward(address nft, address to) internal {
-        (bool success, ) = nft.call(abi.encodeWithSignature("mintReward(address)", to));
-        if (!success) revert UnsupportedReward();
+        if (nft.code.length == 0) revert NftContractRequired();
+        IMintable(nft).mintReward(to);
     }
 
     receive() external payable {
