@@ -46,8 +46,12 @@ export async function fetchStreakStatus(
   opts?: { fresh?: boolean }
 ): Promise<StreakStatus> {
   if (!opts?.fresh) {
-    const cached = readCachedStreakStatus(walletAddress);
-    if (cached && shouldUseCachedStreakStatus(cached)) {
+    const cached = readCachedStreakStatus(walletAddress, campaignId);
+    if (
+      cached &&
+      Number(cached.campaignId) === Number(campaignId) &&
+      shouldUseCachedStreakStatus(cached)
+    ) {
       return cached;
     }
   } else {

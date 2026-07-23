@@ -179,11 +179,13 @@ export default function PlayerProfileProvider({
       pendingWalletRef.current = wallet;
 
       try {
-        // Sign-in: ArcadeXRewards checkIn → session JWT (campaign 1 by default).
+        // Sign-in: ArcadeXRewards checkIn/spin → session JWT.
         if (isArcadeXRewardsConfigured()) {
-          // Prefer cached streak for fast home paint. Session mint still
-          // does a fresh on-chain read when canCheckIn is false.
-          const status = await fetchStreakStatus(wallet);
+          // Always fresh when switching campaigns/modes so streak cache
+          // cannot hide the shuffle gate after a prior campaign-1 check-in.
+          const status = await fetchStreakStatus(wallet, undefined, {
+            fresh: isShuffleDailyPlay(),
+          });
           if (cancelled) return;
           setStreakStatus(status);
 
