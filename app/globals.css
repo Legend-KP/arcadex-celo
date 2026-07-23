@@ -4014,3 +4014,282 @@ a { color: inherit; text-decoration: none; }
     font-size: 26px;
   }
 }
+
+/* --- Daily Shuffle (test mode — ArcadeX light / gold) ----------------------- */
+
+.daily-shuffle-backdrop {
+  z-index: 80;
+}
+
+.daily-shuffle-modal {
+  width: min(420px, calc(100vw - 28px));
+  max-height: min(92vh, 720px);
+  overflow: auto;
+  background: var(--surface);
+  border-radius: 24px;
+  padding: 22px 18px 18px;
+  box-shadow:
+    0 0 0 1px rgba(245, 158, 11, 0.28),
+    0 24px 60px rgba(26, 26, 46, 0.22);
+  border: 2px solid transparent;
+  background-image:
+    linear-gradient(#fff, #fff),
+    var(--gold-border-gradient, linear-gradient(135deg, #fde68a, #f59e0b, #b45309));
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+
+.daily-shuffle-eyebrow {
+  margin: 0;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.daily-shuffle-title {
+  margin: 6px 0 0;
+  text-align: center;
+  font-family: var(--font-head);
+  font-size: 28px;
+  color: var(--text);
+}
+
+.daily-shuffle-sub {
+  margin: 8px auto 0;
+  max-width: 32ch;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.daily-shuffle-hero {
+  margin-top: 18px;
+}
+
+.daily-shuffle-hero-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, #fffbeb, #fff7ed 55%, #fff);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  text-align: center;
+}
+
+.daily-shuffle-hero-glyph {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.daily-shuffle-hero-card strong {
+  font-family: var(--font-head);
+  font-size: 18px;
+  color: var(--text);
+}
+
+.daily-shuffle-hero-card span:last-child {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.daily-shuffle-stage {
+  margin-top: 16px;
+  min-height: 220px;
+}
+
+.daily-shuffle-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.daily-shuffle-card {
+  min-height: 92px;
+  border-radius: 14px;
+  border: 1px solid rgba(26, 26, 46, 0.08);
+  background: #fff;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: default;
+  transition: transform 0.25s ease, opacity 0.25s ease, box-shadow 0.25s ease;
+}
+
+.daily-shuffle-grid.is-pick .daily-shuffle-card {
+  cursor: pointer;
+}
+
+.daily-shuffle-grid.is-pick .daily-shuffle-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(245, 158, 11, 0.18);
+}
+
+.daily-shuffle-card.is-back {
+  background: linear-gradient(145deg, #f59e0b, #b45309);
+  color: #fff;
+}
+
+.daily-shuffle-card-mark {
+  font-family: var(--font-head);
+  font-size: 28px;
+}
+
+.daily-shuffle-card-glyph {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.daily-shuffle-card-label {
+  font-family: var(--font-head);
+  font-size: 13px;
+  text-align: center;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.daily-shuffle-card-sub {
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.daily-shuffle-card.rarity-legendary {
+  background: linear-gradient(160deg, #fff7ed, #fef3c7);
+}
+.daily-shuffle-card.rarity-rare {
+  background: linear-gradient(160deg, #ecfdf5, #d1fae5);
+}
+.daily-shuffle-card.rarity-uncommon {
+  background: linear-gradient(160deg, #f0fdf4, #dcfce7);
+}
+.daily-shuffle-card.rarity-spark {
+  background: linear-gradient(160deg, #fffbeb, #fde68a);
+}
+.daily-shuffle-card.rarity-none {
+  background: #f8fafc;
+}
+
+.daily-shuffle-card.is-winner {
+  transform: scale(1.04);
+  box-shadow: 0 0 0 2px #f59e0b, 0 12px 28px rgba(245, 158, 11, 0.28);
+  z-index: 2;
+}
+
+.daily-shuffle-card.is-loser {
+  opacity: 0.4;
+  filter: saturate(0.7);
+}
+
+.daily-shuffle-pile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 220px;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.daily-shuffle-pile-cards {
+  position: relative;
+  width: 88px;
+  height: 110px;
+}
+
+.daily-shuffle-pile-card {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #fbbf24, #d97706);
+  box-shadow: 0 8px 16px rgba(180, 83, 9, 0.25);
+  animation: daily-shuffle-jiggle 0.9s ease-in-out infinite;
+}
+
+.daily-shuffle-pile-card:nth-child(2) {
+  transform: rotate(-6deg);
+  animation-delay: 0.05s;
+}
+.daily-shuffle-pile-card:nth-child(3) {
+  transform: rotate(5deg);
+  animation-delay: 0.1s;
+}
+.daily-shuffle-pile-card:nth-child(4) {
+  transform: rotate(-2deg);
+  animation-delay: 0.15s;
+}
+
+@keyframes daily-shuffle-jiggle {
+  0%, 100% { translate: 0 0; }
+  25% { translate: -3px 2px; }
+  50% { translate: 3px -2px; }
+  75% { translate: -2px -1px; }
+}
+
+.daily-shuffle-result {
+  margin-top: 14px;
+  text-align: center;
+}
+
+.daily-shuffle-result-title {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: 20px;
+  color: var(--text);
+}
+
+.daily-shuffle-result-amt {
+  margin: 6px 0 0;
+  font-family: var(--font-head);
+  font-size: 22px;
+  color: #d97706;
+}
+
+.daily-shuffle-hint {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.daily-shuffle-error {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.daily-shuffle-actions {
+  margin-top: 16px;
+}
+
+.daily-shuffle-cta {
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-family: var(--font-head);
+  font-size: 16px;
+  color: #fff;
+  background: linear-gradient(180deg, #22c55e, #16a34a);
+  box-shadow: 0 8px 18px rgba(22, 163, 74, 0.28);
+  cursor: pointer;
+}
+
+.daily-shuffle-cta:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}

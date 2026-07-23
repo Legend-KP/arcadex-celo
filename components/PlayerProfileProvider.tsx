@@ -10,7 +10,9 @@ import {
   useState,
 } from "react";
 import DailyCheckInModal from "@/components/DailyCheckInModal";
+import DailyShuffleModal from "@/components/DailyShuffleModal";
 import PlayerNameModal from "@/components/PlayerNameModal";
+import { isShuffleDailyPlay } from "@/lib/daily-play-mode";
 import {
   bootstrapPlayerProfile,
   fetchPlayerProfile,
@@ -386,7 +388,13 @@ export default function PlayerProfileProvider({
     <PlayerProfileContext.Provider value={value}>
       {children}
       <DailyCheckInModal
-        open={showCheckIn}
+        open={showCheckIn && !isShuffleDailyPlay()}
+        walletAddress={walletAddress}
+        status={streakStatus}
+        onComplete={handleCheckInComplete}
+      />
+      <DailyShuffleModal
+        open={showCheckIn && isShuffleDailyPlay()}
         walletAddress={walletAddress}
         status={streakStatus}
         onComplete={handleCheckInComplete}

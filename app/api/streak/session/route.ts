@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import {
-  DEFAULT_STREAK_CAMPAIGN_ID,
   isArcadeXRewardsConfigured,
 } from "@/lib/arcadex-rewards";
+import { getDailyCampaignId } from "@/lib/daily-play-mode";
 import { getStreakProgressCached } from "@/lib/streak-progress-cache";
 import {
   checkRateLimit,
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     const campaignId =
       typeof body.campaignId === "number" && Number.isFinite(body.campaignId)
         ? body.campaignId
-        : DEFAULT_STREAK_CAMPAIGN_ID;
+        : getDailyCampaignId();
 
     if (!rawWallet || !isWalletAddress(rawWallet)) {
       return NextResponse.json(

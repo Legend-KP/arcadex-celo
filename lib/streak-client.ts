@@ -3,6 +3,7 @@
 import {
   DEFAULT_STREAK_CAMPAIGN_ID,
 } from "@/lib/arcadex-rewards";
+import { getDailyCampaignId } from "@/lib/daily-play-mode";
 import { checkInOnChain } from "@/lib/arcadex-rewards-check-in";
 import {
   clearCachedStreakStatus,
@@ -41,7 +42,7 @@ export interface StreakStatus {
 
 export async function fetchStreakStatus(
   walletAddress: string,
-  campaignId: number = DEFAULT_STREAK_CAMPAIGN_ID,
+  campaignId: number = getDailyCampaignId(),
   opts?: { fresh?: boolean }
 ): Promise<StreakStatus> {
   if (!opts?.fresh) {
@@ -82,7 +83,10 @@ export function isAlreadyCheckedInError(error: unknown): boolean {
   return (
     lower.includes("toosoon") ||
     lower.includes("too soon") ||
+    lower.includes("spintoosoon") ||
+    lower.includes("spin too soon") ||
     lower.includes("already checked") ||
+    lower.includes("already shuffled") ||
     lower.includes("streakcomplete") ||
     lower.includes("streak complete")
   );
@@ -148,7 +152,7 @@ export class SessionRefreshError extends Error {
  */
 export async function refreshSessionFromCheckIn(
   walletAddress: string,
-  campaignId: number = DEFAULT_STREAK_CAMPAIGN_ID
+  campaignId: number = getDailyCampaignId()
 ): Promise<string> {
   const res = await fetch("/api/streak/session", {
     method: "POST",

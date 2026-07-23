@@ -1595,3 +1595,218 @@ export async function saveGameProgressOnServer(
     return storedProgressToGameProgress(stored, hasLeaderboard);
   });
 }
+
+// --- Daily shuffle (test mode) -------------------------------------------------
+
+export type ShufflePendingRecord = {
+  wallet: string;
+  campaignId: number;
+  nonce: number;
+  outcomeId: string;
+  outcomeType: "usdt" | "spark" | "none";
+  displayAmount: number | null;
+  rewardMode: number;
+  rewardTarget: string;
+  rewardAmount: string;
+  deadline: number;
+  signature: string;
+  createdAt: number;
+  consumedAt?: number;
+  txHash?: string;
+};
+
+function shufflePendingPath(wallet: string, campaignId: number, nonce: number): string {
+  return `shufflePending/${wallet.toLowerCase()}/${campaignId}/${nonce}`;
+}
+
+function shuffleUsdtCooldownPath(wallet: string): string {
+  return `shuffleUsdtCooldown/${wallet.toLowerCase()}`;
+}
+
+function spinTxPath(txHash: string): string {
+  return `spinTxs/${txHash.toLowerCase()}`;
+}
+
+function shuffleGrantPath(txHash: string): string {
+  return `shuffleGrants/${txHash.toLowerCase()}`;
+}
+
+export async function getShuffleUsdtCooldownUntil(
+  walletAddress: string
+): Promise<number> {
+  const wallet = normalizeWalletAddress(walletAddress);
+  const data = await readPath<{ until?: number }>(shuffleUsdtCooldownPath(wallet));
+  if (!data || typeof data.until !== "number") return 0;
+  return data.until;
+}
+
+export async function setShuffleUsdtCooldown(
+  walletAddress: string,
+  untilMs: number
+): Promise<void> {
+  const wallet = normalizeWalletAddress(walletAddress);
+  await writePath(shuffleUsdtCooldownPath(wallet), {
+    until: untilMs,
+    at: Date.now(),
+  });
+}
+
+export async function saveShufflePending(
+  record: ShufflePendingRecord
+): Promise<void> {
+  await writePath(
+    shufflePendingPath(record.wallet, record.campaignId, record.nonce),
+    record
+  );
+}
+
+export async function getShufflePending(
+  walletAddress: string,
+  campaignId: number,
+  nonce: number
+): Promise<ShufflePendingRecord | null> {
+  const wallet = normalizeWalletAddress(walletAddress);
+  return readPath<ShufflePendingRecord>(
+    shufflePendingPath(wallet, campaignId, nonce)
+  );
+}
+
+export async function markShufflePendingConsumed(
+  walletAddress: string,
+  campaignId: number,
+  nonce: number,
+  txHash: string
+): Promise<void> {
+  const wallet = normalizeWalletAddress(walletAddress);
+  const path = shufflePendingPath(wallet, campaignId, nonce);
+  const existing = await readPath<ShufflePendingRecord>(path);
+  if (!existing) return;
+  await writePath(path, {
+    ...existing,
+    consumedAt: Date.now(),
+    txHash: txHash.toLowerCase(),
+  });
+}
+
+export async function recordSpinTxOnServer(
+  walletAddress: string,
+  txHash: string,
+  campaignId: number,
+  outcomeId: string
+): Promise<{ reused: boolean }> {
+  if (!isWalletAddress(walletAddress)) {
+    throw new StreakSyncError("A valid wallet address is required.", "NO_WALLET");
+  }
+
+  const wallet = normalizeWalletAddress(walletAddress);
+  const normalizedTxHash = txHash.trim().toLowerCase();
+
+  if (!/^0x[a-f0-9]{64}$/.test(normalizedTxHash)) {
+    throw new StreakSyncError("A valid transaction hash is required.", "INVALID_TX");
+  }
+
+  const claim = await claimGuardRecord(
+    spinTxPath(normalizedTxHash),
+    wallet,
+    () => ({
+      wallet,
+      campaignId,
+      outcomeId,
+      syncedAt: Date.now(),
+    })
+  );
+
+  if (claim.status === "conflict_other_wallet") {
+    throw new StreakSyncError(
+      "This spin was already used by another wallet.",
+      "TX_ALREADY_USED"
+    );
+  }
+
+  return { reused: claim.status === "exists" };
+}
+
+export async function grantShuffleInfiniteSparkOnServer(
+  walletAddress: string,
+  txHash: string
+): Promise<{
+  state: StoredSparkState;
+  sparks: ReturnType<typeof computeSparkSnapshot>;
+  granted: boolean;
+}> {
+  if (!isWalletAddress(walletAddress)) {
+    throw new StreakRewardError(
+      "A valid wallet address is required.",
+      "NO_WALLET"
+    );
+  }
+
+  const wallet = normalizeWalletAddress(walletAddress);
+  const normalizedTxHash = txHash.trim().toLowerCase();
+  const guardPath = shuffleGrantPath(normalizedTxHash);
+  const existingGrant = await readPath<{ wallet?: string }>(guardPath);
+
+  if (existingGrant?.wallet) {
+    const recorded = normalizeWalletAddress(existingGrant.wallet);
+    if (recorded !== wallet) {
+      throw new StreakRewardError(
+        "This reward was already used by another wallet.",
+        "TX_ALREADY_USED"
+      );
+    }
+    const state = normalizeSparkState(await ensureSparkStateOnServer(wallet));
+    return {
+      state,
+      sparks: computeSparkSnapshot(state),
+      granted: false,
+    };
+  }
+
+  const now = Date.now();
+  const state = normalizeSparkState(await ensureSparkStateOnServer(wallet), now);
+  const baseUntil =
+    state.infiniteUntil && state.infiniteUntil > now ? state.infiniteUntil : now;
+  const infiniteUntil = baseUntil + INFINITE_SPARK_DURATION_MS;
+
+  const claim = await claimGuardRecord(guardPath, wallet, () => ({
+    wallet,
+    grantedAt: now,
+    infiniteUntil,
+    reward: "INFINITE_SPARK_24H",
+    source: "shuffle",
+  }));
+
+  if (claim.status === "conflict_other_wallet") {
+    throw new StreakRewardError(
+      "This reward was already used by another wallet.",
+      "TX_ALREADY_USED"
+    );
+  }
+
+  if (claim.status === "exists") {
+    const current = normalizeSparkState(await ensureSparkStateOnServer(wallet));
+    return {
+      state: current,
+      sparks: computeSparkSnapshot(current),
+      granted: false,
+    };
+  }
+
+  const nextState: StoredSparkState = {
+    ...state,
+    infiniteUntil,
+  };
+
+  try {
+    await writePath(sparksPath(wallet), sparkStateForRtdb(nextState));
+  } catch (err) {
+    await deletePath(guardPath).catch(() => {});
+    throw err;
+  }
+
+  return {
+    state: nextState,
+    sparks: computeSparkSnapshot(nextState),
+    granted: true,
+  };
+}

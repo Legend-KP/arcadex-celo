@@ -259,3 +259,110 @@ export async function readStreakProgress(
     },
   };
 }
+
+export interface VerifiedSpin {
+  player: Address;
+  campaignId: bigint;
+  rewardMode: number;
+  rewardTarget: Address;
+  rewardAmount: bigint;
+  timestamp: bigint;
+}
+
+export async function verifySpinTx(
+  walletAddress: string,
+  txHash: Hash,
+  expectedCampaignId: number
+): Promise<VerifiedSpin> {
+  assertConfigured();
+  const expectedPlayer = getAddress(walletAddress);
+  const receipt = await waitForCeloTransactionReceipt(txHash, {
+    timeoutMs: 20_000,
+  });
+
+  if (receipt.status !== "success") {
+    throw new Error("Spin transaction did not succeed.");
+  }
+
+  if (
+    receipt.to?.toLowerCase() !==
+    ARCADEX_REWARDS_CONTRACT_ADDRESS.toLowerCase()
+  ) {
+    throw new Error("Transaction was not sent to ArcadeXRewards.");
+  }
+
+  let spin: VerifiedSpin | null = null;
+
+  for (const log of receipt.logs) {
+    if (
+      log.address.toLowerCase() !==
+      ARCADEX_REWARDS_CONTRACT_ADDRESS.toLowerCase()
+    ) {
+      continue;
+    }
+
+    try {
+      const decoded = decodeEventLog({
+        abi: ARCADEX_REWARDS_ABI,
+        data: log.data,
+        topics: log.topics,
+      });
+
+      if (decoded.eventName !== "SpinResultGranted") continue;
+
+      const args = decoded.args as {
+        player: Address;
+        campaignId: bigint;
+        rewardMode: number;
+        rewardTarget: Address;
+        rewardAmount: bigint;
+        timestamp: bigint;
+      };
+
+      if (getAddress(args.player) !== expectedPlayer) {
+        throw new Error("Spin wallet does not match your account.");
+      }
+      if (Number(args.campaignId) !== expectedCampaignId) {
+        throw new Error("Spin is for a different campaign.");
+      }
+
+      spin = {
+        player: getAddress(args.player),
+        campaignId: args.campaignId,
+        rewardMode: Number(args.rewardMode),
+        rewardTarget: getAddress(args.rewardTarget),
+        rewardAmount: args.rewardAmount,
+        timestamp: args.timestamp,
+      };
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        (err.message.includes("does not match") ||
+          err.message.includes("different campaign"))
+      ) {
+        throw err;
+      }
+    }
+  }
+
+  if (!spin) {
+    throw new Error("No SpinResultGranted event found in this transaction.");
+  }
+
+  return spin;
+}
+
+export async function readSpinNonce(
+  walletAddress: string,
+  campaignId: number
+): Promise<bigint> {
+  assertConfigured();
+  const player = getAddress(walletAddress);
+  const publicClient = getCeloPublicClient();
+  return publicClient.readContract({
+    address: ARCADEX_REWARDS_CONTRACT_ADDRESS,
+    abi: ARCADEX_REWARDS_ABI,
+    functionName: "spinNonce",
+    args: [player, BigInt(campaignId)],
+  });
+}
