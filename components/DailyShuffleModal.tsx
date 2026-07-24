@@ -181,8 +181,7 @@ export default function DailyShuffleModal({
           Daily Shuffle
         </h2>
         <p className="daily-shuffle-sub">
-          One free shuffle every 24 hours. Same sign-in as always — cards are
-          just the reveal.
+          Sign-in for free free shuffle every 24 hours
         </p>
 
         {phase === "intro" || phase === "busy" ? (

@@ -51,7 +51,10 @@ const CONTEST_TOP_MIRROR_SIZE = 15;
 const RTDB_TRANSACTION_MAX_RETRIES = 8;
 
 type RtdbFetchOptions = RequestInit & {
-  /** Suppress response body (reduces download bandwidth on writes). */
+  /**
+   * Suppress response body (reduces download bandwidth on writes).
+   * Never combine with if-match / if-none-match — Firebase returns 400.
+   */
   silent?: boolean;
   /** Return only immediate child keys (no nested payloads). */
   shallow?: boolean;
@@ -218,11 +221,11 @@ async function writePathIfMatch(
   data: unknown,
   etag: string
 ): Promise<"ok" | "conflict"> {
+  // Do NOT use print=silent here — Firebase rejects mixing it with if-match.
   const res = await rtdbFetch(path, {
     method: "PUT",
     headers: { "if-match": etag },
     body: JSON.stringify(data),
-    silent: true,
   });
 
   if (res.status === 412) return "conflict";
