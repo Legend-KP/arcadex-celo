@@ -1,4 +1,5 @@
 import { SignJWT, importPKCS8 } from "jose";
+import { fetchWithTimeout } from "@/lib/firebase-fetch";
 
 const FIREBASE_SCOPES =
   "https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/userinfo.email";
@@ -7,6 +8,10 @@ const FIREBASE_SCOPES =
 const ACCESS_TOKEN_TTL_MS = 55 * 60 * 1000;
 
 let cachedAccessToken: { token: string; expiresAt: number } | null = null;
+/** In-flight refresh — concurrent callers share one mint. */
+let accessTokenInFlight: Promise<string> | null = null;
+/** Parsed once per warm isolate; avoid re-importing the PKCS8 key every refresh. */
+let cachedPrivateKey: Awaited<ReturnType<typeof importPKCS8>> | null = null;
 let warnedLegacyRtdbSecretConfigured = false;
 
 export function getProjectId(): string {
@@ -66,15 +71,20 @@ export function warnIfLegacyRtdbSecretConfigured(): void {
   );
 }
 
-export async function getFirebaseAccessToken(): Promise<string> {
+async function getServiceAccountKey(): Promise<
+  Awaited<ReturnType<typeof importPKCS8>>
+> {
+  if (cachedPrivateKey) return cachedPrivateKey;
+  const { privateKey } = getServiceAccount();
+  cachedPrivateKey = await importPKCS8(privateKey, "RS256");
+  return cachedPrivateKey;
+}
+
+async function mintFirebaseAccessToken(): Promise<string> {
   warnIfLegacyRtdbSecretConfigured();
 
-  if (cachedAccessToken && Date.now() < cachedAccessToken.expiresAt) {
-    return cachedAccessToken.token;
-  }
-
-  const { clientEmail, privateKey } = getServiceAccount();
-  const key = await importPKCS8(privateKey, "RS256");
+  const { clientEmail } = getServiceAccount();
+  const key = await getServiceAccountKey();
 
   const assertion = await new SignJWT({ scope: FIREBASE_SCOPES })
     .setProtectedHeader({ alg: "RS256", typ: "JWT" })
@@ -85,14 +95,13 @@ export async function getFirebaseAccessToken(): Promise<string> {
     .setExpirationTime("1h")
     .sign(key);
 
-  const res = await fetch("https://oauth2.googleapis.com/token", {
+  const res = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
       assertion,
     }),
-    cache: "no-store",
   });
 
   const data = (await res.json()) as {
@@ -109,14 +118,37 @@ export async function getFirebaseAccessToken(): Promise<string> {
     );
   }
 
-  // Scopes are requested in the JWT assertion above. Google's token response often
-  // omits the `scope` field for service-account flows, so we validate success by
-  // token issuance rather than parsing an optional response field.
-
   cachedAccessToken = {
     token: data.access_token,
     expiresAt: Date.now() + ACCESS_TOKEN_TTL_MS,
   };
 
   return data.access_token;
+}
+
+/**
+ * OAuth access token for Firestore + RTDB REST.
+ * Cached until near expiry; concurrent refreshers share one in-flight promise.
+ * A failed mint clears the in-flight promise so the next caller can retry.
+ */
+export async function getFirebaseAccessToken(): Promise<string> {
+  if (cachedAccessToken && Date.now() < cachedAccessToken.expiresAt) {
+    return cachedAccessToken.token;
+  }
+
+  if (accessTokenInFlight) {
+    return accessTokenInFlight;
+  }
+
+  accessTokenInFlight = mintFirebaseAccessToken()
+    .catch((err) => {
+      // Do not poison the cache — allow the next caller to retry.
+      cachedAccessToken = null;
+      throw err;
+    })
+    .finally(() => {
+      accessTokenInFlight = null;
+    });
+
+  return accessTokenInFlight;
 }

@@ -3,12 +3,22 @@ import {
   activateSparkRefillOnServer,
   SparkRefillActivationError,
 } from "@/lib/rtdb-server";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
 import { normalizeWalletAddress } from "@/lib/wallet-address";
 import { requireWalletAuth } from "@/lib/wallet-session";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  if (!(await checkRateLimit(`sparks-refill:ip:${ip}`, 30, 60_000))) {
+    return rateLimitResponse();
+  }
+
   try {
     const body = (await request.json()) as {
       walletAddress?: string;
@@ -33,6 +43,10 @@ export async function POST(request: Request) {
     }
 
     const wallet = normalizeWalletAddress(rawWallet);
+    if (!(await checkRateLimit(`sparks-refill:wallet:${wallet}`, 20, 60_000))) {
+      return rateLimitResponse();
+    }
+
     const auth = await requireWalletAuth(request, wallet);
     if (!auth.ok) {
       return NextResponse.json(

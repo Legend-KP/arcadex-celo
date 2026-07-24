@@ -50,13 +50,17 @@ export default function GameMenu({
 
   const tutorialSrc = useMemo(() => getGameTutorialUrl(game), [game]);
   const tutorialSeenKey = useMemo(() => getGameTutorialSeenKey(game), [game]);
+  const contestPosterSrc = "/contest-tutorial.webp";
 
   const [bgIdx, setBgIdx] = useState(0);
   const [logoIdx, setLogoIdx] = useState(0);
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [contestPosterDismissed, setContestPosterDismissed] = useState(false);
 
   const bgSrc = bgCandidates[bgIdx];
   const menuImageSrc = logoCandidates[logoIdx];
+  const contestPosterOpen =
+    contestLive && !contestPosterDismissed && !tutorialOpen;
 
   const dismissTutorial = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -65,9 +69,14 @@ export default function GameMenu({
     setTutorialOpen(false);
   }, [tutorialSeenKey]);
 
+  const dismissContestPoster = useCallback(() => {
+    setContestPosterDismissed(true);
+  }, []);
+
   useEffect(() => {
     setBgIdx(0);
     setLogoIdx(0);
+    setContestPosterDismissed(false);
   }, [game.id, primaryImageSrc]);
 
   useEffect(() => {
@@ -81,10 +90,15 @@ export default function GameMenu({
   }, [tutorialSrc, tutorialSeenKey]);
 
   useEffect(() => {
-    if (!tutorialOpen) return;
+    if (!tutorialOpen && !contestPosterOpen) return;
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") dismissTutorial();
+      if (event.key !== "Escape") return;
+      if (tutorialOpen) {
+        dismissTutorial();
+        return;
+      }
+      if (contestPosterOpen) dismissContestPoster();
     }
 
     const prevOverflow = document.body.style.overflow;
@@ -94,7 +108,12 @@ export default function GameMenu({
       document.body.style.overflow = prevOverflow;
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [tutorialOpen, dismissTutorial]);
+  }, [
+    tutorialOpen,
+    contestPosterOpen,
+    dismissTutorial,
+    dismissContestPoster,
+  ]);
 
   const tutorialModal =
     tutorialOpen && tutorialSrc ? (
@@ -126,6 +145,36 @@ export default function GameMenu({
         </div>
       </div>
     ) : null;
+
+  const contestPosterModal = contestPosterOpen ? (
+    <div className="game-tutorial-backdrop" role="presentation">
+      <div
+        className="game-tutorial"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Contest is live"
+      >
+        <div className="game-tutorial-media game-tutorial-media--contest">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={contestPosterSrc}
+            alt="Contest details"
+            className="game-tutorial-img"
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+          />
+        </div>
+        <button
+          type="button"
+          className="game-tutorial-btn"
+          onClick={dismissContestPoster}
+        >
+          Let&apos;s Go
+        </button>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div className="game-menu">
@@ -235,8 +284,9 @@ export default function GameMenu({
       </div>
 
       {typeof document !== "undefined"
-        ? tutorialModal && createPortal(tutorialModal, document.body)
-        : tutorialModal}
+        ? (tutorialModal || contestPosterModal) &&
+          createPortal(tutorialModal || contestPosterModal, document.body)
+        : tutorialModal || contestPosterModal}
     </div>
   );
 }

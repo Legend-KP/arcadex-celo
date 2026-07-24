@@ -139,6 +139,11 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ip = getClientIp(request);
+  if (!(await checkRateLimit(`leaderboard-post:ip:${ip}`, 60, 60_000))) {
+    return rateLimitResponse();
+  }
+
   try {
     const { id } = await params;
     const { response: disabled } = await assertLeaderboardEnabled(request, id);
@@ -167,6 +172,10 @@ export async function POST(
         { error: "A wallet address is required to save scores." },
         { status: 400 }
       );
+    }
+
+    if (!(await checkRateLimit(`leaderboard-post:wallet:${wallet}`, 40, 60_000))) {
+      return rateLimitResponse();
     }
 
     const auth = await requireWalletAuth(request, wallet);

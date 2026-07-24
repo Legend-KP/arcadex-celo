@@ -18,6 +18,7 @@ import {
 } from "@/lib/rtdb-server";
 import { Game, GameGatingFlags } from "@/types";
 import { getFirebaseAccessToken, getProjectId, getServiceAccount } from "@/lib/firebase-admin";
+import { fetchWithTimeout } from "@/lib/firebase-fetch";
 import { normalizeImageAssetUrl } from "@/lib/game-assets";
 
 type FirestoreValue = {
@@ -31,6 +32,9 @@ type FirestoreDocument = {
   name: string;
   fields: Record<string, FirestoreValue>;
 };
+
+/** Coalesce concurrent catalog loads on the same isolate. */
+let gamesListInFlight: Promise<Game[]> | null = null;
 
 function parseField(value: FirestoreValue | undefined): unknown {
   if (!value) return undefined;
@@ -88,12 +92,24 @@ async function syncGatingAfterMutation(
 ): Promise<void> {
   invalidateGameFlagsCache(gameId);
   if (!game) {
-    await deleteGameGatingFlagsFromRtdb(gameId).catch(() => {});
+    try {
+      await deleteGameGatingFlagsFromRtdb(gameId);
+    } catch (err) {
+      console.error(
+        `[ArcadeX][GATING_SYNC] Failed to delete RTDB flags for ${gameId}:`,
+        err instanceof Error ? err.message : err
+      );
+    }
     return;
   }
-  await syncGameGatingFlagsToRtdb(gameId, gatingFlagsFromGame(game)).catch(
-    () => {}
-  );
+  try {
+    await syncGameGatingFlagsToRtdb(gameId, gatingFlagsFromGame(game));
+  } catch (err) {
+    console.error(
+      `[ArcadeX][GATING_SYNC] Firestore ok but RTDB sync failed for ${gameId}:`,
+      err instanceof Error ? err.message : err
+    );
+  }
 }
 
 async function firestoreFetch(
@@ -117,14 +133,13 @@ async function firestoreFetch(
   const token = await getFirebaseAccessToken();
   const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${path}`;
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
       ...init?.headers,
     },
-    cache: "no-store",
   });
 
   if (res.ok) {
@@ -178,15 +193,23 @@ export async function fetchGamesFromServer(): Promise<Game[]> {
     if (stale) return stale;
   }
 
-  try {
-    const games = await fetchGamesFromFirestore();
-    setCachedGameList(games);
-    return games;
-  } catch (err) {
-    const stale = getStaleGameListFallback();
-    if (stale) return stale;
-    throw err;
-  }
+  if (gamesListInFlight) return gamesListInFlight;
+
+  gamesListInFlight = (async () => {
+    try {
+      const games = await fetchGamesFromFirestore();
+      setCachedGameList(games);
+      return games;
+    } catch (err) {
+      const stale = getStaleGameListFallback();
+      if (stale) return stale;
+      throw err;
+    } finally {
+      gamesListInFlight = null;
+    }
+  })();
+
+  return gamesListInFlight;
 }
 
 async function fetchGameFromFirestore(id: string): Promise<Game | null> {

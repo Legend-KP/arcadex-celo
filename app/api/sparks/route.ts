@@ -1,11 +1,21 @@
 import { NextResponse } from "next/server";
 import { fetchSparkStateFromServer } from "@/lib/rtdb-server";
 import { computeSparkSnapshot } from "@/lib/spark";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
 import { normalizeWalletAddress } from "@/lib/wallet-address";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const ip = getClientIp(request);
+  if (!(await checkRateLimit(`sparks-get:ip:${ip}`, 90, 60_000))) {
+    return rateLimitResponse();
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const rawWallet = searchParams.get("walletAddress")?.trim() ?? "";
@@ -18,6 +28,10 @@ export async function GET(request: Request) {
     }
 
     const wallet = normalizeWalletAddress(rawWallet);
+    if (!(await checkRateLimit(`sparks-get:wallet:${wallet}`, 60, 60_000))) {
+      return rateLimitResponse();
+    }
+
     const state = await fetchSparkStateFromServer(wallet);
     const sparks = computeSparkSnapshot(state);
     return NextResponse.json({ state, sparks });

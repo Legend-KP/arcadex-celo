@@ -15,7 +15,7 @@ import {
   isGameVisible,
 } from "@/lib/firestore-server";
 import { normalizeImageAssetUrl } from "@/lib/game-assets";
-import { fetchAllGamePlayCounts } from "@/lib/rtdb-server";
+import { fetchGamePlayCountsForIds } from "@/lib/rtdb-server";
 import {
   checkRateLimit,
   getClientIp,
@@ -44,12 +44,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [games, playCounts] = await Promise.all([
-      fetchGamesFromServer(),
-      fetchAllGamePlayCounts().catch(
-        () => ({}) as Record<string, number>
-      ),
-    ]);
+    const games = await fetchGamesFromServer();
+    const playCounts = await fetchGamePlayCountsForIds(
+      games.map((g) => g.id)
+    ).catch(() => ({}) as Record<string, number>);
 
     const isAdmin = await verifyAdminRequest(request);
     const visible = isAdmin

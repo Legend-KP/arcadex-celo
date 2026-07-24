@@ -24,13 +24,16 @@ import { verifySparkRefillPaymentTx } from "@/lib/spark-refill-verify";
 import { verifyScoreSubmitPaymentTx } from "@/lib/score-submit-verify";
 import type { Hash } from "viem";
 import { getDatabaseUrl, getFirebaseAccessToken, scrubSecrets } from "./firebase-admin";
+import { fetchWithTimeout } from "@/lib/firebase-fetch";
 import {
   bumpCachedPlayCount,
   getCachedGameFlags,
   getCachedPlayCounts,
   invalidateGameFlagsCache,
+  invalidateSharedPlayCountsKv,
+  loadPlayCountsWithSharedCache,
+  mergeCachedPlayCounts,
   setCachedGameFlags,
-  setCachedPlayCounts,
 } from "@/lib/rtdb-cache";
 import { coalesceProgressWrite } from "@/lib/progress-write-coalesce";
 import {
@@ -47,15 +50,20 @@ const LEADERBOARD_TOP_MIRROR_SIZE = 50;
 const CONTEST_TOP_MIRROR_SIZE = 15;
 const RTDB_TRANSACTION_MAX_RETRIES = 8;
 
+type RtdbFetchOptions = RequestInit & {
+  /** Suppress response body (reduces download bandwidth on writes). */
+  silent?: boolean;
+  /** Return only immediate child keys (no nested payloads). */
+  shallow?: boolean;
+};
+
 /** Service-account OAuth only; fail closed on auth errors. */
-async function getRtdbAuthQuery(): Promise<string> {
+async function getRtdbAccessToken(): Promise<string> {
   try {
-    const token = await getFirebaseAccessToken();
-    return `access_token=${encodeURIComponent(token)}`;
+    return await getFirebaseAccessToken();
   } catch (oauthErr) {
     const message =
       oauthErr instanceof Error ? oauthErr.message : "OAuth token unavailable";
-    // Alert-friendly security marker for log pipelines.
     console.error(
       `[ArcadeX][SECURITY][RTDB_AUTH] OAuth token acquisition failed: ${scrubSecrets(
         message
@@ -98,20 +106,33 @@ function resolveWalletField(
   return undefined;
 }
 
+/**
+ * RTDB REST with Bearer auth (token stays out of the URL / access logs).
+ * Optional print=silent and shallow query flags.
+ */
 async function rtdbFetch(
   path: string,
-  init?: RequestInit
+  init?: RtdbFetchOptions
 ): Promise<Response> {
-  const auth = await getRtdbAuthQuery();
-  const url = `${getDatabaseUrl()}/${encodeRtdbPath(path)}.json?${auth}`;
+  const token = await getRtdbAccessToken();
+  const { silent, shallow, headers: initHeaders, ...rest } = init ?? {};
 
-  return fetch(url, {
-    ...init,
+  const params = new URLSearchParams();
+  if (silent) params.set("print", "silent");
+  if (shallow) params.set("shallow", "true");
+  const qs = params.toString();
+
+  const url = `${getDatabaseUrl()}/${encodeRtdbPath(path)}.json${
+    qs ? `?${qs}` : ""
+  }`;
+
+  return fetchWithTimeout(url, {
+    ...rest,
     headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
+      Authorization: `Bearer ${token}`,
+      ...(rest.body ? { "Content-Type": "application/json" } : {}),
+      ...initHeaders,
     },
-    cache: "no-store",
   });
 }
 
@@ -124,6 +145,20 @@ async function readPath<T>(path: string): Promise<T | null> {
   }
 
   const data = (await res.json()) as T | null;
+  return data ?? null;
+}
+
+/** Immediate child keys only — no nested payloads. */
+export async function readPathShallow(
+  path: string
+): Promise<Record<string, boolean> | null> {
+  const res = await rtdbFetch(path, { shallow: true });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const text = scrubSecrets(await res.text());
+    throw new Error(`Realtime Database shallow read failed (${res.status}): ${text}`);
+  }
+  const data = (await res.json()) as Record<string, boolean> | null;
   return data ?? null;
 }
 
@@ -155,11 +190,26 @@ async function writePath(path: string, data: unknown): Promise<void> {
   const res = await rtdbFetch(path, {
     method: "PUT",
     body: JSON.stringify(data),
+    silent: true,
   });
 
   if (!res.ok) {
     const text = scrubSecrets(await res.text());
     throw new Error(`Realtime Database write failed (${res.status}): ${text}`);
+  }
+}
+
+/** Partial update — only the provided fields are written. */
+async function patchPath(path: string, data: unknown): Promise<void> {
+  const res = await rtdbFetch(path, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+    silent: true,
+  });
+
+  if (!res.ok) {
+    const text = scrubSecrets(await res.text());
+    throw new Error(`Realtime Database patch failed (${res.status}): ${text}`);
   }
 }
 
@@ -172,6 +222,7 @@ async function writePathIfMatch(
     method: "PUT",
     headers: { "if-match": etag },
     body: JSON.stringify(data),
+    silent: true,
   });
 
   if (res.status === 412) return "conflict";
@@ -183,7 +234,7 @@ async function writePathIfMatch(
 }
 
 async function deletePath(path: string): Promise<void> {
-  const res = await rtdbFetch(path, { method: "DELETE" });
+  const res = await rtdbFetch(path, { method: "DELETE", silent: true });
   if (!res.ok && res.status !== 404) {
     const text = scrubSecrets(await res.text());
     throw new Error(`Realtime Database delete failed (${res.status}): ${text}`);
@@ -195,6 +246,7 @@ async function incrementPath(path: string, delta = 1): Promise<void> {
   const res = await rtdbFetch(path, {
     method: "PUT",
     body: JSON.stringify({ ".sv": { increment: delta } }),
+    silent: true,
   });
 
   if (!res.ok) {
@@ -975,32 +1027,69 @@ export async function syncGameGatingFlagsToRtdb(
 }
 
 export async function deleteGameGatingFlagsFromRtdb(gameId: string): Promise<void> {
-  const res = await rtdbFetch(gameFlagsPath(gameId), { method: "DELETE" });
-  if (!res.ok && res.status !== 404) {
-    const text = await res.text();
-    throw new Error(`Realtime Database delete failed (${res.status}): ${text}`);
-  }
+  await deletePath(gameFlagsPath(gameId));
   invalidateGameFlagsCache(gameId);
 }
 
 // ─── Game play counts ──────────────────────────────────────────────────────────
 
-export async function fetchAllGamePlayCounts(): Promise<Record<string, number>> {
+async function readPlayCountsForIds(
+  gameIds: string[]
+): Promise<Record<string, number>> {
+  const unique = [...new Set(gameIds.filter(Boolean))];
+  if (unique.length === 0) return {};
+
+  const entries = await Promise.all(
+    unique.map(async (gameId) => {
+      const count = await readPath<number>(`gamePlays/${gameId}`);
+      return [gameId, typeof count === "number" ? count : 0] as const;
+    })
+  );
+
+  return Object.fromEntries(entries);
+}
+
+/**
+ * Play counts for catalog game IDs only — no full `gamePlays` tree download.
+ * Uses memory + KV shared cache and coalesces concurrent misses.
+ */
+export async function fetchGamePlayCountsForIds(
+  gameIds: string[]
+): Promise<Record<string, number>> {
+  const unique = [...new Set(gameIds.filter(Boolean))];
+  if (unique.length === 0) return {};
+
   const cached = getCachedPlayCounts();
-  if (cached) return cached;
+  if (cached) {
+    const result: Record<string, number> = {};
+    const missing: string[] = [];
+    for (const id of unique) {
+      if (typeof cached[id] === "number") {
+        result[id] = cached[id];
+      } else {
+        missing.push(id);
+      }
+    }
+    if (missing.length === 0) return result;
 
-  const data = await readPath<Record<string, number>>("gamePlays");
-  if (!data) {
-    setCachedPlayCounts({});
-    return {};
+    const fetched = await readPlayCountsForIds(missing);
+    mergeCachedPlayCounts(fetched);
+    return { ...result, ...fetched };
   }
 
-  const counts: Record<string, number> = {};
-  for (const [gameId, value] of Object.entries(data)) {
-    counts[gameId] = typeof value === "number" ? value : 0;
-  }
-  setCachedPlayCounts(counts);
-  return counts;
+  return loadPlayCountsWithSharedCache(() => readPlayCountsForIds(unique));
+}
+
+/**
+ * @deprecated Prefer fetchGamePlayCountsForIds(catalogIds) to avoid full-tree reads.
+ * Kept for admin/debug; still uses shared cache + per-id reads via shallow keys.
+ */
+export async function fetchAllGamePlayCounts(): Promise<Record<string, number>> {
+  return loadPlayCountsWithSharedCache(async () => {
+    const keys = await readPathShallow("gamePlays");
+    if (!keys) return {};
+    return readPlayCountsForIds(Object.keys(keys));
+  });
 }
 
 export async function fetchGamePlayCount(gameId: string): Promise<number> {
@@ -1010,7 +1099,9 @@ export async function fetchGamePlayCount(gameId: string): Promise<number> {
   }
 
   const count = await readPath<number>(`gamePlays/${gameId}`);
-  return typeof count === "number" ? count : 0;
+  const value = typeof count === "number" ? count : 0;
+  mergeCachedPlayCounts({ [gameId]: value });
+  return value;
 }
 
 /** Atomic increment — concurrent plays cannot lose counts. */
@@ -1018,10 +1109,12 @@ export async function incrementGamePlayCount(gameId: string): Promise<number> {
   await incrementPath(`gamePlays/${gameId}`, 1);
 
   const bumped = bumpCachedPlayCount(gameId, 1);
+  // Stale KV would overwrite a bumped count on another isolate — drop KV only.
+  void invalidateSharedPlayCountsKv().catch(() => {});
+
   if (typeof bumped === "number") return bumped;
 
-  const count = await fetchGamePlayCount(gameId);
-  return count;
+  return fetchGamePlayCount(gameId);
 }
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────
@@ -1681,8 +1774,7 @@ export async function markShufflePendingConsumed(
   const path = shufflePendingPath(wallet, campaignId, nonce);
   const existing = await readPath<ShufflePendingRecord>(path);
   if (!existing) return;
-  await writePath(path, {
-    ...existing,
+  await patchPath(path, {
     consumedAt: Date.now(),
     txHash: txHash.toLowerCase(),
   });

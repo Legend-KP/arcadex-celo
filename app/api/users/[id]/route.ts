@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { fetchUserFromServer, upsertUserOnServer } from "@/lib/rtdb-server";
 import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
+import {
   isWalletAddress,
   normalizeWalletAddress,
   tryNormalizeWalletAddress,
@@ -12,9 +17,14 @@ export const dynamic = "force-dynamic";
 const NAME_RE = /^[\w\s.-]{1,20}$/;
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ip = getClientIp(request);
+  if (!(await checkRateLimit(`users-get:ip:${ip}`, 90, 60_000))) {
+    return rateLimitResponse();
+  }
+
   try {
     const { id } = await params;
     if (!id.trim()) {
@@ -34,6 +44,11 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const ip = getClientIp(request);
+  if (!(await checkRateLimit(`users-put:ip:${ip}`, 30, 60_000))) {
+    return rateLimitResponse();
+  }
+
   try {
     const { id } = await params;
     if (!id.trim()) {
@@ -62,6 +77,10 @@ export async function PUT(
         { error: "Wallet address is required." },
         { status: 400 }
       );
+    }
+
+    if (!(await checkRateLimit(`users-put:wallet:${wallet}`, 20, 60_000))) {
+      return rateLimitResponse();
     }
 
     const auth = await requireWalletAuth(request, wallet);
