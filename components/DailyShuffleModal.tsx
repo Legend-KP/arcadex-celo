@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { formatChainError } from "@/lib/celo-public-client";
 import { DEFAULT_SHUFFLE_CAMPAIGN_ID } from "@/lib/daily-play-mode";
@@ -37,8 +37,126 @@ interface DailyShuffleModalProps {
   }) => void;
 }
 
+const TICKET_TONES = [
+  "lavender",
+  "mint",
+  "blush",
+  "sky",
+  "butter",
+  "periwinkle",
+] as const;
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function TicketSpark({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      aria-hidden
+    >
+      <path
+        d="M12 1C12.35 8.1 15.9 11.65 23 12C15.9 12.35 12.35 15.9 12 23C11.65 15.9 8.1 12.35 1 12C8.1 11.65 11.65 8.1 12 1Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function TicketShell({
+  tone,
+  children,
+  faceDown,
+}: {
+  tone: (typeof TICKET_TONES)[number];
+  children?: ReactNode;
+  faceDown?: boolean;
+}) {
+  const uid = useId().replace(/:/g, "");
+  const goldId = `ticket-gold-${tone}-${uid}`;
+
+  if (faceDown) {
+    return (
+      <span className={`daily-shuffle-ticket tone-${tone} is-face-down`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="daily-shuffle-ticket-img"
+          src={`/daily-shuffle/ticket-${tone}.png`}
+          alt=""
+          draggable={false}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span className={`daily-shuffle-ticket tone-${tone}`}>
+      <svg
+        className="daily-shuffle-ticket-shape"
+        viewBox="0 0 100 148"
+        preserveAspectRatio="none"
+        aria-hidden
+      >
+        <defs>
+          <linearGradient id={goldId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#F6DE8A" />
+            <stop offset="42%" stopColor="#E8C04A" />
+            <stop offset="100%" stopColor="#C4921A" />
+          </linearGradient>
+        </defs>
+        {/* Ticket: corner bites + top/bottom center notches */}
+        <path
+          className="daily-shuffle-ticket-path"
+          d="M 18 2
+             H 36
+             A 14 14 0 0 1 64 2
+             H 82
+             A 8 8 0 0 1 98 18
+             V 56
+             V 92
+             V 130
+             A 8 8 0 0 1 82 146
+             H 64
+             A 14 14 0 0 1 36 146
+             H 18
+             A 8 8 0 0 1 2 130
+             V 18
+             A 8 8 0 0 1 18 2
+             Z"
+          stroke={`url(#${goldId})`}
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+        <path
+          className="daily-shuffle-ticket-stitch"
+          d="M 22 12
+             H 37
+             A 11 11 0 0 1 63 12
+             H 78
+             A 6 6 0 0 1 90 24
+             V 124
+             A 6 6 0 0 1 78 136
+             H 63
+             A 11 11 0 0 1 37 136
+             H 22
+             A 6 6 0 0 1 10 124
+             V 24
+             A 6 6 0 0 1 22 12
+             Z"
+          fill="none"
+          stroke={`url(#${goldId})`}
+          strokeWidth="1.15"
+          strokeDasharray="3.2 2.6"
+          opacity="0.95"
+        />
+      </svg>
+      <span className="daily-shuffle-ticket-content">{children}</span>
+    </span>
+  );
 }
 
 export default function DailyShuffleModal({
@@ -176,20 +294,29 @@ export default function DailyShuffleModal({
         aria-modal="true"
         aria-labelledby="daily-shuffle-title"
       >
-        <p className="daily-shuffle-eyebrow">Daily play</p>
+        <div className="daily-shuffle-sparkles" aria-hidden>
+          <TicketSpark className="daily-shuffle-sparkle s1" />
+          <TicketSpark className="daily-shuffle-sparkle s2" />
+          <TicketSpark className="daily-shuffle-sparkle s3" />
+          <TicketSpark className="daily-shuffle-sparkle s4" />
+          <TicketSpark className="daily-shuffle-sparkle s5" />
+        </div>
+
+        <p className="daily-shuffle-eyebrow">✦ Daily Play ✦</p>
         <h2 id="daily-shuffle-title" className="daily-shuffle-title">
           Daily Shuffle
         </h2>
         <p className="daily-shuffle-sub">
-          Sign-in for free free shuffle every 24 hours
+          One free shuffle every 24 hours. Same sign-in as always — cards are
+          just the reveal.
         </p>
 
         {phase === "intro" || phase === "busy" ? (
           <div className="daily-shuffle-hero">
-            <div className="daily-shuffle-hero-card">
-              <span className="daily-shuffle-hero-glyph">⚡</span>
-              <strong>Tap to shuffle</strong>
-              <span>USDT · Infinite Spark · or try again tomorrow</span>
+            <div className="daily-shuffle-hero-cards" aria-hidden>
+              {TICKET_TONES.slice(0, 3).map((tone) => (
+                <TicketShell key={tone} tone={tone} faceDown />
+              ))}
             </div>
             {status && !status.canCheckIn ? (
               <p className="daily-shuffle-hint">
@@ -205,12 +332,22 @@ export default function DailyShuffleModal({
           phase === "reveal" ||
           phase === "claiming") && (
           <div className="daily-shuffle-stage">
+            <div className="daily-shuffle-divider" aria-hidden>
+              <span />
+              <TicketSpark />
+              <span />
+            </div>
             {phase === "shuffling" ? (
               <div className="daily-shuffle-pile" aria-live="polite">
                 <span>Shuffling…</span>
                 <div className="daily-shuffle-pile-cards">
                   {[0, 1, 2, 3].map((i) => (
-                    <div key={i} className="daily-shuffle-pile-card" />
+                    <div
+                      key={i}
+                      className={`daily-shuffle-pile-card tone-${TICKET_TONES[i]}`}
+                    >
+                      <TicketShell tone={TICKET_TONES[i]} faceDown />
+                    </div>
                   ))}
                 </div>
               </div>
@@ -220,17 +357,18 @@ export default function DailyShuffleModal({
                   phase === "pick" ? "is-pick" : ""
                 } ${phase === "reveal" || phase === "claiming" ? "is-reveal" : ""}`}
               >
-                {theater.map((card) => {
+                {theater.map((card, index) => {
                   const isWinner = card.id === winnerId;
                   const faceDown = phase === "pick";
                   const showFront =
                     phase === "showcase" ||
                     ((phase === "reveal" || phase === "claiming") && isWinner);
+                  const tone = TICKET_TONES[index % TICKET_TONES.length];
                   return (
                     <button
                       key={card.id}
                       type="button"
-                      className={`daily-shuffle-card rarity-${card.rarity} ${
+                      className={`daily-shuffle-card ${
                         faceDown ? "is-back" : ""
                       } ${
                         phase === "reveal" || phase === "claiming"
@@ -242,23 +380,23 @@ export default function DailyShuffleModal({
                       disabled={phase !== "pick"}
                       onClick={() => handlePick(card.id)}
                     >
-                      {showFront ? (
-                        <>
-                          <span className="daily-shuffle-card-glyph">
-                            {card.glyph}
-                          </span>
-                          <span className="daily-shuffle-card-label">
-                            {card.type === "usdt" && card.amount != null
-                              ? `${card.amount} USDT`
-                              : card.label}
-                          </span>
-                          <span className="daily-shuffle-card-sub">
-                            {card.sub}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="daily-shuffle-card-mark">?</span>
-                      )}
+                      <TicketShell tone={tone} faceDown={!showFront}>
+                        {showFront ? (
+                          <>
+                            <span className="daily-shuffle-card-glyph">
+                              {card.glyph}
+                            </span>
+                            <span className="daily-shuffle-card-label">
+                              {card.type === "usdt" && card.amount != null
+                                ? `${card.amount} USDT`
+                                : card.label}
+                            </span>
+                            <span className="daily-shuffle-card-sub">
+                              {card.sub}
+                            </span>
+                          </>
+                        ) : null}
+                      </TicketShell>
                     </button>
                   );
                 })}
@@ -301,7 +439,15 @@ export default function DailyShuffleModal({
           ) : null}
 
           {phase === "pick" ? (
-            <p className="daily-shuffle-hint">Pick a card to reveal today&apos;s reward</p>
+            <p className="daily-shuffle-hint daily-shuffle-hint-ornament">
+              <span aria-hidden>
+                · · <TicketSpark className="daily-shuffle-hint-spark" /> · ·
+              </span>
+              <span>Pick a card to reveal today&apos;s reward</span>
+              <span aria-hidden>
+                · · <TicketSpark className="daily-shuffle-hint-spark" /> · ·
+              </span>
+            </p>
           ) : null}
 
           {phase === "reveal" || phase === "claiming" ? (
