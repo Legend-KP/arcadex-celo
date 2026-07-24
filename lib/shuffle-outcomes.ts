@@ -7,6 +7,28 @@ import {
 /** USDT on Celo uses 6 decimals. */
 export const USDT_DECIMALS = 6;
 
+/**
+ * Hard daily USDT spend ceiling (human units). Must be ≥ jackpot (1) so the
+ * 1 USDT prize can still pay. Soft odds target ~0.35 on non-jackpot days at
+ * 10k shuffles; the hard gate stops further USDT once this is hit.
+ */
+export const SHUFFLE_DAILY_USDT_BUDGET = Number(
+  process.env.SHUFFLE_DAILY_USDT_BUDGET?.trim() || "1"
+);
+
+/** Integer micro-USDT (6 decimals) helpers for budget math. */
+export function usdtToMicro(amount: number): number {
+  return Math.round(amount * 10 ** USDT_DECIMALS);
+}
+
+export function microToUsdt(micro: number): number {
+  return micro / 10 ** USDT_DECIMALS;
+}
+
+export const SHUFFLE_DAILY_USDT_BUDGET_MICRO = usdtToMicro(
+  SHUFFLE_DAILY_USDT_BUDGET
+);
+
 export type ShuffleOutcomeType = "usdt" | "spark" | "none";
 
 export interface ShuffleOutcomeDef {
@@ -14,12 +36,26 @@ export interface ShuffleOutcomeDef {
   type: ShuffleOutcomeType;
   /** Display amount for USDT (human units). */
   amount: number | null;
+  /** Relative integer weight (sum = SHUFFLE_WEIGHT_TOTAL). */
   weight: number;
   label: string;
   sub: string;
   glyph: string;
   rarity: "legendary" | "rare" | "uncommon" | "spark" | "none";
 }
+
+/**
+ * Weight base chosen so rare odds are exact integers:
+ * 1/15k, 1/10k, 1/2k all divide 30_000.
+ *
+ * At 10k daily shuffles (soft EV, before hard daily cap):
+ * - 1 USDT @ 1/15k     → ~0.67 expected (often blocked by daily cap)
+ * - 0.05 USDT @ 1/10k  → ~0.05
+ * - 0.001 USDT @ 3%    → ~0.30  (maximizes unique USDT winners)
+ * - Infinite Spark @ 1/2k → ~5 winners
+ * Non-jackpot USDT ≈ 0.35/day; hard cap clamps total spend to budget.
+ */
+export const SHUFFLE_WEIGHT_TOTAL = 30_000;
 
 /**
  * Server-only odds table. Client may mirror labels for theater, but never
@@ -30,18 +66,18 @@ export const SHUFFLE_OUTCOMES: ShuffleOutcomeDef[] = [
     id: "usdt_1",
     type: "usdt",
     amount: 1,
-    weight: 0.1,
+    weight: 2, // 2/30000 = 1/15000
     label: "1 USDT",
     sub: "Jackpot",
     glyph: "Ⓤ",
     rarity: "legendary",
   },
   {
-    id: "usdt_p1",
+    id: "usdt_p05",
     type: "usdt",
-    amount: 0.1,
-    weight: 1,
-    label: "0.1 USDT",
+    amount: 0.05,
+    weight: 3, // 3/30000 = 1/10000
+    label: "0.05 USDT",
     sub: "Big win",
     glyph: "Ⓤ",
     rarity: "rare",
@@ -50,7 +86,7 @@ export const SHUFFLE_OUTCOMES: ShuffleOutcomeDef[] = [
     id: "usdt_p001",
     type: "usdt",
     amount: 0.001,
-    weight: 5,
+    weight: 900, // 900/30000 = 3%
     label: "0.001 USDT",
     sub: "Small win",
     glyph: "Ⓤ",
@@ -60,7 +96,7 @@ export const SHUFFLE_OUTCOMES: ShuffleOutcomeDef[] = [
     id: "spark",
     type: "spark",
     amount: null,
-    weight: 15,
+    weight: 15, // 15/30000 = 1/2000
     label: "Infinite Spark",
     sub: "Unlimited plays · 24h",
     glyph: "⚡",
@@ -70,7 +106,7 @@ export const SHUFFLE_OUTCOMES: ShuffleOutcomeDef[] = [
     id: "blnt1",
     type: "none",
     amount: null,
-    weight: 39.9,
+    weight: 14_540,
     label: "Better luck next time",
     sub: "Try again tomorrow",
     glyph: "✦",
@@ -80,7 +116,7 @@ export const SHUFFLE_OUTCOMES: ShuffleOutcomeDef[] = [
     id: "blnt2",
     type: "none",
     amount: null,
-    weight: 39,
+    weight: 14_540,
     label: "Better luck next time",
     sub: "So close!",
     glyph: "✦",
@@ -88,35 +124,44 @@ export const SHUFFLE_OUTCOMES: ShuffleOutcomeDef[] = [
   },
 ];
 
-export const USDT_JACKPOT_COOLDOWN_MS = 15 * 24 * 60 * 60 * 1000;
-
 export function usdtToBaseUnits(amount: number): bigint {
-  return BigInt(Math.round(amount * 10 ** USDT_DECIMALS));
+  return BigInt(usdtToMicro(amount));
 }
 
 export function secureWeightedPick(
   outcomes: ShuffleOutcomeDef[] = SHUFFLE_OUTCOMES
 ): ShuffleOutcomeDef {
-  const SCALE = 1000;
-  const scaled = outcomes.map((o) => Math.round(o.weight * SCALE));
-  const total = scaled.reduce((a, b) => a + b, 0);
+  if (outcomes.length === 0) {
+    throw new Error("No shuffle outcomes available.");
+  }
+  const total = outcomes.reduce((a, o) => a + o.weight, 0);
+  if (total <= 0) {
+    throw new Error("Shuffle outcome weights must be positive.");
+  }
   const roll = randomInt(0, total);
   let cursor = 0;
   for (let i = 0; i < outcomes.length; i++) {
-    cursor += scaled[i];
+    cursor += outcomes[i].weight;
     if (roll < cursor) return outcomes[i];
   }
   return outcomes[outcomes.length - 1];
 }
 
-/** After any USDT win, exclude USDT prizes for the cooldown window. */
+/**
+ * Pick an outcome. USDT prizes that cannot fit in the remaining daily budget
+ * are excluded so more users can still win smaller amounts within the cap.
+ */
 export function pickShuffleOutcome(opts: {
-  usdtBlocked: boolean;
+  /** Remaining daily USDT budget in human units. */
+  remainingUsdt: number;
 }): ShuffleOutcomeDef {
-  const pool = opts.usdtBlocked
-    ? SHUFFLE_OUTCOMES.filter((o) => o.type !== "usdt")
-    : SHUFFLE_OUTCOMES;
-  return secureWeightedPick(pool);
+  const remainingMicro = usdtToMicro(opts.remainingUsdt);
+  const pool = SHUFFLE_OUTCOMES.filter((o) => {
+    if (o.type !== "usdt") return true;
+    if (o.amount == null) return false;
+    return usdtToMicro(o.amount) <= remainingMicro;
+  });
+  return secureWeightedPick(pool.length > 0 ? pool : SHUFFLE_OUTCOMES.filter((o) => o.type !== "usdt"));
 }
 
 export function outcomeToOnChainReward(outcome: ShuffleOutcomeDef): {

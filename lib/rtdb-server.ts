@@ -41,6 +41,7 @@ import {
   normalizeWalletAddress,
   tryNormalizeWalletAddress,
 } from "@/lib/wallet-address";
+import { SHUFFLE_DAILY_USDT_BUDGET_MICRO } from "@/lib/shuffle-outcomes";
 
 type StoredUser = Omit<PlayerProfile, "id">;
 type LeaderboardMap = Record<string, LeaderboardEntry>;
@@ -1715,10 +1716,6 @@ function shufflePendingPath(wallet: string, campaignId: number, nonce: number): 
   return `shufflePending/${wallet.toLowerCase()}/${campaignId}/${nonce}`;
 }
 
-function shuffleUsdtCooldownPath(wallet: string): string {
-  return `shuffleUsdtCooldown/${wallet.toLowerCase()}`;
-}
-
 function spinTxPath(txHash: string): string {
   return `spinTxs/${txHash.toLowerCase()}`;
 }
@@ -1727,23 +1724,202 @@ function shuffleGrantPath(txHash: string): string {
   return `shuffleGrants/${txHash.toLowerCase()}`;
 }
 
-export async function getShuffleUsdtCooldownUntil(
-  walletAddress: string
-): Promise<number> {
-  const wallet = normalizeWalletAddress(walletAddress);
-  const data = await readPath<{ until?: number }>(shuffleUsdtCooldownPath(wallet));
-  if (!data || typeof data.until !== "number") return 0;
-  return data.until;
+function shuffleDailyBudgetPath(dayKey: string): string {
+  return `shuffleDailyBudget/${dayKey}`;
 }
 
-export async function setShuffleUsdtCooldown(
+/** UTC calendar day used for the hard daily USDT spend ceiling. */
+export function shuffleUtcDayKey(nowMs: number = Date.now()): string {
+  return new Date(nowMs).toISOString().slice(0, 10);
+}
+
+type ShuffleUsdtReservation = {
+  amountMicro: number;
+  expiresAt: number;
+};
+
+type ShuffleDailyBudgetRecord = {
+  /** Confirmed on-chain USDT payouts for the day (micro-USDT). */
+  spentMicro?: number;
+  /** Pending signed outcomes not yet synced (micro-USDT), keyed by wallet_nonce. */
+  reservations?: Record<string, ShuffleUsdtReservation>;
+  /** Keys already moved into spentMicro (idempotent sync). */
+  confirmed?: Record<string, number>;
+};
+
+function pruneExpiredReservations(
+  reservations: Record<string, ShuffleUsdtReservation> | undefined,
+  nowMs: number
+): Record<string, ShuffleUsdtReservation> {
+  if (!reservations) return {};
+  const next: Record<string, ShuffleUsdtReservation> = {};
+  for (const [key, value] of Object.entries(reservations)) {
+    if (
+      value &&
+      typeof value.amountMicro === "number" &&
+      typeof value.expiresAt === "number" &&
+      value.expiresAt > nowMs &&
+      value.amountMicro > 0
+    ) {
+      next[key] = value;
+    }
+  }
+  return next;
+}
+
+function sumReservedMicro(
+  reservations: Record<string, ShuffleUsdtReservation>
+): number {
+  let sum = 0;
+  for (const value of Object.values(reservations)) {
+    sum += value.amountMicro;
+  }
+  return sum;
+}
+
+export function shuffleUsdtReservationKey(
   walletAddress: string,
-  untilMs: number
-): Promise<void> {
-  const wallet = normalizeWalletAddress(walletAddress);
-  await writePath(shuffleUsdtCooldownPath(wallet), {
-    until: untilMs,
-    at: Date.now(),
+  campaignId: number,
+  nonce: number
+): string {
+  return `${normalizeWalletAddress(walletAddress)}_${campaignId}_${nonce}`;
+}
+
+export async function getShuffleUsdtBudgetRemainingMicro(
+  nowMs: number = Date.now()
+): Promise<number> {
+  const dayKey = shuffleUtcDayKey(nowMs);
+  const data = await readPath<ShuffleDailyBudgetRecord>(
+    shuffleDailyBudgetPath(dayKey)
+  );
+  const reservations = pruneExpiredReservations(data?.reservations, nowMs);
+  const spent = typeof data?.spentMicro === "number" ? data.spentMicro : 0;
+  const reserved = sumReservedMicro(reservations);
+  return Math.max(0, SHUFFLE_DAILY_USDT_BUDGET_MICRO - spent - reserved);
+}
+
+/**
+ * Atomically reserve USDT against today's hard budget before signing a spin.
+ * Expired reservations are dropped on write. Returns false if amount cannot fit.
+ */
+export async function reserveShuffleUsdtBudget(opts: {
+  amountMicro: number;
+  reservationKey: string;
+  expiresAtMs: number;
+  nowMs?: number;
+}): Promise<{ ok: true; remainingMicro: number } | { ok: false; remainingMicro: number }> {
+  const nowMs = opts.nowMs ?? Date.now();
+  const dayKey = shuffleUtcDayKey(nowMs);
+  const path = shuffleDailyBudgetPath(dayKey);
+  let remainingMicro = 0;
+
+  const { committed, snapshot } = await runRtdbTransaction<ShuffleDailyBudgetRecord>(
+    path,
+    (current) => {
+      const reservations = pruneExpiredReservations(current?.reservations, nowMs);
+      const confirmed = current?.confirmed ?? {};
+      const spent =
+        typeof current?.spentMicro === "number" ? current.spentMicro : 0;
+      const existing = reservations[opts.reservationKey];
+      if (existing && existing.amountMicro === opts.amountMicro) {
+        // Idempotent re-prepare of the same pending outcome.
+        remainingMicro = Math.max(
+          0,
+          SHUFFLE_DAILY_USDT_BUDGET_MICRO - spent - sumReservedMicro(reservations)
+        );
+        return {
+          spentMicro: spent,
+          reservations: {
+            ...reservations,
+            [opts.reservationKey]: {
+              amountMicro: opts.amountMicro,
+              expiresAt: opts.expiresAtMs,
+            },
+          },
+          confirmed,
+        };
+      }
+
+      // Replace a prior reservation for this key (e.g. amount changed).
+      if (existing) {
+        delete reservations[opts.reservationKey];
+      }
+
+      const reserved = sumReservedMicro(reservations);
+      remainingMicro = Math.max(
+        0,
+        SHUFFLE_DAILY_USDT_BUDGET_MICRO - spent - reserved
+      );
+      if (opts.amountMicro > remainingMicro) {
+        return undefined;
+      }
+
+      reservations[opts.reservationKey] = {
+        amountMicro: opts.amountMicro,
+        expiresAt: opts.expiresAtMs,
+      };
+      remainingMicro -= opts.amountMicro;
+      return {
+        spentMicro: spent,
+        reservations,
+        confirmed,
+      };
+    }
+  );
+
+  if (!committed) {
+    const spent =
+      typeof snapshot?.spentMicro === "number" ? snapshot.spentMicro : 0;
+    const reserved = sumReservedMicro(
+      pruneExpiredReservations(snapshot?.reservations, nowMs)
+    );
+    return {
+      ok: false,
+      remainingMicro: Math.max(
+        0,
+        SHUFFLE_DAILY_USDT_BUDGET_MICRO - spent - reserved
+      ),
+    };
+  }
+
+  return { ok: true, remainingMicro };
+}
+
+/** Move a reservation into confirmed spend after on-chain sync. */
+export async function confirmShuffleUsdtBudget(opts: {
+  amountMicro: number;
+  reservationKey: string;
+  nowMs?: number;
+}): Promise<void> {
+  const nowMs = opts.nowMs ?? Date.now();
+  const dayKey = shuffleUtcDayKey(nowMs);
+  const path = shuffleDailyBudgetPath(dayKey);
+
+  await runRtdbTransaction<ShuffleDailyBudgetRecord>(path, (current) => {
+    const reservations = pruneExpiredReservations(current?.reservations, nowMs);
+    const confirmed = { ...(current?.confirmed ?? {}) };
+    const spent =
+      typeof current?.spentMicro === "number" ? current.spentMicro : 0;
+
+    if (typeof confirmed[opts.reservationKey] === "number") {
+      delete reservations[opts.reservationKey];
+      return {
+        spentMicro: spent,
+        reservations,
+        confirmed,
+      };
+    }
+
+    const existing = reservations[opts.reservationKey];
+    delete reservations[opts.reservationKey];
+    const addMicro = existing?.amountMicro ?? opts.amountMicro;
+    confirmed[opts.reservationKey] = addMicro;
+
+    return {
+      spentMicro: spent + addMicro,
+      reservations,
+      confirmed,
+    };
   });
 }
 

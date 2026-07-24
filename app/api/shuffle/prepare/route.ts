@@ -13,14 +13,18 @@ import {
 } from "@/lib/rate-limit";
 import {
   getShufflePending,
-  getShuffleUsdtCooldownUntil,
+  getShuffleUsdtBudgetRemainingMicro,
+  reserveShuffleUsdtBudget,
   saveShufflePending,
+  shuffleUsdtReservationKey,
   type ShufflePendingRecord,
 } from "@/lib/rtdb-server";
 import {
   getShuffleTheaterCards,
+  microToUsdt,
   outcomeToOnChainReward,
   pickShuffleOutcome,
+  usdtToMicro,
 } from "@/lib/shuffle-outcomes";
 import { signShuffleSpin } from "@/lib/shuffle-sign";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
@@ -106,12 +110,29 @@ export async function POST(request: Request) {
       return NextResponse.json(formatPrepareResponse(existing));
     }
 
-    const cooldownUntil = await getShuffleUsdtCooldownUntil(wallet);
-    const usdtBlocked = cooldownUntil > Date.now();
+    const remainingMicro = await getShuffleUsdtBudgetRemainingMicro();
+    let outcome = pickShuffleOutcome({
+      remainingUsdt: microToUsdt(remainingMicro),
+    });
 
-    const outcome = pickShuffleOutcome({ usdtBlocked });
-    const onChain = outcomeToOnChainReward(outcome);
+    const reservationKey = shuffleUsdtReservationKey(wallet, campaignId, nonce);
     const deadline = BigInt(nowSec + SIGNATURE_TTL_SEC);
+
+    if (outcome.type === "usdt" && outcome.amount != null) {
+      const amountMicro = usdtToMicro(outcome.amount);
+      const reserved = await reserveShuffleUsdtBudget({
+        amountMicro,
+        reservationKey,
+        expiresAtMs: Number(deadline) * 1000,
+      });
+
+      if (!reserved.ok) {
+        // Daily cap hit between read and reserve — fall back to non-USDT.
+        outcome = pickShuffleOutcome({ remainingUsdt: 0 });
+      }
+    }
+
+    const onChain = outcomeToOnChainReward(outcome);
     const player = getAddress(wallet) as Address;
 
     const signature = await signShuffleSpin({

@@ -13,15 +13,16 @@ import {
   rateLimitResponse,
 } from "@/lib/rate-limit";
 import {
+  confirmShuffleUsdtBudget,
   getShufflePending,
   grantShuffleInfiniteSparkOnServer,
   markShufflePendingConsumed,
   recordSpinTxOnServer,
-  setShuffleUsdtCooldown,
+  shuffleUsdtReservationKey,
   StreakRewardError,
   StreakSyncError,
 } from "@/lib/rtdb-server";
-import { USDT_JACKPOT_COOLDOWN_MS } from "@/lib/shuffle-outcomes";
+import { usdtToMicro } from "@/lib/shuffle-outcomes";
 import { invalidateStreakProgressCache } from "@/lib/streak-progress-cache";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import { createWalletSessionToken } from "@/lib/wallet-session";
@@ -149,7 +150,14 @@ export async function POST(request: Request) {
     }
 
     if (pending.outcomeType === "usdt" && Number(verified.rewardMode) === REWARD_USDT) {
-      await setShuffleUsdtCooldown(wallet, Date.now() + USDT_JACKPOT_COOLDOWN_MS);
+      const amountMicro =
+        pending.displayAmount != null
+          ? usdtToMicro(pending.displayAmount)
+          : Number(verified.rewardAmount);
+      await confirmShuffleUsdtBudget({
+        amountMicro,
+        reservationKey: shuffleUsdtReservationKey(wallet, campaignId, nonce),
+      });
     }
 
     const needsClaim =
