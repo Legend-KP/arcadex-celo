@@ -49,9 +49,9 @@ const TICKET_TONES = [
 
 /** Intro preview — the three USDT prizes, then flip to ?. */
 const INTRO_USDT_PREVIEW = [
-  { tone: "lavender" as const, label: "1 USDT", glyph: "Ⓤ" },
-  { tone: "mint" as const, label: "0.05 USDT", glyph: "Ⓤ" },
-  { tone: "blush" as const, label: "0.001 USDT", glyph: "Ⓤ" },
+  { tone: "lavender" as const, label: "1 USDT" },
+  { tone: "mint" as const, label: "0.05 USDT" },
+  { tone: "blush" as const, label: "0.001 USDT" },
 ];
 
 const SHOWCASE_MS = 3800;
@@ -175,12 +175,14 @@ function CardFaceContent({
   glyph,
   label,
 }: {
-  glyph: string;
+  glyph?: string | null;
   label: string;
 }) {
   return (
     <>
-      <span className="daily-shuffle-card-glyph">{glyph}</span>
+      {glyph ? (
+        <span className="daily-shuffle-card-glyph">{glyph}</span>
+      ) : null}
       <span className="daily-shuffle-card-label">{label}</span>
     </>
   );
@@ -355,7 +357,9 @@ export default function DailyShuffleModal({
   return createPortal(
     <div className="player-modal-backdrop daily-shuffle-backdrop" role="presentation">
       <div
-        className="daily-shuffle-modal"
+        className={`daily-shuffle-modal${
+          phase === "reveal" || phase === "claiming" ? " is-reveal" : ""
+        }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="daily-shuffle-title"
@@ -368,14 +372,10 @@ export default function DailyShuffleModal({
           <TicketSpark className="daily-shuffle-sparkle s5" />
         </div>
 
-        <p className="daily-shuffle-eyebrow">✦ Daily Play ✦</p>
         <h2 id="daily-shuffle-title" className="daily-shuffle-title">
-          Daily Shuffle
+          Daily Jackpot
         </h2>
-        <p className="daily-shuffle-sub">
-          One free shuffle every 24 hours. Same sign-in as always — cards are
-          just the reveal.
-        </p>
+        <p className="daily-shuffle-sub">One free shuffle every 24 hours.</p>
 
         {phase === "intro" || phase === "busy" ? (
           <div className="daily-shuffle-hero">
@@ -390,10 +390,7 @@ export default function DailyShuffleModal({
                   <div className="daily-shuffle-hero-flip-inner">
                     <div className="daily-shuffle-hero-face daily-shuffle-hero-face-front">
                       <TicketShell tone={card.tone}>
-                        <CardFaceContent
-                          glyph={card.glyph}
-                          label={card.label}
-                        />
+                        <CardFaceContent label={card.label} />
                       </TicketShell>
                     </div>
                     <div className="daily-shuffle-hero-face daily-shuffle-hero-face-back">
@@ -476,7 +473,9 @@ export default function DailyShuffleModal({
                       <TicketShell tone={tone} faceDown={!showFront}>
                         {showFront && display ? (
                           <CardFaceContent
-                            glyph={display.glyph}
+                            glyph={
+                              display.type === "usdt" ? null : display.glyph
+                            }
                             label={revealLabel(display)}
                           />
                         ) : null}

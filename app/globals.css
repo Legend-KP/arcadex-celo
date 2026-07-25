@@ -4109,7 +4109,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .daily-shuffle-title {
-  margin: 10px 0 0;
+  margin: 4px 0 0;
   text-align: center;
   font-family: var(--font-head);
   font-size: 30px;
@@ -4117,12 +4117,59 @@ a { color: inherit; text-decoration: none; }
 }
 
 .daily-shuffle-sub {
-  margin: 8px auto 0;
+  margin: 6px auto 0;
   max-width: 34ch;
   text-align: center;
   font-size: 13px;
   line-height: 1.45;
   color: #6b7280;
+}
+
+/* Reveal: tighten vertical space so Continue stays fully on-screen */
+.daily-shuffle-modal.is-reveal {
+  padding-top: 14px;
+  padding-bottom: 14px;
+  max-height: min(88vh, 720px);
+}
+
+.daily-shuffle-modal.is-reveal .daily-shuffle-title {
+  margin-top: 0;
+  font-size: 26px;
+}
+
+.daily-shuffle-modal.is-reveal .daily-shuffle-sub {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.daily-shuffle-modal.is-reveal .daily-shuffle-stage {
+  margin-top: 8px;
+  min-height: 0;
+}
+
+.daily-shuffle-modal.is-reveal .daily-shuffle-divider {
+  margin-bottom: 8px;
+}
+
+.daily-shuffle-modal.is-reveal .daily-shuffle-grid {
+  row-gap: 12px;
+}
+
+.daily-shuffle-modal.is-reveal .daily-shuffle-result {
+  margin-top: 8px;
+}
+
+.daily-shuffle-modal.is-reveal .daily-shuffle-result-title {
+  font-size: 18px;
+}
+
+.daily-shuffle-modal.is-reveal .daily-shuffle-result-amt {
+  margin-top: 4px;
+  font-size: 18px;
+}
+
+.daily-shuffle-modal.is-reveal .daily-shuffle-actions {
+  margin-top: 10px;
 }
 
 .daily-shuffle-hero {
@@ -4206,7 +4253,7 @@ a { color: inherit; text-decoration: none; }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   column-gap: 8px;
-  row-gap: 22px;
+  row-gap: 30px;
 }
 
 .daily-shuffle-card {
