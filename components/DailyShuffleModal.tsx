@@ -10,6 +10,7 @@ import {
   type ShufflePrepareResult,
   type ShuffleTheaterCard,
 } from "@/lib/shuffle-client";
+import { playShuffleSound } from "@/lib/shuffle-sound";
 import {
   fetchStreakStatus,
   refreshSessionFromCheckIn,
@@ -45,6 +46,18 @@ const TICKET_TONES = [
   "butter",
   "periwinkle",
 ] as const;
+
+/** Intro preview — the three USDT prizes, then flip to ?. */
+const INTRO_USDT_PREVIEW = [
+  { tone: "lavender" as const, label: "1 USDT", glyph: "Ⓤ" },
+  { tone: "mint" as const, label: "0.05 USDT", glyph: "Ⓤ" },
+  { tone: "blush" as const, label: "0.001 USDT", glyph: "Ⓤ" },
+];
+
+const SHOWCASE_MS = 3800;
+const SHUFFLE_MS = 3200;
+const INTRO_REVEAL_MS = 2400;
+const INTRO_FLIP_MS = 700;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -108,7 +121,6 @@ function TicketShell({
             <stop offset="100%" stopColor="#C4921A" />
           </linearGradient>
         </defs>
-        {/* Ticket: corner bites + top/bottom center notches */}
         <path
           className="daily-shuffle-ticket-path"
           d="M 18 2
@@ -159,6 +171,21 @@ function TicketShell({
   );
 }
 
+function CardFaceContent({
+  glyph,
+  label,
+}: {
+  glyph: string;
+  label: string;
+}) {
+  return (
+    <>
+      <span className="daily-shuffle-card-glyph">{glyph}</span>
+      <span className="daily-shuffle-card-label">{label}</span>
+    </>
+  );
+}
+
 export default function DailyShuffleModal({
   open,
   walletAddress,
@@ -176,6 +203,9 @@ export default function DailyShuffleModal({
   const [needsClaim, setNeedsClaim] = useState(false);
   const [infiniteSparkGranted, setInfiniteSparkGranted] = useState(false);
   const [pickedId, setPickedId] = useState<string | null>(null);
+  /** Intro: show USDT amounts, then flip to ?. */
+  const [introFaceUp, setIntroFaceUp] = useState(true);
+  const [introFlipping, setIntroFlipping] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
@@ -188,7 +218,29 @@ export default function DailyShuffleModal({
       setOutcome(null);
       setNeedsClaim(false);
       setPickedId(null);
+      setIntroFaceUp(true);
+      setIntroFlipping(false);
+      return;
     }
+
+    let cancelled = false;
+    setIntroFaceUp(true);
+    setIntroFlipping(false);
+
+    const flipTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      setIntroFlipping(true);
+      window.setTimeout(() => {
+        if (cancelled) return;
+        setIntroFaceUp(false);
+        setIntroFlipping(false);
+      }, INTRO_FLIP_MS);
+    }, INTRO_REVEAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(flipTimer);
+    };
   }, [open]);
 
   const winnerCard = useMemo(
@@ -235,9 +287,16 @@ export default function DailyShuffleModal({
       setInfiniteSparkGranted(Boolean(sync.infiniteSparkGranted));
 
       setPhase("showcase");
-      await sleep(1600);
+      await sleep(SHOWCASE_MS);
+
       setPhase("shuffling");
-      await sleep(1400);
+      const stopSound = playShuffleSound();
+      try {
+        await sleep(SHUFFLE_MS);
+      } finally {
+        stopSound();
+      }
+
       setPhase("pick");
     } catch (err) {
       try {
@@ -253,7 +312,8 @@ export default function DailyShuffleModal({
   function handlePick(cardId: string) {
     if (phase !== "pick" || !winnerId) return;
     setPickedId(cardId);
-    // Theater only — always reveal the server outcome.
+    // Theater only: the tapped card reveals the server outcome (not the
+    // fixed grid slot that happened to hold that outcome id).
     setPhase("reveal");
   }
 
@@ -282,6 +342,12 @@ export default function DailyShuffleModal({
       milestone: outcome?.type === "spark",
       infiniteSparkGranted,
     });
+  }
+
+  function revealLabel(card: ShuffleTheaterCard | null): string {
+    if (!card) return "";
+    if (card.type === "usdt" && card.amount != null) return `${card.amount} USDT`;
+    return card.label;
   }
 
   if (!mounted || !open) return null;
@@ -314,8 +380,27 @@ export default function DailyShuffleModal({
         {phase === "intro" || phase === "busy" ? (
           <div className="daily-shuffle-hero">
             <div className="daily-shuffle-hero-cards" aria-hidden>
-              {TICKET_TONES.slice(0, 3).map((tone) => (
-                <TicketShell key={tone} tone={tone} faceDown />
+              {INTRO_USDT_PREVIEW.map((card) => (
+                <div
+                  key={card.tone}
+                  className={`daily-shuffle-hero-flip ${
+                    introFlipping ? "is-flipping" : ""
+                  } ${introFaceUp ? "is-face-up" : "is-face-down"}`}
+                >
+                  <div className="daily-shuffle-hero-flip-inner">
+                    <div className="daily-shuffle-hero-face daily-shuffle-hero-face-front">
+                      <TicketShell tone={card.tone}>
+                        <CardFaceContent
+                          glyph={card.glyph}
+                          label={card.label}
+                        />
+                      </TicketShell>
+                    </div>
+                    <div className="daily-shuffle-hero-face daily-shuffle-hero-face-back">
+                      <TicketShell tone={card.tone} faceDown />
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
             {status && !status.canCheckIn ? (
@@ -355,15 +440,23 @@ export default function DailyShuffleModal({
               <div
                 className={`daily-shuffle-grid ${
                   phase === "pick" ? "is-pick" : ""
-                } ${phase === "reveal" || phase === "claiming" ? "is-reveal" : ""}`}
+                } ${
+                  phase === "reveal" || phase === "claiming" ? "is-reveal" : ""
+                }`}
               >
                 {theater.map((card, index) => {
-                  const isWinner = card.id === winnerId;
+                  const isPicked = card.id === pickedId;
                   const faceDown = phase === "pick";
+                  // Reveal the card the user tapped — show server outcome there.
                   const showFront =
                     phase === "showcase" ||
-                    ((phase === "reveal" || phase === "claiming") && isWinner);
+                    ((phase === "reveal" || phase === "claiming") && isPicked);
                   const tone = TICKET_TONES[index % TICKET_TONES.length];
+                  const display =
+                    (phase === "reveal" || phase === "claiming") && isPicked
+                      ? winnerCard ?? card
+                      : card;
+
                   return (
                     <button
                       key={card.id}
@@ -372,29 +465,20 @@ export default function DailyShuffleModal({
                         faceDown ? "is-back" : ""
                       } ${
                         phase === "reveal" || phase === "claiming"
-                          ? isWinner
+                          ? isPicked
                             ? "is-winner"
                             : "is-loser"
                           : ""
-                      } ${pickedId === card.id ? "is-picked" : ""}`}
+                      } ${isPicked ? "is-picked" : ""}`}
                       disabled={phase !== "pick"}
                       onClick={() => handlePick(card.id)}
                     >
                       <TicketShell tone={tone} faceDown={!showFront}>
-                        {showFront ? (
-                          <>
-                            <span className="daily-shuffle-card-glyph">
-                              {card.glyph}
-                            </span>
-                            <span className="daily-shuffle-card-label">
-                              {card.type === "usdt" && card.amount != null
-                                ? `${card.amount} USDT`
-                                : card.label}
-                            </span>
-                            <span className="daily-shuffle-card-sub">
-                              {card.sub}
-                            </span>
-                          </>
+                        {showFront && display ? (
+                          <CardFaceContent
+                            glyph={display.glyph}
+                            label={revealLabel(display)}
+                          />
                         ) : null}
                       </TicketShell>
                     </button>
