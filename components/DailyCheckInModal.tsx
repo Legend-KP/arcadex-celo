@@ -46,24 +46,6 @@ function CheckIcon() {
   );
 }
 
-function GiftIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="4" y="10" width="16" height="11" rx="2" fill="#fbbf24" />
-      <rect x="3.5" y="7" width="17" height="4.5" rx="1.5" fill="#f59e0b" />
-      <rect x="10.75" y="7" width="2.5" height="14" fill="#fde68a" />
-      <path
-        d="M12 7c-1.8-2.8-4.4-2.5-4.4-.2C7.6 8.6 9.8 9.2 12 7z"
-        fill="#f472b6"
-      />
-      <path
-        d="M12 7c1.8-2.8 4.4-2.5 4.4-.2C16.4 8.6 14.2 9.2 12 7z"
-        fill="#f472b6"
-      />
-    </svg>
-  );
-}
-
 function ChestIcon() {
   return (
     <svg viewBox="0 0 32 32" fill="none" aria-hidden>
@@ -193,7 +175,6 @@ export default function DailyCheckInModal({
   const displayStreak = wouldReset ? 0 : currentDay;
   const isFinalDay = checkInDay >= requiredDays;
   const days = Array.from({ length: requiredDays }, (_, i) => i + 1);
-  const giftDay = Math.min(3, requiredDays);
 
   const streakHint = wouldReset
     ? "You missed a day — check in to start fresh."
@@ -283,7 +264,6 @@ export default function DailyCheckInModal({
               wouldReset
             );
             const isMilestone = day === requiredDays;
-            const showGift = day === giftDay && state !== "done";
 
             return (
               <div
@@ -292,11 +272,6 @@ export default function DailyCheckInModal({
                   isMilestone ? " daily-checkin-day--milestone" : ""
                 }`}
               >
-                {showGift ? (
-                  <span className="daily-checkin-day-gift" aria-hidden>
-                    <GiftIcon />
-                  </span>
-                ) : null}
                 <div className="daily-checkin-day-node">
                   {state === "done" ? (
                     <span className="daily-checkin-check">
@@ -344,7 +319,7 @@ export default function DailyCheckInModal({
         >
           <span className="daily-checkin-btn-main">
             <ShieldCheckIcon />
-            {loading ? "Unlocking…" : "Daily Check In(Free)"}
+            {loading ? "Unlocking…" : "Daily Check In (Free)"}
           </span>
           <span className="daily-checkin-btn-sub">Non-fee transaction</span>
         </button>

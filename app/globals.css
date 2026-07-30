@@ -3713,9 +3713,10 @@ a { color: inherit; text-decoration: none; }
 
 .daily-checkin-hero-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 14px;
-  text-align: left;
+  gap: 12px;
+  text-align: center;
   background: linear-gradient(125deg, #2e1065 0%, #5b21b6 48%, #312e81 100%);
   border-radius: 20px;
   padding: 16px 16px 16px 14px;
@@ -3760,7 +3761,8 @@ a { color: inherit; text-decoration: none; }
 
 .daily-checkin-hero-copy {
   min-width: 0;
-  flex: 1;
+  width: 100%;
+  text-align: center;
 }
 
 .daily-checkin-section-label {
@@ -3931,9 +3933,10 @@ a { color: inherit; text-decoration: none; }
 
 .daily-checkin-reward-row {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 10px;
-  text-align: left;
+  text-align: center;
 }
 
 .daily-checkin-reward-icon {
@@ -3951,6 +3954,8 @@ a { color: inherit; text-decoration: none; }
 .daily-checkin-reward-copy {
   flex: 1;
   min-width: 0;
+  width: 100%;
+  text-align: center;
 }
 
 .daily-checkin-reward-copy .daily-checkin-section-label {
