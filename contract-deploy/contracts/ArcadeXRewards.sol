@@ -10,7 +10,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 
 interface IMintable {
-    function mintReward(address to) external;
+    function mintReward(address to) external;  
 }
 
 /**
