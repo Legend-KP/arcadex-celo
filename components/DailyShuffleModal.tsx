@@ -375,7 +375,9 @@ export default function DailyShuffleModal({
         <h2 id="daily-shuffle-title" className="daily-shuffle-title">
           Daily Jackpot
         </h2>
-        <p className="daily-shuffle-sub">One free shuffle every 24 hours.</p>
+        <p className="daily-shuffle-sub">
+          One free shuffle per day (resets 00:00 UTC).
+        </p>
 
         {phase === "intro" || phase === "busy" ? (
           <div className="daily-shuffle-hero">

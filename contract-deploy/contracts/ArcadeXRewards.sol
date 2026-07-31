@@ -258,11 +258,13 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
                 hasParticipants[campaignId] = true;
             }
         } else {
-            // Restarts after reset ALWAYS enforce the interval against lastCheckInAt.
-            if (nowTs < p.lastCheckInAt + cfg.minIntervalSeconds) revert TooSoon();
+            // One check-in per UTC calendar day (resets at 00:00 UTC).
+            uint256 lastDay = _utcDay(p.lastCheckInAt);
+            uint256 today = _utcDay(nowTs);
+            if (today <= lastDay) revert TooSoon();
 
-            uint64 missAfter = p.lastCheckInAt + (uint64(cfg.minIntervalSeconds) * 2);
-            if (nowTs >= missAfter) {
+            // Missed at least one full UTC day since last check-in.
+            if (today > lastDay + 1) {
                 emit StreakReset(msg.sender, campaignId, "missed_day", nowTs);
                 p.currentDay = 1;
                 p.milestoneReached = false;
@@ -347,7 +349,8 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
 
         uint64 nowTs = uint64(block.timestamp);
         if (p.initialized) {
-            if (nowTs < p.lastCheckInAt + cfg.minIntervalSeconds) revert SpinTooSoon();
+            // One spin per UTC calendar day (resets at 00:00 UTC).
+            if (_utcDay(nowTs) <= _utcDay(p.lastCheckInAt)) revert SpinTooSoon();
         }
 
         if (nonce != spinNonce[msg.sender][campaignId]) revert InvalidSpinNonce();
@@ -855,11 +858,12 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
             );
         }
 
-        uint256 nextAllowed = uint256(p.lastCheckInAt) + cfg.minIntervalSeconds;
-        uint256 missAfter = uint256(p.lastCheckInAt) + (uint256(cfg.minIntervalSeconds) * 2);
-        canCheckIn = block.timestamp >= nextAllowed;
+        // Eligible again starting at the next 00:00 UTC after lastCheckInAt.
+        uint256 lastDay = _utcDay(p.lastCheckInAt);
+        uint256 today = _utcDay(block.timestamp);
+        canCheckIn = today > lastDay;
         streakWouldReset = cfg.campaignType == CampaignType.STREAK && canCheckIn
-            && block.timestamp >= missAfter && p.currentDay > 0;
+            && today > lastDay + 1 && p.currentDay > 0;
     }
 
     function availableUSDT() external view returns (uint256) {
@@ -875,6 +879,11 @@ contract ArcadeXRewards is ReentrancyGuard, EIP712, IERC721Receiver {
     }
 
     // ─── Internal ───────────────────────────────────────────────────────────────
+
+    /// @dev Unix day index — aligns with UTC calendar dates (00:00 UTC boundaries).
+    function _utcDay(uint256 timestamp) internal pure returns (uint256) {
+        return timestamp / 1 days;
+    }
 
     function _assertMaxClaimsAvailable(Campaign memory cfg, uint256 campaignId) internal view {
         if (cfg.maxClaims > 0 && claimCount[campaignId] >= cfg.maxClaims) {

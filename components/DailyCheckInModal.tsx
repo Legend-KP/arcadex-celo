@@ -222,8 +222,8 @@ export default function DailyCheckInModal({
           <FlameIcon className="daily-checkin-heading-flame" />
         </h2>
         <p className="daily-checkin-sub">
-          Check in daily to keep your streak alive and earn{" "}
-          <span className="daily-checkin-sub-accent">Infinite Spark.</span>
+          Check in once per day (resets 00:00 UTC) to keep your streak alive and
+          earn <span className="daily-checkin-sub-accent">Infinite Spark.</span>
         </p>
 
         <section className="daily-checkin-hero-card">
