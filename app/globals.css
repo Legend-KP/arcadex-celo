@@ -2382,21 +2382,32 @@ a { color: inherit; text-decoration: none; }
   font-weight: 700;
   font-size: 1rem;
   cursor: pointer;
-  color: #fff;
-}
-
-.lb-submit-confirm__pay--live {
   background: #16a34a;
-}
-
-.lb-submit-confirm__pay--offline {
-  background: #dc2626;
   color: #fff;
 }
 
 .lb-submit-confirm__pay:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+.lb-submit-confirm__contest-status {
+  margin: 12px -8px 0;
+  width: calc(100% + 16px);
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-align: center;
+  color: #fff;
+}
+
+.lb-submit-confirm__contest-status--live {
+  background: #16a34a;
+}
+
+.lb-submit-confirm__contest-status--offline {
+  background: #dc2626;
 }
 
 .lb-submit-banner__inner {

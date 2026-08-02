@@ -702,20 +702,22 @@ export default function GameClient({
               </p>
               <button
                 type="button"
-                className={`lb-submit-confirm__pay${
-                  contestLive
-                    ? " lb-submit-confirm__pay--live"
-                    : " lb-submit-confirm__pay--offline"
-                }`}
+                className="lb-submit-confirm__pay"
                 onClick={() => void confirmPendingSubmit()}
                 disabled={payingSubmit}
               >
-                {payingSubmit
-                  ? "Opening wallet…"
-                  : contestLive
-                    ? "Contest is live"
-                    : "Contest is not live"}
+                {payingSubmit ? "Opening wallet…" : "Pay & Submit"}
               </button>
+              <p
+                className={`lb-submit-confirm__contest-status${
+                  contestLive
+                    ? " lb-submit-confirm__contest-status--live"
+                    : " lb-submit-confirm__contest-status--offline"
+                }`}
+                role="status"
+              >
+                {contestLive ? "Contest is live" : "Contest is not live"}
+              </p>
             </div>
           </div>
         )}
