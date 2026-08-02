@@ -680,31 +680,42 @@ export default function GameClient({
         {pendingSubmitScore != null && (
           <div className="lb-submit-confirm" role="dialog" aria-modal="true">
             <div className="lb-submit-confirm__card">
-              <h3 className="lb-submit-confirm__title">Submit score?</h3>
+              <button
+                type="button"
+                className="lb-submit-confirm__close"
+                onClick={cancelPendingSubmit}
+                disabled={payingSubmit}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+              <h3 className="lb-submit-confirm__title">
+                Submit score to enter Contest
+              </h3>
               <p className="lb-submit-confirm__score">
                 {pendingSubmitScore.toLocaleString()}
               </p>
               <p className="lb-submit-confirm__hint">
-                Pay $0.05 in USDT or USDC. MiniPay will ask you to approve.
+                {contestLive
+                  ? "Submit this score to appear on the contest leaderboard. Pay $0.05 in USDT or USDC. MiniPay will ask you to approve."
+                  : "Pay $0.05 in USDT or USDC. MiniPay will ask you to approve."}
               </p>
-              <div className="lb-submit-confirm__actions">
-                <button
-                  type="button"
-                  className="lb-submit-confirm__cancel"
-                  onClick={cancelPendingSubmit}
-                  disabled={payingSubmit}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="lb-submit-confirm__pay"
-                  onClick={() => void confirmPendingSubmit()}
-                  disabled={payingSubmit}
-                >
-                  {payingSubmit ? "Opening wallet…" : "Pay & submit"}
-                </button>
-              </div>
+              <button
+                type="button"
+                className={`lb-submit-confirm__pay${
+                  contestLive
+                    ? " lb-submit-confirm__pay--live"
+                    : " lb-submit-confirm__pay--offline"
+                }`}
+                onClick={() => void confirmPendingSubmit()}
+                disabled={payingSubmit}
+              >
+                {payingSubmit
+                  ? "Opening wallet…"
+                  : contestLive
+                    ? "Contest is live"
+                    : "Contest is not live"}
+              </button>
             </div>
           </div>
         )}
