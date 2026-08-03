@@ -1032,7 +1032,23 @@ a { color: inherit; text-decoration: none; }
   transition: color 0.15s, opacity 0.15s;
 }
 
-.app-footer__link:hover {
+.app-footer__link--button {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent3);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-footer__link:hover,
+.app-footer__link--button:hover {
   color: #2563eb;
 }
 

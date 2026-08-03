@@ -11,9 +11,14 @@ import {
 } from "react";
 import DailyCheckInModal from "@/components/DailyCheckInModal";
 import DailyShuffleModal from "@/components/DailyShuffleModal";
+import OnboardingModal from "@/components/OnboardingModal";
 import PlayerNameModal from "@/components/PlayerNameModal";
 import { fetchDailyPlayConfig } from "@/lib/daily-play-config-client";
 import type { DailyPlayMode } from "@/lib/daily-play-mode";
+import {
+  hasSeenOnboarding,
+  markOnboardingSeen,
+} from "@/lib/onboarding";
 import {
   bootstrapPlayerProfile,
   fetchPlayerProfile,
@@ -60,6 +65,7 @@ interface PlayerProfileContextValue {
   streakStatus: StreakStatus | null;
   updateWalletAddress: (walletAddress: string) => Promise<void>;
   refreshStreakStatus: () => Promise<void>;
+  openOnboarding: () => void;
 }
 
 const PlayerProfileContext = createContext<PlayerProfileContextValue | null>(
@@ -101,6 +107,7 @@ export default function PlayerProfileProvider({
   const [isReady, setIsReady] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [dailyPlayMode, setDailyPlayMode] = useState<DailyPlayMode>("streak");
   const [dailyCampaignId, setDailyCampaignId] = useState(1);
   const [streakStatus, setStreakStatus] = useState<StreakStatus | null>(null);
@@ -108,6 +115,21 @@ export default function PlayerProfileProvider({
   const [error, setError] = useState("");
   const nameCompleteRef = useRef(false);
   const pendingWalletRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!hasSeenOnboarding()) {
+      setShowOnboarding(true);
+    }
+  }, []);
+
+  const openOnboarding = useCallback(() => {
+    setShowOnboarding(true);
+  }, []);
+
+  const handleOnboardingComplete = useCallback(() => {
+    markOnboardingSeen();
+    setShowOnboarding(false);
+  }, []);
 
   const refreshStreakStatus = useCallback(async () => {
     const wallet = walletAddress || getCachedWallet();
@@ -395,6 +417,7 @@ export default function PlayerProfileProvider({
       streakStatus,
       updateWalletAddress,
       refreshStreakStatus,
+      openOnboarding,
     }),
     [
       playerId,
@@ -404,8 +427,11 @@ export default function PlayerProfileProvider({
       streakStatus,
       updateWalletAddress,
       refreshStreakStatus,
+      openOnboarding,
     ]
   );
+
+  const onboardingVisible = showOnboarding && !showCheckIn;
 
   return (
     <PlayerProfileContext.Provider value={value}>
@@ -422,8 +448,12 @@ export default function PlayerProfileProvider({
         status={streakStatus}
         onComplete={handleCheckInComplete}
       />
+      <OnboardingModal
+        open={onboardingVisible}
+        onComplete={handleOnboardingComplete}
+      />
       <PlayerNameModal
-        open={showModal && !showCheckIn}
+        open={showModal && !showCheckIn && !onboardingVisible}
         saving={saving}
         error={error}
         defaultName={defaultName}
