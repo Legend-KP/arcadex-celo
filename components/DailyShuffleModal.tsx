@@ -376,7 +376,7 @@ export default function DailyShuffleModal({
           Daily Jackpot
         </h2>
         <p className="daily-shuffle-sub">
-          One free shuffle per day (resets 00:00 UTC).
+          One no-cost shuffle per day (resets 00:00 UTC).
         </p>
 
         {phase === "intro" || phase === "busy" ? (
@@ -519,7 +519,7 @@ export default function DailyShuffleModal({
               disabled={phase === "busy"}
               onClick={() => void handleShuffle()}
             >
-              {phase === "busy" ? "Confirm in MiniPay…" : "Shuffle now · Free"}
+              {phase === "busy" ? "Confirm in MiniPay…" : "Shuffle now · No cost"}
             </button>
           ) : null}
 

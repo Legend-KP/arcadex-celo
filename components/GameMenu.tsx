@@ -261,7 +261,7 @@ export default function GameMenu({
             <span className="game-menu-btn__icon" aria-hidden>
               ▶
             </span>
-            {starting ? "Starting..." : "Start Game"}
+            {starting ? "Confirm in MiniPay…" : "Start Game · No cost"}
           </button>
           {sparkError && (
             <p className="game-menu-spark-error" role="alert">

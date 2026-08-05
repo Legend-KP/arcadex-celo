@@ -319,9 +319,9 @@ export default function DailyCheckInModal({
         >
           <span className="daily-checkin-btn-main">
             <ShieldCheckIcon />
-            {loading ? "Unlocking…" : "Daily Check In (Free)"}
+            {loading ? "Unlocking…" : "Daily Check In (No cost)"}
           </span>
-          <span className="daily-checkin-btn-sub">Non-fee transaction</span>
+          <span className="daily-checkin-btn-sub">No cost transaction</span>
         </button>
       </div>
     </div>,

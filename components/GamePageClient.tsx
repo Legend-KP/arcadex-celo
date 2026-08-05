@@ -14,6 +14,12 @@ import {
   loadPrimaryGameMenuImage,
   preloadGameMenuAssets,
 } from "@/lib/game-assets";
+import { formatChainError } from "@/lib/celo-public-client";
+import {
+  isArcadeXTxHubConfigured,
+  playPurpose,
+  signInOnChain,
+} from "@/lib/arcadex-tx-hub";
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
@@ -100,16 +106,26 @@ export default function GamePageClient() {
 
     setStarting(true);
     try {
+      if (isArcadeXTxHubConfigured() && game?.id) {
+        await signInOnChain(playPurpose(game.id));
+      }
       await spendForGame();
       setStarted(true);
     } catch (err) {
       setSparkError(
-        err instanceof Error ? err.message : "Could not use a Spark."
+        formatChainError(err) ||
+          (err instanceof Error ? err.message : "Could not start game.")
       );
     } finally {
       setStarting(false);
     }
-  }, [walletAddress, sparks.hasInfinite, sparks.available, spendForGame]);
+  }, [
+    walletAddress,
+    sparks.hasInfinite,
+    sparks.available,
+    spendForGame,
+    game?.id,
+  ]);
 
   if (loading || (game && gameIsLive(game) && !menuReady && !started)) {
     return <LoadingScreen message="Loading game" />;
