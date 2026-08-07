@@ -9,20 +9,57 @@ interface OnboardingModalProps {
   onComplete: () => void;
 }
 
+function preloadImage(src: string): Promise<void> {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = src;
+  });
+}
+
 export default function OnboardingModal({
   open,
   onComplete,
 }: OnboardingModalProps) {
   const [slideIndex, setSlideIndex] = useState(0);
   const [mounted, setMounted] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [slideVisible, setSlideVisible] = useState(true);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (!open) return;
-    setSlideIndex(0);
+    if (!open) {
+      setReady(false);
+      setSlideIndex(0);
+      setSlideVisible(true);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function prepare() {
+      setReady(false);
+      setSlideIndex(0);
+      setSlideVisible(true);
+
+      // Warm the first slide, then the rest in the background.
+      await preloadImage(ONBOARDING_SLIDES[0]);
+      if (cancelled) return;
+      setReady(true);
+
+      void Promise.all(
+        ONBOARDING_SLIDES.slice(1).map((src) => preloadImage(src))
+      );
+    }
+
+    void prepare();
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   useEffect(() => {
@@ -45,24 +82,32 @@ export default function OnboardingModal({
       onComplete();
       return;
     }
-    setSlideIndex((prev) => prev + 1);
+
+    setSlideVisible(false);
+    window.setTimeout(() => {
+      setSlideIndex((prev) => prev + 1);
+      requestAnimationFrame(() => {
+        setSlideVisible(true);
+      });
+    }, 180);
   }
 
   const modal = (
-    <div className="game-tutorial-backdrop" role="presentation">
+    <div className="onboarding-backdrop" role="presentation">
       <div
-        className="game-tutorial"
+        className={`onboarding-panel${ready ? " onboarding-panel--ready" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={`ArcadeX tutorial, step ${slideIndex + 1} of ${ONBOARDING_SLIDES.length}`}
+        aria-hidden={!ready}
       >
-        <div className="game-tutorial-media">
+        <div className="onboarding-media">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             key={src}
             src={src}
             alt={`ArcadeX tutorial step ${slideIndex + 1}`}
-            className="game-tutorial-img"
+            className={`onboarding-img${ready && slideVisible ? " onboarding-img--visible" : ""}`}
             loading="eager"
             fetchPriority="high"
             decoding="async"
@@ -70,8 +115,9 @@ export default function OnboardingModal({
         </div>
         <button
           type="button"
-          className="game-tutorial-btn"
+          className="game-tutorial-btn onboarding-btn"
           onClick={handlePrimary}
+          disabled={!ready || !slideVisible}
         >
           {isLast ? "Let's Go" : "Next"}
         </button>

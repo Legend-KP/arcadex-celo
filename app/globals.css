@@ -1180,6 +1180,102 @@ a { color: inherit; text-decoration: none; }
   transform: scale(0.96);
 }
 
+/* App onboarding (first visit) — above check-in / name until dismissed */
+.onboarding-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 270;
+  background: rgba(8, 10, 18, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  animation: onboarding-backdrop-in 0.32s ease-out;
+}
+@keyframes onboarding-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.onboarding-panel {
+  width: min(100%, 920px);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  opacity: 0;
+  transform: translateY(12px) scale(0.985);
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.onboarding-panel--ready {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.onboarding-media {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+}
+.onboarding-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(72vh, calc(100dvh - 120px));
+  object-fit: contain;
+  object-position: center;
+  opacity: 0;
+  transform: translateX(12px);
+  transition:
+    opacity 0.28s ease,
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.onboarding-img--visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+.onboarding-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+}
+@media (max-width: 640px) {
+  .onboarding-img {
+    max-height: min(68vh, calc(100dvh - 110px));
+  }
+}
+@media (orientation: landscape) and (max-height: 480px) {
+  .onboarding-panel {
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    width: min(100%, 960px);
+  }
+  .onboarding-media {
+    flex: 1 1 auto;
+  }
+  .onboarding-img {
+    max-height: calc(100dvh - 24px);
+  }
+}
+
 /* Horizontal how-to image ? contain within viewport, letterbox if needed */
 .game-tutorial-backdrop {
   position: fixed;

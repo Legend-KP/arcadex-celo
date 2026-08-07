@@ -107,7 +107,8 @@ export default function PlayerProfileProvider({
   const [isReady, setIsReady] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  /** null = resolving localStorage (blocks streak/name so they don't flash first) */
+  const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [dailyPlayMode, setDailyPlayMode] = useState<DailyPlayMode>("streak");
   const [dailyCampaignId, setDailyCampaignId] = useState(1);
   const [streakStatus, setStreakStatus] = useState<StreakStatus | null>(null);
@@ -117,9 +118,7 @@ export default function PlayerProfileProvider({
   const pendingWalletRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!hasSeenOnboarding()) {
-      setShowOnboarding(true);
-    }
+    setShowOnboarding(!hasSeenOnboarding());
   }, []);
 
   const openOnboarding = useCallback(() => {
@@ -431,29 +430,38 @@ export default function PlayerProfileProvider({
     ]
   );
 
-  const onboardingVisible = showOnboarding && !showCheckIn;
+  // New-user order: onboarding → daily streak → name modal
+  const onboardingVisible = showOnboarding === true;
+  const onboardingResolved = showOnboarding !== null;
+  const checkInVisible =
+    onboardingResolved && !onboardingVisible && showCheckIn;
+  const nameModalVisible =
+    onboardingResolved &&
+    !onboardingVisible &&
+    !showCheckIn &&
+    showModal;
 
   return (
     <PlayerProfileContext.Provider value={value}>
       {children}
+      <OnboardingModal
+        open={onboardingVisible}
+        onComplete={handleOnboardingComplete}
+      />
       <DailyCheckInModal
-        open={showCheckIn && dailyPlayMode !== "shuffle"}
+        open={checkInVisible && dailyPlayMode !== "shuffle"}
         walletAddress={walletAddress}
         status={streakStatus}
         onComplete={handleCheckInComplete}
       />
       <DailyShuffleModal
-        open={showCheckIn && dailyPlayMode === "shuffle"}
+        open={checkInVisible && dailyPlayMode === "shuffle"}
         walletAddress={walletAddress}
         status={streakStatus}
         onComplete={handleCheckInComplete}
       />
-      <OnboardingModal
-        open={onboardingVisible}
-        onComplete={handleOnboardingComplete}
-      />
       <PlayerNameModal
-        open={showModal && !showCheckIn && !onboardingVisible}
+        open={nameModalVisible}
         saving={saving}
         error={error}
         defaultName={defaultName}
