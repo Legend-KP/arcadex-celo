@@ -643,19 +643,15 @@ export default function GameClient({
         </div>
       )}
 
-      <div className="game-topbar">
-        <button
-          type="button"
-          className="game-close-btn"
-          aria-label="Back to menu"
-          onClick={() => onBackToMenu?.()}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/home-button.png" alt="" className="game-home-btn-icon" />
-        </button>
-        <span className="game-title-bar">{game.name}</span>
-        <div className="game-topbar-spacer" aria-hidden="true" />
-      </div>
+      <button
+        type="button"
+        className="game-close-btn"
+        aria-label="Back to menu"
+        onClick={() => onBackToMenu?.()}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/home-button.png" alt="" className="game-home-btn-icon" />
+      </button>
 
       <div className="iframe-wrap">
         {!isReady || !iframeSrc ? (
