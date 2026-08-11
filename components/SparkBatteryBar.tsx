@@ -151,7 +151,12 @@ export default function SparkBatteryBar() {
               </p>
             </div>
 
-            <div className="spark-panel__segments">
+            <div
+              className="spark-panel__segments"
+              style={{
+                gridTemplateColumns: `repeat(${Math.max(1, sparks.max)}, 1fr)`,
+              }}
+            >
               {sparks.slots.map((slot) => (
                 <div key={slot.index} className="spark-panel__segment-col">
                   <div className="spark-panel__segment">

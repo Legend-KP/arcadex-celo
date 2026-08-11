@@ -9,6 +9,7 @@ import {
   StoredSparkState,
 } from "@/types";
 import {
+  SPARK_MAX,
   computeSparkSnapshot,
   coerceSparkState,
   defaultSparkState,
@@ -473,7 +474,16 @@ export async function ensureSparkStateOnServer(
   if (existing) {
     const normalized = normalizeSparkState(existing);
     const forRtdb = sparkStateForRtdb(normalized);
-    const needsRewrite = JSON.stringify(forRtdb) !== JSON.stringify(existing);
+    const storedMax =
+      existing &&
+      typeof existing === "object" &&
+      typeof (existing as { max?: unknown }).max === "number"
+        ? (existing as { max: number }).max
+        : 0;
+    // Always persist when raising SPARK_MAX so RTDB does not keep the old cap.
+    const needsRewrite =
+      storedMax < SPARK_MAX ||
+      JSON.stringify(forRtdb) !== JSON.stringify(existing);
     if (needsRewrite) {
       await writePath(sparksPath(wallet), forRtdb);
     }

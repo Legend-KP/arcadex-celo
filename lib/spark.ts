@@ -1,6 +1,6 @@
 import { SparkSlotView, SparkSnapshot, StoredSparkState } from "@/types";
 
-export const SPARK_MAX = 3;
+export const SPARK_MAX = 4;
 export const SPARK_REGEN_MS = 180 * 60 * 1000;
 
 export function defaultSparkState(): StoredSparkState {
@@ -59,10 +59,12 @@ export function coerceSparkState(raw: unknown): StoredSparkState {
   if (!raw || typeof raw !== "object") return defaults;
 
   const data = raw as Partial<StoredSparkState>;
-  const max =
+  // Always at least SPARK_MAX so raising the global cap upgrades existing users.
+  const storedMax =
     typeof data.max === "number" && data.max > 0
       ? Math.floor(data.max)
       : defaults.max;
+  const max = Math.max(storedMax, SPARK_MAX);
   const regenMs =
     typeof data.regenMs === "number" && data.regenMs > 0
       ? data.regenMs
