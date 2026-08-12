@@ -11,6 +11,7 @@ import {
 } from "react";
 import DailyCheckInModal from "@/components/DailyCheckInModal";
 import DailyShuffleModal from "@/components/DailyShuffleModal";
+import DailyStreakBrokenModal from "@/components/DailyStreakBrokenModal";
 import OnboardingModal from "@/components/OnboardingModal";
 import PlayerNameModal from "@/components/PlayerNameModal";
 import { fetchDailyPlayConfig } from "@/lib/daily-play-config-client";
@@ -19,6 +20,10 @@ import {
   hasSeenOnboarding,
   markOnboardingSeen,
 } from "@/lib/onboarding";
+import {
+  hasSeenStreakBroken,
+  markStreakBrokenSeen,
+} from "@/lib/streak-broken-seen";
 import {
   bootstrapPlayerProfile,
   fetchPlayerProfile,
@@ -107,6 +112,8 @@ export default function PlayerProfileProvider({
   const [isReady, setIsReady] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
+  /** After the broken-streak animation, skip it for this session break. */
+  const [streakBrokenDismissed, setStreakBrokenDismissed] = useState(false);
   /** null = resolving localStorage (blocks streak/name so they don't flash first) */
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [dailyPlayMode, setDailyPlayMode] = useState<DailyPlayMode>("streak");
@@ -129,6 +136,17 @@ export default function PlayerProfileProvider({
     markOnboardingSeen();
     setShowOnboarding(false);
   }, []);
+
+  const handleStreakBrokenContinue = useCallback(() => {
+    if (walletAddress && streakStatus?.lastCheckInAt) {
+      markStreakBrokenSeen(walletAddress, streakStatus.lastCheckInAt);
+    }
+    setStreakBrokenDismissed(true);
+  }, [walletAddress, streakStatus?.lastCheckInAt]);
+
+  useEffect(() => {
+    setStreakBrokenDismissed(false);
+  }, [walletAddress, streakStatus?.lastCheckInAt]);
 
   const refreshStreakStatus = useCallback(async () => {
     const wallet = walletAddress || getCachedWallet();
@@ -430,11 +448,26 @@ export default function PlayerProfileProvider({
     ]
   );
 
-  // New-user order: onboarding → daily streak → name modal
+  // New-user order: onboarding → streak broken (if needed) → daily streak → name modal
   const onboardingVisible = showOnboarding === true;
   const onboardingResolved = showOnboarding !== null;
   const checkInVisible =
     onboardingResolved && !onboardingVisible && showCheckIn;
+
+  const previousBrokenDays = streakStatus?.currentDay ?? 0;
+  const lastBrokenCheckInAt = streakStatus?.lastCheckInAt ?? 0;
+  const streakBrokenVisible =
+    checkInVisible &&
+    dailyPlayMode !== "shuffle" &&
+    !streakBrokenDismissed &&
+    Boolean(streakStatus?.streakWouldReset) &&
+    previousBrokenDays > 0 &&
+    Boolean(walletAddress) &&
+    lastBrokenCheckInAt > 0 &&
+    !hasSeenStreakBroken(walletAddress, lastBrokenCheckInAt);
+
+  const dailyCheckInVisible =
+    checkInVisible && dailyPlayMode !== "shuffle" && !streakBrokenVisible;
   const nameModalVisible =
     onboardingResolved &&
     !onboardingVisible &&
@@ -448,8 +481,13 @@ export default function PlayerProfileProvider({
         open={onboardingVisible}
         onComplete={handleOnboardingComplete}
       />
+      <DailyStreakBrokenModal
+        open={streakBrokenVisible}
+        previousDays={previousBrokenDays}
+        onContinue={handleStreakBrokenContinue}
+      />
       <DailyCheckInModal
-        open={checkInVisible && dailyPlayMode !== "shuffle"}
+        open={dailyCheckInVisible}
         walletAddress={walletAddress}
         status={streakStatus}
         onComplete={handleCheckInComplete}

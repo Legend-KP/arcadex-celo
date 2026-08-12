@@ -4202,6 +4202,195 @@ a { color: inherit; text-decoration: none; }
   }
 }
 
+/* --- Streak broken (fresh start) ------------------------------------------- */
+
+.streak-broken-backdrop {
+  z-index: 85;
+}
+
+.streak-broken-modal {
+  position: relative;
+  text-align: center;
+  gap: 0;
+  padding: 28px 20px 22px;
+  max-width: 360px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 90% 50% at 50% -10%, rgba(167, 139, 250, 0.2), transparent 55%),
+    var(--surface);
+}
+
+.streak-broken-flame {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background:
+    radial-gradient(circle at 35% 30%, #c4b5fd 0%, #7c3aed 48%, #4c1d95 100%);
+  box-shadow:
+    0 0 0 6px rgba(167, 139, 250, 0.22),
+    0 8px 20px rgba(91, 33, 182, 0.4);
+  transition: filter 0.45s ease, opacity 0.45s ease, transform 0.45s ease;
+}
+
+.streak-broken-flame svg {
+  width: 34px;
+  height: 34px;
+}
+
+.streak-broken-flame--soft {
+  filter: grayscale(0.35) saturate(0.75);
+  opacity: 0.88;
+  transform: scale(0.94);
+  box-shadow:
+    0 0 0 6px rgba(167, 139, 250, 0.14),
+    0 6px 16px rgba(91, 33, 182, 0.28);
+}
+
+.streak-broken-label {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7c3aed;
+}
+
+.streak-broken-flip-stage {
+  height: 88px;
+  perspective: 700px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+}
+
+.streak-broken-flip-card {
+  display: grid;
+  place-items: center;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+}
+
+.streak-broken-flip-card--in {
+  animation: streak-broken-flip-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.streak-broken-flip-card--out {
+  animation: streak-broken-flip-out 0.3s cubic-bezier(0.55, 0.06, 0.68, 0.19) both;
+}
+
+@keyframes streak-broken-flip-in {
+  from {
+    opacity: 0.35;
+    transform: rotateX(-80deg) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: rotateX(0deg) translateY(0);
+  }
+}
+
+@keyframes streak-broken-flip-out {
+  from {
+    opacity: 1;
+    transform: rotateX(0deg) translateY(0);
+  }
+  to {
+    opacity: 0.2;
+    transform: rotateX(78deg) translateY(12px);
+  }
+}
+
+.streak-broken-num {
+  font-family: var(--font-head);
+  font-size: 72px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: #6d28d9;
+  text-shadow: 0 4px 18px rgba(109, 40, 217, 0.22);
+}
+
+.streak-broken-unit {
+  margin: 0 0 18px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+  min-height: 1.3em;
+}
+
+.streak-broken-copy {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  pointer-events: none;
+  margin-bottom: 18px;
+}
+
+.streak-broken-copy--visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.streak-broken-title {
+  margin: 0 0 8px;
+  font-family: var(--font-head);
+  font-size: 26px;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6d28d9;
+}
+
+.streak-broken-message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
+  padding: 0 4px;
+}
+
+.streak-broken-btn {
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  color: #fff;
+  font-family: var(--font-head);
+  font-size: 16px;
+  letter-spacing: 0.02em;
+  background: linear-gradient(90deg, #7c3aed 0%, #6366f1 48%, #3b82f6 100%);
+  box-shadow: 0 8px 22px rgba(99, 102, 241, 0.35);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: filter 0.15s, opacity 0.2s;
+}
+
+.streak-broken-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.streak-broken-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streak-broken-flip-card--in,
+  .streak-broken-flip-card--out {
+    animation: none;
+  }
+
+  .streak-broken-copy {
+    transition: none;
+  }
+}
+
 /* --- Daily Shuffle (test mode ? ArcadeX light / gold) ----------------------- */
 
 .daily-shuffle-backdrop {
