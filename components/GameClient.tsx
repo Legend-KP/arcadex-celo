@@ -48,6 +48,7 @@ export default function GameClient({
   const [submitToast, setSubmitToast] = useState<LeaderboardSubmitToastState | null>(
     null
   );
+  const dismissSubmitToast = useCallback(() => setSubmitToast(null), []);
   /** Score waiting for a user tap — MiniPay needs a real gesture, not postMessage. */
   const [pendingSubmitScore, setPendingSubmitScore] = useState<number | null>(
     null
@@ -670,7 +671,7 @@ export default function GameClient({
 
         <LeaderboardSubmitToast
           toast={submitToast}
-          onDismiss={() => setSubmitToast(null)}
+          onDismiss={dismissSubmitToast}
         />
 
         {pendingSubmitScore != null && (
@@ -698,7 +699,11 @@ export default function GameClient({
               </p>
               <button
                 type="button"
-                className="lb-submit-confirm__pay"
+                className={`lb-submit-confirm__pay${
+                  contestLive
+                    ? " lb-submit-confirm__pay--live"
+                    : " lb-submit-confirm__pay--offline"
+                }`}
                 onClick={() => void confirmPendingSubmit()}
                 disabled={payingSubmit}
               >
