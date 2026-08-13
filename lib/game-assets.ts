@@ -13,6 +13,8 @@ const LOCAL_GAME_FOLDERS = [
 
 /** Root-level logos under public/games/ for titles without a folder. */
 const ROOT_GAME_LOGOS: Record<string, string> = {
+  "line-link": "/games/line-logo.webp",
+  linelink: "/games/line-logo.webp",
   "arrow-out": "/games/arrowout-logo.webp",
   arrowout: "/games/arrowout-logo.webp",
   burger: "/games/burger-logo.webp",
@@ -24,6 +26,16 @@ const ROOT_GAME_LOGOS: Record<string, string> = {
   sanddrop: "/games/sanddrop-logo.webp",
   "sand-drop": "/games/sanddrop-logo.webp",
 };
+
+function resolveRootLogo(game: Game): string | null {
+  const nameSlug = slugifyGameName(game.name);
+  if (ROOT_GAME_LOGOS[nameSlug]) return ROOT_GAME_LOGOS[nameSlug];
+
+  const id = game.id.trim().toLowerCase();
+  if (id && ROOT_GAME_LOGOS[id]) return ROOT_GAME_LOGOS[id];
+
+  return null;
+}
 
 export function slugifyGameName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
