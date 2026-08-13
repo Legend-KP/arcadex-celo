@@ -13,6 +13,9 @@ const LOCAL_GAME_FOLDERS = [
 
 /** Root-level logos under public/games/ for titles without a folder. */
 const ROOT_GAME_LOGOS: Record<string, string> = {
+  "jelly-jumble": "/games/jelly-logo.webp",
+  jellyjumble: "/games/jelly-logo.webp",
+  jelly: "/games/jelly-logo.webp",
   "line-link": "/games/line-logo.webp",
   linelink: "/games/line-logo.webp",
   "arrow-out": "/games/arrowout-logo.webp",
