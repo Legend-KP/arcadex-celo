@@ -198,26 +198,43 @@ export default function GameMenu({
 
       <div className="game-menu-grid" aria-hidden />
 
-      <button
-        type="button"
-        className="game-menu-back"
-        onClick={() => router.push("/")}
-        aria-label="Back to home"
-      >
-        ←
-      </button>
-      {tutorialSrc && (
+      <div className="game-menu-topbar">
         <button
           type="button"
-          className="game-menu-info"
-          onClick={() => setTutorialOpen(true)}
-          aria-label="How to play"
+          className="game-menu-back"
+          onClick={() => router.push("/")}
+          aria-label="Back to home"
         >
-          <span className="game-menu-info__glyph" aria-hidden>
-            i
-          </span>
+          <svg
+            className="game-menu-back__icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M14.5 5.5 8 12l6.5 6.5"
+              stroke="currentColor"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
-      )}
+        {tutorialSrc ? (
+          <button
+            type="button"
+            className="game-menu-info"
+            onClick={() => setTutorialOpen(true)}
+            aria-label="How to play"
+          >
+            <span className="game-menu-info__glyph" aria-hidden>
+              i
+            </span>
+          </button>
+        ) : (
+          <span className="game-menu-topbar__spacer" aria-hidden />
+        )}
+      </div>
 
       <div className="game-menu-stack">
         {contestLive && (

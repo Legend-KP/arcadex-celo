@@ -120,6 +120,10 @@ export function gameAssetCandidates(
   const localFolder = resolveLocalGameFolder(game);
 
   // Prefer bundled assets so they show even when remote URLs fail.
+  if (kind === "logo") {
+    push(resolveRootLogo(game) ?? undefined);
+  }
+
   if (localFolder) {
     pushLocalGameAssets(push, localFolder, kind);
   }
@@ -173,6 +177,8 @@ export function gameFallbackCandidates(game: Game): string[] {
     seen.add(normalized);
     out.push(normalized);
   };
+
+  push(resolveRootLogo(game) ?? undefined);
 
   // Admin-configured fallback is the fastest path when set.
   push(game.fallbackImage);
