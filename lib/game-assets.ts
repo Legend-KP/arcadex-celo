@@ -1,4 +1,5 @@
 import { Game } from "@/types";
+import { injectImagePreload, preloadImage } from "@/lib/preload-image";
 
 /** Folder names under public/games/ for each title. */
 const LOCAL_GAME_FOLDERS = [
@@ -302,8 +303,8 @@ export function loadPrimaryGameMenuImage(game: Game): Promise<string | null> {
 }
 
 /**
- * Warm only the primary menu image (and optional tutorial on the game page).
- * Keep this light — calling from the home grid was starving card thumbnails.
+ * Warm the primary menu image. Optionally warm the tutorial too —
+ * use high priority when the player has not seen it yet.
  */
 export function preloadGameMenuAssets(
   game: Game,
@@ -313,19 +314,18 @@ export function preloadGameMenuAssets(
 
   const primary = getPrimaryGameMenuImage(game);
   if (primary) {
-    const img = new Image();
-    img.fetchPriority = "high";
-    img.decoding = "async";
-    img.src = primary;
+    injectImagePreload(primary, "high");
+    void preloadImage(primary, "high");
   }
 
   if (opts?.includeTutorial) {
     const tutorialUrl = getGameTutorialUrl(game);
     if (tutorialUrl && tutorialUrl !== primary) {
-      const img = new Image();
-      img.fetchPriority = "low";
-      img.decoding = "async";
-      img.src = tutorialUrl;
+      const unseen =
+        window.localStorage.getItem(getGameTutorialSeenKey(game)) !== "1";
+      const priority = unseen ? "high" : "low";
+      injectImagePreload(tutorialUrl, priority);
+      void preloadImage(tutorialUrl, priority);
     }
   }
 }
@@ -336,6 +336,7 @@ const GAME_TUTORIAL_BY_FOLDER: Record<string, string> = {
   "base-drop": "/tutorials/BASE-DROP.webp",
   "block-blast": "/tutorials/BLOCK-BLAST.webp",
   "coin-sort": "/tutorials/COIN-SORT.webp",
+  coinsort: "/tutorials/COIN-SORT.webp",
   "dot-connect": "/tutorials/DOT-CONNECT.webp",
   "line-link": "/tutorials/LINE-LINK.webp",
   "math-run": "/tutorials/MATH-RUN.webp",
@@ -346,10 +347,79 @@ function resolveTutorialKey(game: Game): string {
   return resolveLocalGameFolder(game) ?? (slugifyGameName(game.name) || game.id);
 }
 
+/** Tutorial URLs to try, in priority order (hyphenated name, then spaced filename). */
+export function getGameTutorialCandidates(game: Game): string[] {
+  const key = resolveTutorialKey(game);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (url?: string) => {
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+    out.push(url);
+  };
+
+  push(GAME_TUTORIAL_BY_FOLDER[key]);
+  const hyphen = key.toUpperCase();
+  const spaced = key.replace(/-/g, " ").toUpperCase();
+  push(`/tutorials/${hyphen}.webp`);
+  push(`/tutorials/${spaced}.webp`);
+
+  return out;
+}
+
 /** Tutorial image URL for a game, or null when none is prepared yet. */
 export function getGameTutorialUrl(game: Game): string | null {
-  const key = resolveTutorialKey(game);
-  return GAME_TUTORIAL_BY_FOLDER[key] ?? null;
+  return getGameTutorialCandidates(game)[0] ?? null;
+}
+
+/** Decode the first tutorial image that exists. */
+export function loadGameTutorialImage(game: Game): Promise<string | null> {
+  if (typeof window === "undefined") {
+    return Promise.resolve(getGameTutorialUrl(game));
+  }
+
+  const urls = getGameTutorialCandidates(game);
+  if (urls.length === 0) return Promise.resolve(null);
+
+  return new Promise((resolve) => {
+    let cancelled = false;
+    let idx = 0;
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) {
+        cancelled = true;
+        resolve(urls[0] ?? null);
+      }
+    }, 2000);
+
+    const tryNext = () => {
+      if (cancelled) return;
+      const url = urls[idx];
+      if (!url) {
+        window.clearTimeout(timeout);
+        cancelled = true;
+        resolve(null);
+        return;
+      }
+
+      const img = new Image();
+      img.decoding = "async";
+      img.fetchPriority = "high";
+      img.onload = () => {
+        if (cancelled) return;
+        window.clearTimeout(timeout);
+        cancelled = true;
+        resolve(url);
+      };
+      img.onerror = () => {
+        if (cancelled) return;
+        idx += 1;
+        tryNext();
+      };
+      img.src = url;
+    };
+
+    tryNext();
+  });
 }
 
 /** localStorage key for per-game first-time tutorial seen state. */

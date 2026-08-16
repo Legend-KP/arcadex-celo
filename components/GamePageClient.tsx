@@ -11,6 +11,8 @@ import NoSparksModal from "@/components/NoSparksModal";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { useSparks } from "@/components/SparkProvider";
 import {
+  getGameTutorialSeenKey,
+  loadGameTutorialImage,
   loadPrimaryGameMenuImage,
   preloadGameMenuAssets,
 } from "@/lib/game-assets";
@@ -28,6 +30,7 @@ export default function GamePageClient() {
   const { sparks, spendForGame } = useSparks();
   const [game, setGame] = useState<Game | null>(null);
   const [menuImageSrc, setMenuImageSrc] = useState<string | null>(null);
+  const [tutorialImageSrc, setTutorialImageSrc] = useState<string | null>(null);
   const [menuReady, setMenuReady] = useState(false);
   const [started, setStarted] = useState(false);
   const [lbOpen, setLbOpen] = useState(false);
@@ -45,6 +48,7 @@ export default function GamePageClient() {
       setLoading(true);
       setMenuReady(false);
       setMenuImageSrc(null);
+      setTutorialImageSrc(null);
       setError("");
 
       try {
@@ -65,10 +69,31 @@ export default function GamePageClient() {
             // Play tracking is best-effort
           });
 
-          // Decode fallback art before revealing the menu UI.
-          const primary = await loadPrimaryGameMenuImage(nextGame);
-          if (cancelled) return;
-          setMenuImageSrc(primary);
+          const tutorialUnseen =
+            typeof window !== "undefined" &&
+            window.localStorage.getItem(getGameTutorialSeenKey(nextGame)) !==
+              "1";
+
+          const primaryPromise = loadPrimaryGameMenuImage(nextGame);
+          const tutorialPromise = loadGameTutorialImage(nextGame);
+
+          if (tutorialUnseen) {
+            const [primary, tutorial] = await Promise.all([
+              primaryPromise,
+              tutorialPromise,
+            ]);
+            if (cancelled) return;
+            setMenuImageSrc(primary);
+            setTutorialImageSrc(tutorial);
+          } else {
+            const primary = await primaryPromise;
+            if (cancelled) return;
+            setMenuImageSrc(primary);
+            void tutorialPromise.then((tutorial) => {
+              if (!cancelled) setTutorialImageSrc(tutorial);
+            });
+          }
+
           preloadGameMenuAssets(nextGame, { includeTutorial: true });
           setMenuReady(true);
         } else if (!cancelled) {
@@ -179,6 +204,7 @@ export default function GamePageClient() {
         <GameMenu
           game={game}
           primaryImageSrc={menuImageSrc}
+          tutorialImageSrc={tutorialImageSrc}
           onStart={handleStart}
           onLeaderboard={() => openLeaderboard("default")}
           starting={starting}

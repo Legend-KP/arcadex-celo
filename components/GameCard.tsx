@@ -50,7 +50,7 @@ export default function GameCard({
   const imgPriority = priority ? ("high" as const) : ("auto" as const);
 
   const warmMenu = () => {
-    if (isLive) preloadGameMenuAssets(game);
+    if (isLive) preloadGameMenuAssets(game, { includeTutorial: true });
   };
 
   const thumbContent = thumbSrc ? (

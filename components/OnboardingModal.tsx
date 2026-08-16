@@ -2,20 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { ONBOARDING_SLIDES } from "@/lib/onboarding";
+import {
+  ONBOARDING_SLIDES,
+  preloadOnboardingSlides,
+} from "@/lib/onboarding";
+import { preloadImage } from "@/lib/preload-image";
 
 interface OnboardingModalProps {
   open: boolean;
   onComplete: () => void;
-}
-
-function preloadImage(src: string): Promise<void> {
-  return new Promise((resolve) => {
-    const img = new window.Image();
-    img.onload = () => resolve();
-    img.onerror = () => resolve();
-    img.src = src;
-  });
 }
 
 export default function OnboardingModal({
@@ -45,14 +40,14 @@ export default function OnboardingModal({
       setReady(false);
       setSlideIndex(0);
       setSlideVisible(true);
+      preloadOnboardingSlides();
 
-      // Warm the first slide, then the rest in the background.
-      await preloadImage(ONBOARDING_SLIDES[0]);
+      await preloadImage(ONBOARDING_SLIDES[0], "high");
       if (cancelled) return;
       setReady(true);
 
       void Promise.all(
-        ONBOARDING_SLIDES.slice(1).map((src) => preloadImage(src))
+        ONBOARDING_SLIDES.slice(1, 3).map((src) => preloadImage(src, "low"))
       );
     }
 
@@ -61,6 +56,13 @@ export default function OnboardingModal({
       cancelled = true;
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const next = ONBOARDING_SLIDES[slideIndex + 1];
+    if (next) void preloadImage(next, "high");
+  }, [open, slideIndex]);
 
   useEffect(() => {
     if (!open) return;

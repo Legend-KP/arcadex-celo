@@ -19,6 +19,7 @@ import type { DailyPlayMode } from "@/lib/daily-play-mode";
 import {
   hasSeenOnboarding,
   markOnboardingSeen,
+  preloadOnboardingSlides,
 } from "@/lib/onboarding";
 import {
   hasSeenStreakBroken,
@@ -125,7 +126,9 @@ export default function PlayerProfileProvider({
   const pendingWalletRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setShowOnboarding(!hasSeenOnboarding());
+    const unseen = !hasSeenOnboarding();
+    setShowOnboarding(unseen);
+    if (unseen) preloadOnboardingSlides();
   }, []);
 
   const openOnboarding = useCallback(() => {

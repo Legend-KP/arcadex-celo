@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import {
   gameMenuBackgroundCandidates,
   gameMenuImageCandidates,
+  getGameTutorialCandidates,
   getGameTutorialSeenKey,
-  getGameTutorialUrl,
 } from "@/lib/game-assets";
 import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
 
@@ -15,6 +15,8 @@ interface GameMenuProps {
   game: Game;
   /** Pre-decoded fallback/hero image — preferred over candidate cascade. */
   primaryImageSrc?: string | null;
+  /** Pre-decoded tutorial image — preferred over candidate cascade. */
+  tutorialImageSrc?: string | null;
   onStart: () => void | Promise<void>;
   onLeaderboard: () => void;
   starting?: boolean;
@@ -24,6 +26,7 @@ interface GameMenuProps {
 export default function GameMenu({
   game,
   primaryImageSrc = null,
+  tutorialImageSrc = null,
   onStart,
   onLeaderboard,
   starting = false,
@@ -48,17 +51,26 @@ export default function GameMenu({
     return list;
   }, [game, primaryImageSrc]);
 
-  const tutorialSrc = useMemo(() => getGameTutorialUrl(game), [game]);
+  const tutorialCandidates = useMemo(() => {
+    const list = getGameTutorialCandidates(game);
+    if (tutorialImageSrc) {
+      return [tutorialImageSrc, ...list.filter((u) => u !== tutorialImageSrc)];
+    }
+    return list;
+  }, [game, tutorialImageSrc]);
+
   const tutorialSeenKey = useMemo(() => getGameTutorialSeenKey(game), [game]);
   const contestPosterSrc = "/contest-tutorial.webp";
 
   const [bgIdx, setBgIdx] = useState(0);
   const [logoIdx, setLogoIdx] = useState(0);
+  const [tutorialIdx, setTutorialIdx] = useState(0);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [contestPosterDismissed, setContestPosterDismissed] = useState(false);
 
   const bgSrc = bgCandidates[bgIdx];
   const menuImageSrc = logoCandidates[logoIdx];
+  const tutorialSrc = tutorialCandidates[tutorialIdx];
   const contestPosterOpen =
     contestLive && !contestPosterDismissed && !tutorialOpen;
 
@@ -76,6 +88,7 @@ export default function GameMenu({
   useEffect(() => {
     setBgIdx(0);
     setLogoIdx(0);
+    setTutorialIdx(0);
     setContestPosterDismissed(false);
   }, [game.id, primaryImageSrc]);
 
@@ -133,6 +146,7 @@ export default function GameMenu({
               loading="eager"
               fetchPriority="high"
               decoding="async"
+              onError={() => setTutorialIdx((i) => i + 1)}
             />
           </div>
           <button
