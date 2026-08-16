@@ -38,6 +38,17 @@ function resolveRootLogo(game: Game): string | null {
   const id = game.id.trim().toLowerCase();
   if (id && ROOT_GAME_LOGOS[id]) return ROOT_GAME_LOGOS[id];
 
+  const haystacks = [nameSlug, isFirestoreAutoId(id) ? "" : id].filter(Boolean);
+  for (const [key, url] of Object.entries(ROOT_GAME_LOGOS)) {
+    if (haystacks.some((h) => h === key || h.startsWith(`${key}-`))) {
+      return url;
+    }
+  }
+
+  if (nameSlug.includes("jelly") || (!isFirestoreAutoId(id) && id.includes("jelly"))) {
+    return ROOT_GAME_LOGOS["jelly-jumble"];
+  }
+
   return null;
 }
 
