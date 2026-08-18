@@ -456,14 +456,28 @@ export async function bootstrapUserOnServer(
 
 // ─── Sparks ───────────────────────────────────────────────────────────────────
 
-export async function fetchSparkStateFromServer(
+/**
+ * Read-only spark lookup. Missing wallets get the default full battery
+ * in memory — no RTDB row is created. Persist via bootstrap or spend.
+ */
+export async function readSparkStateFromServer(
   walletAddress: string
 ): Promise<StoredSparkState> {
   if (!isWalletAddress(walletAddress)) {
     throw new Error("A valid wallet address is required.");
   }
 
-  return ensureSparkStateOnServer(walletAddress);
+  const wallet = normalizeWalletAddress(walletAddress);
+  const existing = await readPath<unknown>(sparksPath(wallet));
+  if (!existing) return defaultSparkState();
+  return normalizeSparkState(existing);
+}
+
+/** @deprecated Use readSparkStateFromServer — GET must not create rows. */
+export async function fetchSparkStateFromServer(
+  walletAddress: string
+): Promise<StoredSparkState> {
+  return readSparkStateFromServer(walletAddress);
 }
 
 export async function ensureSparkStateOnServer(
@@ -498,7 +512,7 @@ export async function ensureSparkStateOnServer(
 export async function getSparkSnapshotFromServer(
   walletAddress: string
 ): Promise<ReturnType<typeof computeSparkSnapshot>> {
-  const state = await fetchSparkStateFromServer(walletAddress);
+  const state = await readSparkStateFromServer(walletAddress);
   return computeSparkSnapshot(state);
 }
 

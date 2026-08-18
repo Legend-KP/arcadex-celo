@@ -13,9 +13,11 @@ import {
   UnityMessage,
   type LeaderboardSubmitUnityResult,
 } from "@/lib/bridge";
-import { getLeaderboard } from "@/lib/firebase";
 import { getGameProgress, saveGameProgress } from "@/lib/game-progress-client";
-import { submitScoreToLeaderboard } from "@/lib/leaderboard-client";
+import {
+  getLeaderboard,
+  submitScoreToLeaderboard,
+} from "@/lib/leaderboard-client";
 import { buildGameIframeUrl, getShellOrigin } from "@/lib/game-iframe-url";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { resolveWalletOnAppOpen } from "@/lib/walletAuth";

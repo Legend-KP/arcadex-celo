@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchSparkStateFromServer } from "@/lib/rtdb-server";
+import { readSparkStateFromServer } from "@/lib/rtdb-server";
 import { computeSparkSnapshot } from "@/lib/spark";
 import {
   checkRateLimit,
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
       return rateLimitResponse();
     }
 
-    const state = await fetchSparkStateFromServer(wallet);
+    const state = await readSparkStateFromServer(wallet);
     const sparks = computeSparkSnapshot(state);
     return NextResponse.json({ state, sparks });
   } catch (err) {
