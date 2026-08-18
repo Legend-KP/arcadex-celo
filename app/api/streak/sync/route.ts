@@ -19,6 +19,12 @@ import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import { invalidateStreakProgressCache } from "@/lib/streak-progress-cache";
 import { createWalletSessionToken } from "@/lib/wallet-session";
 import type { Hash } from "viem";
+import {
+  canMintDailySession,
+  hashDeviceId,
+  markDailySessionDevice,
+  readDeviceCookie,
+} from "@/lib/device-binding";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +38,8 @@ const SESSION_TTL_SEC = 24 * 60 * 60;
  * - on-chain msg.sender must match body wallet (via event)
  * - tx must hit ArcadeXRewards and include CheckedIn
  * - txHash can only be synced once per wallet (RTDB replay guard)
- * - JWT cannot be minted for another wallet without their private key / tx
+ * - JWT is minted only for the HttpOnly device cookie that loaded
+ *   streak status before this check-in tx (not a Celoscan copy)
  */
 export async function POST(request: Request) {
   const ip = getClientIp(request);
@@ -92,8 +99,6 @@ export async function POST(request: Request) {
     await recordCheckInTxOnServer(wallet, txHash, verified.day, campaignId);
     await invalidateStreakProgressCache(wallet, campaignId);
 
-    const token = await createWalletSessionToken(wallet);
-
     let reward: {
       granted: boolean;
       sparks?: unknown;
@@ -122,6 +127,29 @@ export async function POST(request: Request) {
         throw err;
       }
     }
+
+    const deviceId = readDeviceCookie(request);
+    const deviceHash = deviceId ? await hashDeviceId(deviceId) : null;
+    const canMint =
+      Boolean(deviceHash) &&
+      (await canMintDailySession({
+        wallet,
+        deviceHash: deviceHash!,
+        txTimestamp: verified.timestamp,
+      }));
+
+    if (!canMint || !deviceHash) {
+      return NextResponse.json(
+        {
+          error: "Daily check-in must be finished in the same browser that started it.",
+          code: "DEVICE_MISMATCH",
+        },
+        { status: 403 }
+      );
+    }
+
+    await markDailySessionDevice(wallet, deviceHash);
+    const token = await createWalletSessionToken(wallet);
 
     return NextResponse.json({
       ok: true,

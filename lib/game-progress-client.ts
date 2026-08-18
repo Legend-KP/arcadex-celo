@@ -65,6 +65,7 @@ export async function saveGameProgress(
       walletAddress,
       value,
       score: value,
+      level: value,
       ...(opts?.playerName?.trim()
         ? { playerName: opts.playerName.trim() }
         : {}),

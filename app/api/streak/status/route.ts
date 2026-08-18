@@ -10,6 +10,7 @@ import {
   rateLimitResponse,
 } from "@/lib/rate-limit";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
+import { ensureDeviceBinding, withDeviceCookie } from "@/lib/device-binding";
 
 export const dynamic = "force-dynamic";
 
@@ -48,21 +49,25 @@ export async function GET(request: Request) {
     }
 
     const wallet = normalizeWalletAddress(rawWallet);
+    const { setCookie } = await ensureDeviceBinding(request, wallet);
     const fresh = searchParams.get("fresh") === "1";
     const status = await getStreakProgressCached(wallet, campaignId, {
       fresh,
     });
     const maxAgeSec = fresh ? 0 : Math.floor(STREAK_PROGRESS_CACHE_MS / 1000);
 
-    return NextResponse.json(
-      { configured: true, ...status },
-      {
-        headers: {
-          "Cache-Control": fresh
-            ? "private, no-store"
-            : `private, max-age=${maxAgeSec}`,
-        },
-      }
+    return withDeviceCookie(
+      NextResponse.json(
+        { configured: true, ...status },
+        {
+          headers: {
+            "Cache-Control": fresh
+              ? "private, no-store"
+              : `private, max-age=${maxAgeSec}`,
+          },
+        }
+      ),
+      setCookie
     );
   } catch (err) {
     const message =

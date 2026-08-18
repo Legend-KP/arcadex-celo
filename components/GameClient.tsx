@@ -19,6 +19,8 @@ import {
   submitScoreToLeaderboard,
 } from "@/lib/leaderboard-client";
 import { buildGameIframeUrl, getShellOrigin } from "@/lib/game-iframe-url";
+import { readProgressNumber } from "@/lib/progress-value";
+import { getWalletSessionToken } from "@/lib/wallet-session-client";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { resolveWalletOnAppOpen } from "@/lib/walletAuth";
 import { formatChainError } from "@/lib/celo-public-client";
@@ -80,6 +82,7 @@ export default function GameClient({
       walletAddress: resolvedWallet || undefined,
       playerName: resolvedName || undefined,
       hasLeaderboard: leaderboardEnabled,
+      sessionToken: getWalletSessionToken() || undefined,
     });
   }, [
     isReady,
@@ -109,11 +112,15 @@ export default function GameClient({
         includeBootstrap?: boolean;
       }
     ) => {
+      const storedValue = payload.hasLeaderboard
+        ? payload.highScore
+        : payload.level;
       const progressMessage = {
         success: true,
         highScore: payload.highScore,
         score: payload.highScore,
         level: payload.level,
+        value: storedValue,
         hasLeaderboard: payload.hasLeaderboard,
       };
 
@@ -128,6 +135,7 @@ export default function GameClient({
           contestLive,
           ...payload,
           score: payload.highScore,
+          value: storedValue,
           hints: 0,
           tutorialComplete: false,
           gamePurchased: true,
@@ -178,19 +186,22 @@ export default function GameClient({
     loadFallbackRef.current = setTimeout(markGameReady, GAME_LOAD_FALLBACK_MS);
   }, [markGameReady]);
 
-  const persistScore = useCallback(
-    async (score: number, name: string, resolvedWalletAddr: string) => {
+  const persistProgress = useCallback(
+    async (value: number, name: string, resolvedWalletAddr: string) => {
       const previousBest = personalBestRef.current;
-      const result = await saveGameProgress(game.id, resolvedWalletAddr, score, {
+      const result = await saveGameProgress(game.id, resolvedWalletAddr, value, {
         playerName: name,
       });
-      const nextBest = result.progress.score ?? score;
-      if (nextBest > previousBest) {
-        personalBestRef.current = nextBest;
+      const highScore =
+        result.progress.score ?? (leaderboardEnabled ? value : previousBest);
+      const level =
+        result.progress.level ?? (leaderboardEnabled ? 0 : value);
+      if (leaderboardEnabled && highScore > previousBest) {
+        personalBestRef.current = highScore;
       }
-      return nextBest;
+      return { highScore, level };
     },
-    [game.id]
+    [game.id, leaderboardEnabled]
   );
 
   const showSubmitFeedback = useCallback((result: LeaderboardSubmitUnityResult) => {
@@ -341,13 +352,14 @@ export default function GameClient({
         if (cancelled) return;
 
         const highScore = progress.score ?? 0;
+        const level = progress.level ?? 0;
         personalBestRef.current = Math.max(personalBestRef.current, highScore);
-        if (personalBestRef.current <= 0) return;
+        if (personalBestRef.current <= 0 && level <= 0) return;
 
         deliverProgressToUnity(
           {
             highScore: personalBestRef.current,
-            level: progress.level ?? 0,
+            level,
             hasLeaderboard,
           },
           {
@@ -447,30 +459,19 @@ export default function GameClient({
             name?: string;
             score?: number;
             value?: number;
+            level?: number;
             walletAddress?: string;
           };
-          const progressValue =
-            typeof payload.value === "number"
-              ? payload.value
-              : typeof payload.score === "number"
-                ? payload.score
-                : undefined;
+          const progressValue = readProgressNumber(payload);
           const saveCallback =
             msg.type === "MINIPAY_SUBMIT_SCORE"
               ? "OnScoreSubmitted"
               : "OnProgressSaved";
 
-          if (!leaderboardEnabled) {
-            sendToUnity(iframeRef, saveCallback, {
-              success: false,
-              error: "Leaderboard disabled for this game.",
-            });
-            break;
-          }
           if (typeof progressValue !== "number") {
             sendToUnity(iframeRef, saveCallback, {
               success: false,
-              error: "score is required.",
+              error: "value, score, or level is required.",
             });
             break;
           }
@@ -492,15 +493,17 @@ export default function GameClient({
             });
           }
           try {
-            const highScore = await persistScore(
+            const saved = await persistProgress(
               progressValue,
               playerName || payload.name || "",
               resolvedWalletAddr
             );
             sendToUnity(iframeRef, saveCallback, {
               success: true,
-              highScore,
-              score: highScore,
+              highScore: saved.highScore,
+              score: saved.highScore,
+              level: saved.level,
+              value: leaderboardEnabled ? saved.highScore : saved.level,
             });
           } catch (err) {
             sendToUnity(iframeRef, saveCallback, {
@@ -508,7 +511,7 @@ export default function GameClient({
               error:
                 err instanceof Error
                   ? err.message
-                  : "Could not save score.",
+                  : "Could not save progress.",
             });
           }
           break;
@@ -627,7 +630,7 @@ export default function GameClient({
       markGameReady,
       scheduleProgressRetries,
       deliverProgressToUnity,
-      persistScore,
+      persistProgress,
       deliverLeaderboardSubmitResult,
       replayStoredSubmitResult,
     ]

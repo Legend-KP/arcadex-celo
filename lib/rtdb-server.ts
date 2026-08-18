@@ -1734,6 +1734,8 @@ export type ShufflePendingRecord = {
   createdAt: number;
   consumedAt?: number;
   txHash?: string;
+  /** SHA-256 of HttpOnly device cookie. Never returned to clients. */
+  deviceHash?: string;
 };
 
 function shufflePendingPath(wallet: string, campaignId: number, nonce: number): string {
@@ -1965,6 +1967,75 @@ export async function getShufflePending(
   return readPath<ShufflePendingRecord>(
     shufflePendingPath(wallet, campaignId, nonce)
   );
+}
+
+function deviceSeenPath(wallet: string, deviceHash: string): string {
+  return `deviceSeen/${normalizeWalletAddress(wallet)}/${deviceHash}`;
+}
+
+function sessionDevicePath(wallet: string): string {
+  return `sessionDevice/${normalizeWalletAddress(wallet)}`;
+}
+
+/** Keep the earliest seen timestamp for this wallet + device hash. */
+export async function recordDeviceSeenIfAbsent(
+  walletAddress: string,
+  deviceHash: string
+): Promise<number> {
+  const wallet = normalizeWalletAddress(walletAddress);
+  const path = deviceSeenPath(wallet, deviceHash);
+  const now = Date.now();
+  const { committed, snapshot } = await runRtdbTransaction<number>(
+    path,
+    (current) => {
+      if (typeof current === "number" && current > 0) return undefined;
+      return now;
+    }
+  );
+  if (typeof snapshot === "number" && snapshot > 0) return snapshot;
+  return committed ? now : now;
+}
+
+export async function getDeviceSeenAt(
+  walletAddress: string,
+  deviceHash: string
+): Promise<number | null> {
+  const wallet = normalizeWalletAddress(walletAddress);
+  const seen = await readPath<number>(deviceSeenPath(wallet, deviceHash));
+  return typeof seen === "number" && seen > 0 ? seen : null;
+}
+
+export async function bindWalletSessionDevice(
+  walletAddress: string,
+  deviceHash: string
+): Promise<void> {
+  const wallet = normalizeWalletAddress(walletAddress);
+  await writePath(sessionDevicePath(wallet), {
+    hash: deviceHash,
+    boundAt: Date.now(),
+  });
+}
+
+export async function getWalletSessionDeviceHash(
+  walletAddress: string
+): Promise<string | null> {
+  const wallet = normalizeWalletAddress(walletAddress);
+  const data = await readPath<{ hash?: string }>(sessionDevicePath(wallet));
+  return typeof data?.hash === "string" && data.hash.length > 0
+    ? data.hash
+    : null;
+}
+
+export async function bindShufflePendingDevice(
+  walletAddress: string,
+  campaignId: number,
+  nonce: number,
+  deviceHash: string
+): Promise<void> {
+  const wallet = normalizeWalletAddress(walletAddress);
+  await patchPath(shufflePendingPath(wallet, campaignId, nonce), {
+    deviceHash,
+  });
 }
 
 export async function markShufflePendingConsumed(

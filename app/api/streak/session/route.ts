@@ -11,6 +11,12 @@ import {
 } from "@/lib/rate-limit";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import { createWalletSessionToken } from "@/lib/wallet-session";
+import {
+  canMintDailySession,
+  hashDeviceId,
+  markDailySessionDevice,
+  readDeviceCookie,
+} from "@/lib/device-binding";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +99,27 @@ export async function POST(request: Request) {
       );
     }
 
+    const deviceId = readDeviceCookie(request);
+    const deviceHash = deviceId ? await hashDeviceId(deviceId) : null;
+    const canMint =
+      Boolean(deviceHash) &&
+      (await canMintDailySession({
+        wallet,
+        deviceHash: deviceHash!,
+        lastCheckInAtSec,
+      }));
+
+    if (!canMint || !deviceHash) {
+      return NextResponse.json(
+        {
+          error: "Daily check-in required. Please check in to continue.",
+          code: "NEED_CHECKIN",
+        },
+        { status: 401 }
+      );
+    }
+
+    await markDailySessionDevice(wallet, deviceHash);
     const token = await createWalletSessionToken(wallet);
     return NextResponse.json({
       ok: true,

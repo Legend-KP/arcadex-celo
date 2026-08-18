@@ -23,6 +23,7 @@ import {
 } from "@/lib/rate-limit";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import { requireWalletAuth } from "@/lib/wallet-session";
+import { readProgressNumber } from "@/lib/progress-value";
 
 export const dynamic = "force-dynamic";
 
@@ -135,12 +136,14 @@ export async function GET(
       { playerName: name }
     );
     const highScore = progress.score ?? 0;
+    const level = progress.level ?? 0;
 
     const payload = {
       progress,
       hasLeaderboard,
       highScore,
       score: highScore,
+      level,
     };
 
     setDebouncedProgressResponse(id, wallet, payload);
@@ -191,6 +194,7 @@ export async function POST(
       walletAddress?: string;
       value?: number;
       score?: number;
+      level?: number;
       name?: string;
       playerName?: string;
     };
@@ -212,17 +216,12 @@ export async function POST(
       );
     }
 
-    const scoreValue =
-      typeof body.value === "number"
-        ? body.value
-        : typeof body.score === "number"
-          ? body.score
-          : undefined;
+    const scoreValue = readProgressNumber(body);
 
     if (typeof scoreValue !== "number") {
       return corsJsonResponse(
         request,
-        { error: "value or score is required." },
+        { error: "value, score, or level is required." },
         { status: 400 }
       );
     }
@@ -235,7 +234,8 @@ export async function POST(
       hasLeaderboard,
       { playerName: body.playerName ?? body.name }
     );
-    const highScore = progress.score ?? scoreValue;
+    const highScore = progress.score ?? (hasLeaderboard ? scoreValue : 0);
+    const level = progress.level ?? (hasLeaderboard ? 0 : scoreValue);
 
     const payload = {
       success: true,
@@ -243,6 +243,7 @@ export async function POST(
       hasLeaderboard,
       highScore,
       score: highScore,
+      level,
     };
 
     setDebouncedProgressResponse(
@@ -253,6 +254,7 @@ export async function POST(
         hasLeaderboard,
         highScore,
         score: highScore,
+        level,
       }
     );
 

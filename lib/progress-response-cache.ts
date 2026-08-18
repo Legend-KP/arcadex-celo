@@ -8,6 +8,7 @@ export type ProgressGetPayload = {
   hasLeaderboard: boolean;
   highScore: number;
   score: number;
+  level: number;
 };
 
 type DebounceEntry = {

@@ -26,6 +26,12 @@ import { usdtToMicro } from "@/lib/shuffle-outcomes";
 import { invalidateStreakProgressCache } from "@/lib/streak-progress-cache";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import { createWalletSessionToken } from "@/lib/wallet-session";
+import {
+  canMintDailySession,
+  hashDeviceId,
+  markDailySessionDevice,
+  readDeviceCookie,
+} from "@/lib/device-binding";
 
 export const dynamic = "force-dynamic";
 
@@ -120,8 +126,6 @@ export async function POST(request: Request) {
     await markShufflePendingConsumed(wallet, campaignId, nonce, txHash);
     await invalidateStreakProgressCache(wallet, campaignId);
 
-    const token = await createWalletSessionToken(wallet);
-
     let infiniteSparkGranted = false;
     let reward: { granted: boolean; sparks?: unknown; state?: unknown } | null =
       null;
@@ -159,6 +163,35 @@ export async function POST(request: Request) {
         reservationKey: shuffleUsdtReservationKey(wallet, campaignId, nonce),
       });
     }
+
+    const deviceId = readDeviceCookie(request);
+    const deviceHash = deviceId ? await hashDeviceId(deviceId) : null;
+    const pendingHash = pending.deviceHash;
+    const deviceMatchesPending =
+      Boolean(deviceHash) &&
+      Boolean(pendingHash) &&
+      deviceHash === pendingHash;
+    const canMint =
+      Boolean(deviceHash) &&
+      (deviceMatchesPending ||
+        (await canMintDailySession({
+          wallet,
+          deviceHash: deviceHash!,
+          txTimestamp: verified.timestamp,
+        })));
+
+    if (!canMint || !deviceHash) {
+      return NextResponse.json(
+        {
+          error: "Daily shuffle must be finished in the same browser that started it.",
+          code: "DEVICE_MISMATCH",
+        },
+        { status: 403 }
+      );
+    }
+
+    await markDailySessionDevice(wallet, deviceHash);
+    const token = await createWalletSessionToken(wallet);
 
     const needsClaim =
       pending.outcomeType === "usdt" &&

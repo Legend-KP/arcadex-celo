@@ -52,7 +52,7 @@ export interface Game {
   active: boolean;
   /** When false, the game is visible but shows "Coming Soon" and cannot be played. Defaults to true. */
   live?: boolean;
-  /** When false, leaderboard UI, RTDB paths, and score APIs are disabled. Defaults to true. */
+  /** When false, this is a level game: no leaderboard UI; progress is stored as `l`. Defaults to true (score game, stores `s`). */
   hasLeaderboard?: boolean;
   /** Legacy flag; live status is derived from contestEndsAt. */
   contestLive?: boolean;

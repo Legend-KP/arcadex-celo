@@ -12,6 +12,7 @@ import {
   rateLimitResponse,
 } from "@/lib/rate-limit";
 import {
+  bindShufflePendingDevice,
   getShufflePending,
   getShuffleUsdtBudgetRemainingMicro,
   reserveShuffleUsdtBudget,
@@ -19,6 +20,7 @@ import {
   shuffleUsdtReservationKey,
   type ShufflePendingRecord,
 } from "@/lib/rtdb-server";
+import { ensureDeviceBinding, withDeviceCookie } from "@/lib/device-binding";
 import {
   getShuffleTheaterCards,
   microToUsdt,
@@ -70,6 +72,11 @@ export async function POST(request: Request) {
       return rateLimitResponse();
     }
 
+    const { deviceHash, setCookie } = await ensureDeviceBinding(
+      request,
+      wallet
+    );
+
     const progress = await readStreakProgress(wallet, campaignId);
     if (!progress.campaign.active || progress.campaign.cancelled) {
       return NextResponse.json(
@@ -107,7 +114,13 @@ export async function POST(request: Request) {
       existing.deadline > nowSec + 30 &&
       existing.signature
     ) {
-      return NextResponse.json(formatPrepareResponse(existing));
+      if (existing.deviceHash !== deviceHash) {
+        await bindShufflePendingDevice(wallet, campaignId, nonce, deviceHash);
+      }
+      return withDeviceCookie(
+        NextResponse.json(formatPrepareResponse(existing)),
+        setCookie
+      );
     }
 
     const remainingMicro = await getShuffleUsdtBudgetRemainingMicro();
@@ -158,11 +171,15 @@ export async function POST(request: Request) {
       deadline: Number(deadline),
       signature,
       createdAt: Date.now(),
+      deviceHash,
     };
 
     await saveShufflePending(record);
 
-    return NextResponse.json(formatPrepareResponse(record));
+    return withDeviceCookie(
+      NextResponse.json(formatPrepareResponse(record)),
+      setCookie
+    );
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to prepare shuffle.";
