@@ -106,7 +106,7 @@ export async function POST(request: Request) {
       (await canMintDailySession({
         wallet,
         deviceHash: deviceHash!,
-        lastCheckInAtSec,
+        lastCheckInAtSec: lastCheckInAt,
       }));
 
     if (!canMint || !deviceHash) {
