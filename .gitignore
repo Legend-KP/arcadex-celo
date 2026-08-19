@@ -54,3 +54,6 @@ contract-deploy/node_modules/
 unity-bridge/DEVELOPER_GUIDE.md
 *.md
 /unity-bridge
+unity-coinsort-fix/ArcadeXBridge.cs
+unity-coinsort-fix/ArcadeXBridge.jslib
+unity-coinsort-fix/GameProgressionManager.cs

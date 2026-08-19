@@ -25,9 +25,9 @@ import {
   hasSeenStreakBroken,
   markStreakBrokenSeen,
 } from "@/lib/streak-broken-seen";
+import { fetchHomeShell } from "@/lib/home-client";
 import {
   bootstrapPlayerProfile,
-  fetchPlayerProfile,
   savePlayerProfile,
 } from "@/lib/player-profile-client";
 import {
@@ -171,7 +171,8 @@ export default function PlayerProfileProvider({
   }, [walletAddress]);
 
   const finishProfileLoad = useCallback(async (wallet: string) => {
-    let user = await fetchPlayerProfile(wallet).catch(() => null);
+    const home = await fetchHomeShell(wallet);
+    let user = home.user;
     if (!user) {
       user = await bootstrapPlayerProfile(wallet);
     } else {

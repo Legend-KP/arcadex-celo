@@ -10,6 +10,8 @@ import {
   readCachedGamesList,
   writeCachedGamesList,
 } from "@/lib/games-list-client-cache";
+import { fetchHomeShell } from "@/lib/home-client";
+import { getCachedWallet } from "@/lib/player-id";
 
 export default function HomePage() {
   const [games, setGames] = useState<Game[]>(() => {
@@ -33,29 +35,7 @@ export default function HomePage() {
       }
 
       try {
-        const res = await fetch("/api/games", { cache: "no-store" });
-        const text = await res.text();
-        let data: {
-          games?: Game[];
-          playCounts?: Record<string, number>;
-          error?: string;
-        };
-        try {
-          data = JSON.parse(text) as {
-            games?: Game[];
-            playCounts?: Record<string, number>;
-            error?: string;
-          };
-        } catch {
-          throw new Error(
-            "Server returned an invalid response. Check Cloudflare Worker secrets and redeploy."
-          );
-        }
-
-        if (!res.ok) {
-          throw new Error(data.error ?? "Could not load games.");
-        }
-
+        const data = await fetchHomeShell(getCachedWallet() ?? undefined);
         if (cancelled) return;
 
         const nextGames = data.games ?? [];
@@ -73,7 +53,7 @@ export default function HomePage() {
           setError(
             err instanceof Error
               ? err.message
-              : "Could not load games. Check your Firebase configuration."
+              : "Could not load games. Please try again."
           );
         }
       } finally {

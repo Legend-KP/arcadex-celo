@@ -31,6 +31,7 @@ import {
   getCachedGameFlags,
   getCachedPlayCounts,
   invalidateGameFlagsCache,
+  invalidateSharedPlayCountsCache,
   invalidateSharedPlayCountsKv,
   loadPlayCountsWithSharedCache,
   mergeCachedPlayCounts,
@@ -1061,25 +1062,25 @@ export async function deleteGameGatingFlagsFromRtdb(gameId: string): Promise<voi
 
 // ─── Game play counts ──────────────────────────────────────────────────────────
 
-async function readPlayCountsForIds(
-  gameIds: string[]
-): Promise<Record<string, number>> {
-  const unique = [...new Set(gameIds.filter(Boolean))];
-  if (unique.length === 0) return {};
+/** One GET of `gamePlays` — avoids N parallel child reads (Worker subrequest cap). */
+async function readAllPlayCounts(): Promise<Record<string, number>> {
+  const data = await readPath<unknown>("gamePlays");
+  if (!data || typeof data !== "object") return {};
 
-  const entries = await Promise.all(
-    unique.map(async (gameId) => {
-      const count = await readPath<number>(`gamePlays/${gameId}`);
-      return [gameId, typeof count === "number" ? count : 0] as const;
-    })
-  );
-
-  return Object.fromEntries(entries);
+  const counts: Record<string, number> = {};
+  for (const [gameId, value] of Object.entries(
+    data as Record<string, unknown>
+  )) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      counts[gameId] = value;
+    }
+  }
+  return counts;
 }
 
 /**
- * Play counts for catalog game IDs only — no full `gamePlays` tree download.
- * Uses memory + KV shared cache and coalesces concurrent misses.
+ * Play counts for catalog game IDs. One parent GET of `gamePlays`, then
+ * filter to catalog IDs. Uses memory + KV shared cache and coalesces misses.
  */
 export async function fetchGamePlayCountsForIds(
   gameIds: string[]
@@ -1088,36 +1089,25 @@ export async function fetchGamePlayCountsForIds(
   if (unique.length === 0) return {};
 
   const cached = getCachedPlayCounts();
-  if (cached) {
-    const result: Record<string, number> = {};
-    const missing: string[] = [];
-    for (const id of unique) {
-      if (typeof cached[id] === "number") {
-        result[id] = cached[id];
-      } else {
-        missing.push(id);
-      }
-    }
-    if (missing.length === 0) return result;
-
-    const fetched = await readPlayCountsForIds(missing);
-    mergeCachedPlayCounts(fetched);
-    return { ...result, ...fetched };
+  if (cached && unique.every((id) => typeof cached[id] === "number")) {
+    return Object.fromEntries(unique.map((id) => [id, cached[id]]));
   }
 
-  return loadPlayCountsWithSharedCache(() => readPlayCountsForIds(unique));
+  if (cached) {
+    await invalidateSharedPlayCountsCache();
+  }
+
+  const all = await loadPlayCountsWithSharedCache(readAllPlayCounts);
+  return Object.fromEntries(
+    unique.map((id) => [id, typeof all[id] === "number" ? all[id] : 0])
+  );
 }
 
 /**
- * @deprecated Prefer fetchGamePlayCountsForIds(catalogIds) to avoid full-tree reads.
- * Kept for admin/debug; still uses shared cache + per-id reads via shallow keys.
+ * @deprecated Prefer fetchGamePlayCountsForIds(catalogIds).
  */
 export async function fetchAllGamePlayCounts(): Promise<Record<string, number>> {
-  return loadPlayCountsWithSharedCache(async () => {
-    const keys = await readPathShallow("gamePlays");
-    if (!keys) return {};
-    return readPlayCountsForIds(Object.keys(keys));
-  });
+  return loadPlayCountsWithSharedCache(readAllPlayCounts);
 }
 
 export async function fetchGamePlayCount(gameId: string): Promise<number> {

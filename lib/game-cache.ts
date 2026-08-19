@@ -17,6 +17,8 @@ export const GAMES_API_CACHE_CONTROL =
 
 const CATALOG_GEN_KV_KEY = "cache:gamesCatalog:gen";
 const CATALOG_GEN_KV_TTL_SEC = 60 * 60 * 24 * 7;
+const CATALOG_LIST_KV_KEY = "cache:gamesCatalog:list:v1";
+const CATALOG_LIST_KV_TTL_SEC = Math.ceil(GAME_LIST_TTL_MS / 1000);
 
 type CacheEntry<T> = {
   value: T;
@@ -78,12 +80,47 @@ export function getCachedGameList(): Game[] | null {
   return null;
 }
 
-export function setCachedGameList(games: Game[]): void {
+export function setCachedGameList(games: Game[], persistShared = true): void {
   const expiresAt = Date.now() + GAME_LIST_TTL_MS;
   gameListEntry = { value: games, expiresAt };
   lastGoodGameList = games;
   for (const game of games) {
     setCachedGameDoc(game.id, game);
+  }
+  if (persistShared) void persistSharedCatalogList(games);
+}
+
+async function persistSharedCatalogList(games: Game[]): Promise<void> {
+  try {
+    const kv = await getWorkerKv();
+    await kv?.put(CATALOG_LIST_KV_KEY, JSON.stringify({ games }), {
+      expirationTtl: CATALOG_LIST_KV_TTL_SEC,
+    });
+  } catch {
+    // Memory cache still valid if KV is unavailable.
+  }
+}
+
+/** Shared catalog JSON — used when this isolate's memory cache is cold. */
+export async function readSharedCatalogList(): Promise<Game[] | null> {
+  try {
+    const kv = await getWorkerKv();
+    const raw = await kv?.get(CATALOG_LIST_KV_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { games?: Game[] };
+    if (!Array.isArray(parsed.games) || parsed.games.length === 0) return null;
+    return parsed.games;
+  } catch {
+    return null;
+  }
+}
+
+async function deleteSharedCatalogList(): Promise<void> {
+  try {
+    const kv = await getWorkerKv();
+    await kv?.delete?.(CATALOG_LIST_KV_KEY);
+  } catch {
+    // Next TTL expiry still drops a stale list.
   }
 }
 
@@ -119,6 +156,8 @@ export function upsertCachedGame(game: Game): void {
       g.id === game.id ? game : g
     );
   }
+  const list = gameListEntry?.value ?? lastGoodGameList;
+  if (list) void persistSharedCatalogList(list);
 }
 
 function dropFreshCatalogCaches(): void {
@@ -132,17 +171,21 @@ function dropFreshCatalogCaches(): void {
  * If another isolate bumped the catalog generation (Hide / Coming Soon),
  * drop this isolate's in-memory games so the next read hits Firestore.
  */
-export async function refreshCatalogCacheIfStale(): Promise<void> {
+/** @returns true when this isolate dropped memory because generation changed */
+export async function refreshCatalogCacheIfStale(): Promise<boolean> {
   try {
     const kv = await getWorkerKv();
     const raw = await kv?.get(CATALOG_GEN_KV_KEY);
-    if (!raw) return;
+    if (!raw) return false;
     const shared = Number(raw);
-    if (!Number.isFinite(shared) || shared === localCatalogGeneration) return;
+    if (!Number.isFinite(shared) || shared === localCatalogGeneration) {
+      return false;
+    }
     dropFreshCatalogCaches();
     localCatalogGeneration = shared;
+    return true;
   } catch {
-    // Memory TTL still applies if KV is unavailable.
+    return false;
   }
 }
 
@@ -155,8 +198,9 @@ export async function bumpCatalogGeneration(): Promise<void> {
     await kv?.put(CATALOG_GEN_KV_KEY, String(next), {
       expirationTtl: CATALOG_GEN_KV_TTL_SEC,
     });
+    await kv?.delete?.(CATALOG_LIST_KV_KEY);
   } catch {
-    // Other isolates may stay stale until in-memory TTL expires.
+    await deleteSharedCatalogList();
   }
 }
 

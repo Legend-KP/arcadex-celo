@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { fetchHomeShell } from "@/lib/home-client";
 import { fetchSparkData, localSparkData, spendSpark, activateInfiniteSpark, activateSparkRefill } from "@/lib/spark-client";
 import { computeSparkSnapshot, normalizeSparkState, coerceSparkState } from "@/lib/spark";
 import { purchaseInfiniteSparkOnChain } from "@/lib/infinite-spark-purchase";
@@ -127,8 +128,15 @@ export default function SparkProvider({
     async function load() {
       setLoading(true);
       try {
-        const data = await fetchSparkData(walletAddress);
-        if (!cancelled) setState(coerceSparkState(data.state));
+        const home = await fetchHomeShell(walletAddress);
+        if (!cancelled) {
+          if (home.state) {
+            setState(coerceSparkState(home.state));
+          } else {
+            const data = await fetchSparkData(walletAddress);
+            if (!cancelled) setState(coerceSparkState(data.state));
+          }
+        }
       } catch {
         if (!cancelled) setState(localSparkData().state);
       } finally {

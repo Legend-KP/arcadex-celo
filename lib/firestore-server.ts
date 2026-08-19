@@ -2,6 +2,7 @@ import { nextGameSortOrder, sortGames } from "@/lib/game-sort";
 import {
   getCachedGameDoc,
   getCachedGameList,
+  readSharedCatalogList,
   getCatalogEpoch,
   getStaleGameDocFallback,
   getStaleGameListFallback,
@@ -192,9 +193,18 @@ async function fetchGamesFromFirestore(): Promise<Game[]> {
 }
 
 export async function fetchGamesFromServer(): Promise<Game[]> {
-  await refreshCatalogCacheIfStale();
+  const catalogBumped = await refreshCatalogCacheIfStale();
   const cached = getCachedGameList();
   if (cached) return cached;
+
+  // After Hide / Coming Soon, skip KV list — it may lag behind generation.
+  if (!catalogBumped) {
+    const shared = await readSharedCatalogList();
+    if (shared) {
+      setCachedGameList(shared, false);
+      return shared;
+    }
+  }
 
   if (isFirestoreCircuitOpen()) {
     const stale = getStaleGameListFallback();

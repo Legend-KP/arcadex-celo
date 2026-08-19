@@ -5,14 +5,10 @@ import {
   verifyAdminRequest,
 } from "@/lib/admin-auth";
 import { recordApiMetric } from "@/lib/api-metrics";
+import { loadCatalogListForRequest } from "@/lib/catalog-request";
 import { GAMES_API_CACHE_CONTROL } from "@/lib/game-cache";
-import {
-  createGameOnServer,
-  fetchGamesFromServer,
-  isGameVisible,
-} from "@/lib/firestore-server";
+import { createGameOnServer } from "@/lib/firestore-server";
 import { normalizeImageAssetUrl } from "@/lib/game-assets";
-import { fetchGamePlayCountsForIds } from "@/lib/rtdb-server";
 import {
   checkRateLimit,
   getClientIp,
@@ -41,15 +37,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const games = await fetchGamesFromServer();
-    const playCounts = await fetchGamePlayCountsForIds(
-      games.map((g) => g.id)
-    ).catch(() => ({}) as Record<string, number>);
-
-    const isAdmin = await verifyAdminRequest(request);
-    const visible = isAdmin
-      ? games
-      : games.filter(isGameVisible);
+    const { games, playCounts } = await loadCatalogListForRequest(request);
 
     recordApiMetric({
       endpoint: "/api/games",
@@ -62,7 +50,7 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(
-      { games: visible, playCounts },
+      { games, playCounts },
       {
         headers: {
           "Cache-Control": GAMES_API_CACHE_CONTROL,
