@@ -1010,6 +1010,81 @@ a { color: inherit; text-decoration: none; }
   margin-top: 4px;
 }
 
+.game-card--coming-soon {
+  cursor: default;
+  pointer-events: none;
+}
+.game-card--coming-soon:hover {
+  box-shadow:
+    0 4px 16px rgba(125, 185, 220, 0.12),
+    0 1px 4px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.game-card--coming-soon:active {
+  opacity: 1;
+}
+.game-card--coming-soon .thumb-img {
+  filter: grayscale(0.4) brightness(0.72);
+}
+
+.coming-soon-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.52);
+  pointer-events: none;
+}
+.coming-soon-overlay span {
+  font-family: var(--font-head);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: #fff;
+  padding: 7px 11px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.35);
+}
+
+.coming-soon-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 32px 24px;
+  text-align: center;
+  gap: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 55%, #f5f8ff 100%);
+}
+.coming-soon-screen__title {
+  font-family: var(--font-head);
+  font-size: clamp(28px, 8vw, 40px);
+  color: var(--text);
+  margin: 0;
+}
+.coming-soon-screen__subtitle {
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 16px;
+  max-width: 320px;
+}
+.coming-soon-screen .game-menu-btn {
+  max-width: 280px;
+}
+.game-menu-btn--back {
+  background: #ffffff;
+  border: 1.5px solid #e5e7eb;
+  color: #1a1a2e;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+}
+
 /* ?? App footer (home legal links) ?????????????????????? */
 .app-footer {
   margin-top: 8px;

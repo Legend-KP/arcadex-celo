@@ -2,6 +2,7 @@ import { nextGameSortOrder, sortGames } from "@/lib/game-sort";
 import {
   getCachedGameDoc,
   getCachedGameList,
+  getCatalogEpoch,
   getStaleGameDocFallback,
   getStaleGameListFallback,
   invalidateGameCache,
@@ -10,6 +11,10 @@ import {
   recordFirestoreSuccess,
   setCachedGameDoc,
   setCachedGameList,
+  upsertCachedGame,
+  removeCachedGame,
+  refreshCatalogCacheIfStale,
+  bumpCatalogGeneration,
 } from "@/lib/game-cache";
 import { invalidateGameFlagsCache } from "@/lib/rtdb-cache";
 import {
@@ -35,6 +40,7 @@ type FirestoreDocument = {
 
 /** Coalesce concurrent catalog loads on the same isolate. */
 let gamesListInFlight: Promise<Game[]> | null = null;
+let gamesListInFlightEpoch = -1;
 
 function parseField(value: FirestoreValue | undefined): unknown {
   if (!value) return undefined;
@@ -167,6 +173,7 @@ function encodeFields(
 ): Record<string, FirestoreValue> {
   const fields: Record<string, FirestoreValue> = {};
   for (const [key, value] of Object.entries(data)) {
+    if (value === undefined || value === null) continue;
     if (typeof value === "string") fields[key] = { stringValue: value };
     else if (typeof value === "boolean") fields[key] = { booleanValue: value };
     else if (Number.isInteger(value)) fields[key] = { integerValue: String(value) };
@@ -185,6 +192,7 @@ async function fetchGamesFromFirestore(): Promise<Game[]> {
 }
 
 export async function fetchGamesFromServer(): Promise<Game[]> {
+  await refreshCatalogCacheIfStale();
   const cached = getCachedGameList();
   if (cached) return cached;
 
@@ -193,19 +201,27 @@ export async function fetchGamesFromServer(): Promise<Game[]> {
     if (stale) return stale;
   }
 
-  if (gamesListInFlight) return gamesListInFlight;
+  if (gamesListInFlight && gamesListInFlightEpoch === getCatalogEpoch()) {
+    return gamesListInFlight;
+  }
 
+  const epoch = getCatalogEpoch();
+  gamesListInFlightEpoch = epoch;
   gamesListInFlight = (async () => {
     try {
       const games = await fetchGamesFromFirestore();
-      setCachedGameList(games);
+      if (epoch === getCatalogEpoch()) {
+        setCachedGameList(games);
+      }
       return games;
     } catch (err) {
       const stale = getStaleGameListFallback();
       if (stale) return stale;
       throw err;
     } finally {
-      gamesListInFlight = null;
+      if (gamesListInFlightEpoch === epoch) {
+        gamesListInFlight = null;
+      }
     }
   })();
 
@@ -224,6 +240,7 @@ async function fetchGameFromFirestore(id: string): Promise<Game | null> {
 }
 
 export async function fetchGameFromServer(id: string): Promise<Game | null> {
+  await refreshCatalogCacheIfStale();
   const cached = getCachedGameDoc(id);
   if (cached) return cached;
 
@@ -265,6 +282,7 @@ export async function createGameOnServer(
   const game = docToGame(doc);
 
   invalidateGameCache(id);
+  await bumpCatalogGeneration();
   await syncGatingAfterMutation(id, game);
 
   return id;
@@ -276,8 +294,9 @@ export async function updateGameOnServer(
 ): Promise<void> {
   await patchGameOnFirestore(id, data);
   invalidateGameCache(id);
+  await bumpCatalogGeneration();
   const refreshed = await fetchGameFromFirestore(id);
-  if (refreshed) setCachedGameDoc(id, refreshed);
+  if (refreshed) upsertCachedGame(refreshed);
   await syncGatingAfterMutation(id, refreshed);
 }
 
@@ -285,14 +304,17 @@ async function patchGameOnFirestore(
   id: string,
   data: Partial<Omit<Game, "id">>
 ): Promise<void> {
-  const keys = Object.keys(data);
+  const payload = Object.fromEntries(
+    Object.entries(data).filter(([, value]) => value !== undefined)
+  ) as Record<string, string | number | boolean>;
+  const keys = Object.keys(payload);
   if (keys.length === 0) return;
 
   const mask = keys.map((key) => `updateMask.fieldPaths=${key}`).join("&");
   const res = await firestoreFetch(`games/${id}?${mask}`, {
     method: "PATCH",
     body: JSON.stringify({
-      fields: encodeFields(data as Record<string, string | number | boolean>),
+      fields: encodeFields(payload),
     }),
   });
 
@@ -326,6 +348,7 @@ export async function reorderGamesOnServer(orderedIds: string[]): Promise<void> 
   );
 
   invalidateGameCache();
+  await bumpCatalogGeneration();
   const refreshed = await fetchGamesFromFirestore();
   setCachedGameList(refreshed);
 }
@@ -337,7 +360,8 @@ export async function deleteGameOnServer(id: string): Promise<void> {
     throw new Error(`Firestore delete failed (${res.status}): ${text}`);
   }
 
-  invalidateGameCache(id);
+  removeCachedGame(id);
+  await bumpCatalogGeneration();
   await syncGatingAfterMutation(id, null);
 }
 

@@ -8,7 +8,6 @@ import Logo from "@/components/Logo";
 import SparkBatteryBar from "@/components/SparkBatteryBar";
 import {
   readCachedGamesList,
-  shouldBackgroundRefreshGamesList,
   writeCachedGamesList,
 } from "@/lib/games-list-client-cache";
 
@@ -34,7 +33,7 @@ export default function HomePage() {
       }
 
       try {
-        const res = await fetch("/api/games");
+        const res = await fetch("/api/games", { cache: "no-store" });
         const text = await res.text();
         let data: {
           games?: Game[];
@@ -89,10 +88,7 @@ export default function HomePage() {
     }
 
     const onVisible = () => {
-      if (
-        document.visibilityState === "visible" &&
-        shouldBackgroundRefreshGamesList()
-      ) {
+      if (document.visibilityState === "visible") {
         void loadGames(true);
       }
     };

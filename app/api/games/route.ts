@@ -5,10 +5,7 @@ import {
   verifyAdminRequest,
 } from "@/lib/admin-auth";
 import { recordApiMetric } from "@/lib/api-metrics";
-import {
-  GAMES_API_MAX_AGE_SEC,
-  GAMES_API_STALE_WHILE_REVALIDATE_SEC,
-} from "@/lib/game-cache";
+import { GAMES_API_CACHE_CONTROL } from "@/lib/game-cache";
 import {
   createGameOnServer,
   fetchGamesFromServer,
@@ -68,7 +65,9 @@ export async function GET(request: Request) {
       { games: visible, playCounts },
       {
         headers: {
-          "Cache-Control": `public, max-age=${GAMES_API_MAX_AGE_SEC}, stale-while-revalidate=${GAMES_API_STALE_WHILE_REVALIDATE_SEC}`,
+          "Cache-Control": GAMES_API_CACHE_CONTROL,
+          "CDN-Cache-Control": "no-store",
+          Vary: "Cookie",
         },
       }
     );

@@ -11,6 +11,7 @@ import {
   updateGameOnServer,
 } from "@/lib/firestore-server";
 import { normalizeImageAssetUrl } from "@/lib/game-assets";
+import { GAMES_API_CACHE_CONTROL } from "@/lib/game-cache";
 import { Game } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,15 @@ export async function GET(
       return NextResponse.json({ error: "Game not found." }, { status: 404 });
     }
 
-    return NextResponse.json({ game });
+    return NextResponse.json(
+      { game },
+      {
+        headers: {
+          "Cache-Control": GAMES_API_CACHE_CONTROL,
+          "CDN-Cache-Control": "no-store",
+        },
+      }
+    );
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to load game.";

@@ -1,5 +1,6 @@
 import { Game } from "@/types";
 import { invalidateGameFlagsCache } from "@/lib/rtdb-cache";
+import { getWorkerKv } from "@/lib/worker-kv";
 
 /** Full games list — refreshed on admin mutations. */
 export const GAME_LIST_TTL_MS = 60_000;
@@ -7,9 +8,15 @@ export const GAME_LIST_TTL_MS = 60_000;
 /** Single game doc — admin edits are rare. */
 export const GAME_DOC_TTL_MS = 300_000;
 
-/** HTTP Cache-Control for GET /api/games. */
-export const GAMES_API_MAX_AGE_SEC = 60;
-export const GAMES_API_STALE_WHILE_REVALIDATE_SEC = 120;
+/**
+ * Hide / Coming Soon are admin-toggled. Never HTTP-cache the catalog:
+ * public vs admin responses differ, and CDN cache hid those changes.
+ */
+export const GAMES_API_CACHE_CONTROL =
+  "private, no-store, no-cache, must-revalidate";
+
+const CATALOG_GEN_KV_KEY = "cache:gamesCatalog:gen";
+const CATALOG_GEN_KV_TTL_SEC = 60 * 60 * 24 * 7;
 
 type CacheEntry<T> = {
   value: T;
@@ -25,6 +32,18 @@ const lastGoodGameDocs = new Map<string, Game>();
 
 let firestoreCircuitOpenUntil = 0;
 let firestoreConsecutiveFailures = 0;
+
+/** Shared catalog generation — other isolates drop memory cache when this changes. */
+let localCatalogGeneration: number | null = null;
+let catalogEpoch = 0;
+
+export function getCatalogEpoch(): number {
+  return catalogEpoch;
+}
+
+function bumpLocalEpoch(): void {
+  catalogEpoch += 1;
+}
 
 export type GameCacheStats = {
   listHits: number;
@@ -86,17 +105,82 @@ export function setCachedGameDoc(id: string, game: Game): void {
   lastGoodGameDocs.set(id, game);
 }
 
+/** Keep list + circuit-breaker fallback in sync after an admin patch. */
+export function upsertCachedGame(game: Game): void {
+  setCachedGameDoc(game.id, game);
+  if (gameListEntry) {
+    gameListEntry = {
+      value: gameListEntry.value.map((g) => (g.id === game.id ? game : g)),
+      expiresAt: gameListEntry.expiresAt,
+    };
+  }
+  if (lastGoodGameList) {
+    lastGoodGameList = lastGoodGameList.map((g) =>
+      g.id === game.id ? game : g
+    );
+  }
+}
+
+function dropFreshCatalogCaches(): void {
+  bumpLocalEpoch();
+  gameListEntry = null;
+  gameDocEntries.clear();
+  invalidateGameFlagsCache();
+}
+
+/**
+ * If another isolate bumped the catalog generation (Hide / Coming Soon),
+ * drop this isolate's in-memory games so the next read hits Firestore.
+ */
+export async function refreshCatalogCacheIfStale(): Promise<void> {
+  try {
+    const kv = await getWorkerKv();
+    const raw = await kv?.get(CATALOG_GEN_KV_KEY);
+    if (!raw) return;
+    const shared = Number(raw);
+    if (!Number.isFinite(shared) || shared === localCatalogGeneration) return;
+    dropFreshCatalogCaches();
+    localCatalogGeneration = shared;
+  } catch {
+    // Memory TTL still applies if KV is unavailable.
+  }
+}
+
+/** Call after every admin catalog mutation so other isolates see Hide / Live. */
+export async function bumpCatalogGeneration(): Promise<void> {
+  const next = Date.now();
+  localCatalogGeneration = next;
+  try {
+    const kv = await getWorkerKv();
+    await kv?.put(CATALOG_GEN_KV_KEY, String(next), {
+      expirationTtl: CATALOG_GEN_KV_TTL_SEC,
+    });
+  } catch {
+    // Other isolates may stay stale until in-memory TTL expires.
+  }
+}
+
 /** Clear single-doc cache first, then list (invalidation order). */
 export function invalidateGameCache(gameId?: string): void {
+  bumpLocalEpoch();
   if (gameId) {
     gameDocEntries.delete(gameId);
-    lastGoodGameDocs.delete(gameId);
   } else {
     gameDocEntries.clear();
     lastGoodGameDocs.clear();
+    lastGoodGameList = null;
   }
   gameListEntry = null;
   invalidateGameFlagsCache(gameId);
+}
+
+/** Drop a deleted game from circuit-breaker fallbacks. */
+export function removeCachedGame(gameId: string): void {
+  invalidateGameCache(gameId);
+  lastGoodGameDocs.delete(gameId);
+  if (lastGoodGameList) {
+    lastGoodGameList = lastGoodGameList.filter((g) => g.id !== gameId);
+  }
 }
 
 export function getStaleGameListFallback(): Game[] | null {

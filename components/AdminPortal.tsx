@@ -160,9 +160,11 @@ export default function AdminPortal() {
   }
 
   async function handleToggle(game: Game) {
+    const nextActive = !game.active;
     try {
-      await updateAdminGame(game.id, { active: !game.active });
+      await updateAdminGame(game.id, { active: nextActive });
       await refresh();
+      showToast(nextActive ? "Game is visible on the arcade." : "Game hidden from the arcade.");
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : "Failed to update game."
@@ -171,9 +173,11 @@ export default function AdminPortal() {
   }
 
   async function handleToggleLive(game: Game) {
+    const nextLive = !gameIsLive(game);
     try {
-      await updateAdminGame(game.id, { live: !gameIsLive(game) });
+      await updateAdminGame(game.id, { live: nextLive });
       await refresh();
+      showToast(nextLive ? "Game is live." : "Coming Soon overlay is on.");
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : "Failed to update game."
