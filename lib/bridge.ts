@@ -115,7 +115,9 @@ export type GameBridgeMessageType =
   | "GAME_PROGRESS_GET"
   | "GAME_LEADERBOARD_GET"
   | "GAME_LEADERBOARD_SUBMIT"
-  | "GAME_LEADERBOARD_SUBMIT_POLL";
+  | "GAME_LEADERBOARD_SUBMIT_POLL"
+  | "GAME_STATE_GET"
+  | "GAME_STATE_SAVE";
 
 /** @deprecated Legacy MiniPay-prefixed aliases — still accepted inbound. */
 export type LegacyUnityMessageType =
@@ -137,6 +139,7 @@ export type UnityMessageType = GameBridgeMessageType | LegacyUnityMessageType;
 export interface UnityMessage {
   type: UnityMessageType;
   payload?: unknown;
+  requestId?: string;
 }
 
 const LEGACY_MESSAGE_ALIASES: Record<string, GameBridgeMessageType> = {
@@ -154,6 +157,8 @@ const HANDLED_GAME_MESSAGES = new Set<GameBridgeMessageType>([
   "GAME_LEADERBOARD_GET",
   "GAME_LEADERBOARD_SUBMIT",
   "GAME_LEADERBOARD_SUBMIT_POLL",
+  "GAME_STATE_GET",
+  "GAME_STATE_SAVE",
 ]);
 
 export function normalizeUnityMessageType(

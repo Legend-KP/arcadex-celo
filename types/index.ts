@@ -112,13 +112,18 @@ export function gameHasContest(
 
 /**
  * Raw RTDB shape at `users/{wallet}/games/{gameId}`.
- * Score games store `s`; level games store `l`. No timestamp field.
+ * Score games store `s`; level games store `l`.
+ * Games like Coin Sort also store a checkpoint blob in `st` with revision `r`.
  */
 export interface StoredGameProgress {
   /** High score (when hasLeaderboard is true) */
   s?: number;
   /** Current level (when hasLeaderboard is false) */
   l?: number;
+  /** Opaque Unity checkpoint (stage, board, currency, milestones, …). */
+  st?: Record<string, unknown>;
+  /** Checkpoint revision for GAME_STATE_SAVE optimistic locking. */
+  r?: number;
   /** @deprecated Legacy RTDB writes */
   score?: number;
   /** @deprecated Legacy RTDB writes */

@@ -14,12 +14,13 @@ import {
   type LeaderboardSubmitUnityResult,
 } from "@/lib/bridge";
 import { getGameProgress, saveGameProgress } from "@/lib/game-progress-client";
+import { getGameState, saveGameState } from "@/lib/game-state-client";
 import {
   getLeaderboard,
   submitScoreToLeaderboard,
 } from "@/lib/leaderboard-client";
 import { buildGameIframeUrl, getShellOrigin } from "@/lib/game-iframe-url";
-import { readProgressNumber } from "@/lib/progress-value";
+import { extractProgressExtras, readProgressNumber } from "@/lib/progress-value";
 import { getWalletSessionToken } from "@/lib/wallet-session-client";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { resolveWalletOnAppOpen } from "@/lib/walletAuth";
@@ -105,6 +106,9 @@ export default function GameClient({
         highScore: number;
         level: number;
         hasLeaderboard: boolean;
+        gameState?: Record<string, unknown> | null;
+        gameStateRevision?: number;
+        gameStateFound?: boolean;
       },
       opts?: {
         wallet?: string;
@@ -139,6 +143,9 @@ export default function GameClient({
           hints: 0,
           tutorialComplete: false,
           gamePurchased: true,
+          gameStateIncluded: true,
+          gameStateFound: payload.gameStateFound === true,
+          gameState: payload.gameState ?? null,
         });
       }
     },
@@ -157,6 +164,9 @@ export default function GameClient({
         highScore: number;
         level: number;
         hasLeaderboard: boolean;
+        gameState?: Record<string, unknown> | null;
+        gameStateRevision?: number;
+        gameStateFound?: boolean;
       },
       opts?: {
         wallet?: string;
@@ -411,15 +421,26 @@ export default function GameClient({
           const bootstrapName = playerName || profile?.name || "";
           let highScore = 0;
           let level = 0;
+          let gameState: Record<string, unknown> | null = null;
+          let gameStateRevision = 0;
+          let gameStateFound = false;
           if (wallet) {
             try {
-              const { progress } = await getGameProgress(game.id, wallet, {
-                playerName: bootstrapName || undefined,
-                force: true,
-              });
+              const [{ progress }, stateResult] = await Promise.all([
+                getGameProgress(game.id, wallet, {
+                  playerName: bootstrapName || undefined,
+                  force: true,
+                }),
+                getGameState(game.id, wallet).catch(() => null),
+              ]);
               highScore = progress.score ?? 0;
               level = progress.level ?? 0;
               personalBestRef.current = highScore;
+              if (stateResult) {
+                gameState = stateResult.state;
+                gameStateRevision = stateResult.revision;
+                gameStateFound = stateResult.found;
+              }
             } catch {
               // Progress is optional during bootstrap
             }
@@ -429,6 +450,9 @@ export default function GameClient({
             highScore,
             level,
             hasLeaderboard: leaderboardEnabled,
+            gameState,
+            gameStateRevision,
+            gameStateFound,
           };
 
           deliverProgressToUnity(progressPayload, {
@@ -455,7 +479,7 @@ export default function GameClient({
         }
 
         case "GAME_PROGRESS_SAVE": {
-          const payload = (msg.payload ?? {}) as {
+          const payload = (msg.payload ?? {}) as Record<string, unknown> & {
             name?: string;
             score?: number;
             value?: number;
@@ -463,15 +487,16 @@ export default function GameClient({
             walletAddress?: string;
           };
           const progressValue = readProgressNumber(payload);
+          const extras = extractProgressExtras(payload);
           const saveCallback =
             msg.type === "MINIPAY_SUBMIT_SCORE"
               ? "OnScoreSubmitted"
               : "OnProgressSaved";
 
-          if (typeof progressValue !== "number") {
+          if (typeof progressValue !== "number" && !extras) {
             sendToUnity(iframeRef, saveCallback, {
               success: false,
-              error: "value, score, or level is required.",
+              error: "value, score, level, or state is required.",
             });
             break;
           }
@@ -493,17 +518,28 @@ export default function GameClient({
             });
           }
           try {
-            const saved = await persistProgress(
-              progressValue,
-              playerName || payload.name || "",
-              resolvedWalletAddr
-            );
+            let highScore = personalBestRef.current;
+            let level = 0;
+            if (typeof progressValue === "number") {
+              const saved = await persistProgress(
+                progressValue,
+                playerName || payload.name || "",
+                resolvedWalletAddr
+              );
+              highScore = saved.highScore;
+              level = saved.level;
+            }
+            if (extras) {
+              await saveGameState(game.id, resolvedWalletAddr, extras, {
+                merge: true,
+              });
+            }
             sendToUnity(iframeRef, saveCallback, {
               success: true,
-              highScore: saved.highScore,
-              score: saved.highScore,
-              level: saved.level,
-              value: leaderboardEnabled ? saved.highScore : saved.level,
+              highScore,
+              score: highScore,
+              level,
+              value: leaderboardEnabled ? highScore : level,
             });
           } catch (err) {
             sendToUnity(iframeRef, saveCallback, {
@@ -609,6 +645,102 @@ export default function GameClient({
               },
               { persist: false }
             );
+          }
+          break;
+        }
+
+        case "GAME_STATE_GET": {
+          const payload = (msg.payload ?? {}) as { walletAddress?: string };
+          const requestId = msg.requestId ?? "";
+          const wallet =
+            walletAddress || payload.walletAddress || profile?.walletAddress || "";
+          if (!wallet) {
+            sendToUnity(iframeRef, "OnGameStateReceived", {
+              success: false,
+              found: false,
+              requestId,
+              error: "No wallet address available.",
+            });
+            break;
+          }
+          try {
+            const record = await getGameState(game.id, wallet);
+            sendToUnity(iframeRef, "OnGameStateReceived", {
+              success: true,
+              found: record.found,
+              requestId,
+              revision: record.revision,
+              state: record.state,
+            });
+          } catch (err) {
+            sendToUnity(iframeRef, "OnGameStateReceived", {
+              success: false,
+              found: false,
+              requestId,
+              error:
+                err instanceof Error
+                  ? err.message
+                  : "Could not load game state.",
+            });
+          }
+          break;
+        }
+
+        case "GAME_STATE_SAVE": {
+          const payload = (msg.payload ?? {}) as {
+            walletAddress?: string;
+            baseRevision?: number;
+            requestId?: string;
+            state?: Record<string, unknown>;
+          };
+          const requestId = payload.requestId ?? msg.requestId ?? "";
+          const wallet =
+            walletAddress || payload.walletAddress || profile?.walletAddress || "";
+          if (!wallet) {
+            sendToUnity(iframeRef, "OnGameStateSaved", {
+              success: false,
+              conflict: false,
+              requestId,
+              error: "No wallet address available.",
+            });
+            break;
+          }
+          if (
+            !payload.state ||
+            typeof payload.state !== "object" ||
+            Array.isArray(payload.state)
+          ) {
+            sendToUnity(iframeRef, "OnGameStateSaved", {
+              success: false,
+              conflict: false,
+              requestId,
+              error: "state object is required.",
+            });
+            break;
+          }
+          try {
+            const record = await saveGameState(game.id, wallet, payload.state, {
+              baseRevision: payload.baseRevision,
+              requestId,
+            });
+            sendToUnity(iframeRef, "OnGameStateSaved", {
+              success: record.success,
+              conflict: record.conflict === true,
+              revision: record.revision,
+              requestId,
+              state: record.state,
+              error: record.conflict ? "Game state revision conflict." : "",
+            });
+          } catch (err) {
+            sendToUnity(iframeRef, "OnGameStateSaved", {
+              success: false,
+              conflict: false,
+              requestId,
+              error:
+                err instanceof Error
+                  ? err.message
+                  : "Could not save game state.",
+            });
           }
           break;
         }

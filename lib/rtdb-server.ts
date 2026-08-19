@@ -1707,6 +1707,159 @@ export async function saveGameProgressOnServer(
   });
 }
 
+export type GameStateRecord = {
+  found: boolean;
+  revision: number;
+  state: Record<string, unknown> | null;
+};
+
+const GAME_STATE_MAX_BYTES = 256 * 1024;
+const UNSAFE_RTDB_KEY = /[.$#[\]/]/;
+
+function sanitizeGameStateValue(value: unknown, depth = 0): unknown {
+  if (depth > 10) return null;
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    return value.length > 20_000 ? value.slice(0, 20_000) : value;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, 1000)
+      .map((item) => sanitizeGameStateValue(item, depth + 1));
+  }
+  if (typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    let count = 0;
+    for (const [key, nested] of Object.entries(
+      value as Record<string, unknown>
+    )) {
+      if (count >= 200) break;
+      if (!key || UNSAFE_RTDB_KEY.test(key)) continue;
+      out[key] = sanitizeGameStateValue(nested, depth + 1);
+      count += 1;
+    }
+    return out;
+  }
+  return null;
+}
+
+function sanitizeGameStateObject(state: unknown): Record<string, unknown> {
+  const sanitized = sanitizeGameStateValue(state);
+  if (!sanitized || typeof sanitized !== "object" || Array.isArray(sanitized)) {
+    throw new Error("Game state must be a JSON object.");
+  }
+  const json = JSON.stringify(sanitized);
+  if (json.length > GAME_STATE_MAX_BYTES) {
+    throw new Error("Game state is too large.");
+  }
+  return sanitized as Record<string, unknown>;
+}
+
+function readStoredGameState(
+  stored: StoredGameProgress | null
+): Record<string, unknown> | null {
+  if (!stored?.st || typeof stored.st !== "object" || Array.isArray(stored.st)) {
+    return null;
+  }
+  return stored.st;
+}
+
+export async function fetchGameStateFromServer(
+  walletAddress: string,
+  gameId: string
+): Promise<GameStateRecord> {
+  if (!isWalletAddress(walletAddress)) {
+    return { found: false, revision: 0, state: null };
+  }
+
+  const stored = await fetchGameProgressFromServer(walletAddress, gameId);
+  const state = readStoredGameState(stored);
+  return {
+    found: state != null && Object.keys(state).length > 0,
+    revision: typeof stored?.r === "number" ? stored.r : 0,
+    state,
+  };
+}
+
+export class GameStateConflictError extends Error {
+  revision: number;
+  state: Record<string, unknown> | null;
+
+  constructor(revision: number, state: Record<string, unknown> | null) {
+    super("Game state revision conflict.");
+    this.name = "GameStateConflictError";
+    this.revision = revision;
+    this.state = state;
+  }
+}
+
+/**
+ * Writes Unity checkpoint data to users/{wallet}/games/{gameId}.st
+ * without clobbering personal-best s/l.
+ */
+export async function saveGameStateOnServer(
+  walletAddress: string,
+  gameId: string,
+  state: unknown,
+  opts?: { baseRevision?: number; merge?: boolean }
+): Promise<GameStateRecord> {
+  if (!isWalletAddress(walletAddress)) {
+    throw new Error("A valid wallet address is required.");
+  }
+
+  const incoming = sanitizeGameStateObject(state);
+  const wallet = normalizeWalletAddress(walletAddress);
+  const conflictBox: { value: GameStateRecord | null } = { value: null };
+
+  const { snapshot } = await runRtdbTransaction<StoredGameProgress>(
+    gameProgressPath(wallet, gameId),
+    (current) => {
+      const currentRevision = typeof current?.r === "number" ? current.r : 0;
+      if (
+        typeof opts?.baseRevision === "number" &&
+        opts.baseRevision > 0 &&
+        currentRevision > 0 &&
+        opts.baseRevision !== currentRevision
+      ) {
+        conflictBox.value = {
+          found: readStoredGameState(current) != null,
+          revision: currentRevision,
+          state: readStoredGameState(current),
+        };
+        return undefined;
+      }
+
+      const currentState = readStoredGameState(current) ?? {};
+      const nextState = opts?.merge ? { ...currentState, ...incoming } : incoming;
+
+      return {
+        ...(current ?? {}),
+        st: nextState,
+        r: currentRevision + 1,
+      };
+    }
+  );
+
+  if (conflictBox.value) {
+    throw new GameStateConflictError(
+      conflictBox.value.revision,
+      conflictBox.value.state
+    );
+  }
+
+  const stored =
+    snapshot ?? (await fetchGameProgressFromServer(wallet, gameId));
+  const savedState = readStoredGameState(stored) ?? incoming;
+
+  return {
+    found: true,
+    revision: typeof stored?.r === "number" ? stored.r : 1,
+    state: savedState,
+  };
+}
+
 // --- Daily shuffle (test mode) -------------------------------------------------
 
 export type ShufflePendingRecord = {
