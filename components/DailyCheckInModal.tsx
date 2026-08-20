@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatChainError } from "@/lib/celo-public-client";
+import { playSuccessSfx, playTouchSfx } from "@/lib/sfx";
 import {
   fetchStreakStatus,
   performDailyCheckIn,
@@ -121,6 +122,15 @@ export default function DailyCheckInModal({
 }: DailyCheckInModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState<{
+    title: string;
+    body: string;
+  } | null>(null);
+  const pendingCompleteRef = useRef<{
+    day: number;
+    milestone: boolean;
+    infiniteSparkGranted: boolean;
+  } | null>(null);
   const infinityGradId = useId().replace(/:/g, "");
   const recoverAttemptedRef = useRef(false);
 
@@ -159,8 +169,26 @@ export default function DailyCheckInModal({
   }, [open, walletAddress, onComplete]);
 
   useEffect(() => {
-    if (!open) recoverAttemptedRef.current = false;
+    if (!open) {
+      recoverAttemptedRef.current = false;
+      setSuccess(null);
+      pendingCompleteRef.current = null;
+    }
   }, [open]);
+
+  const finishSuccess = useCallback(() => {
+    const pending = pendingCompleteRef.current;
+    pendingCompleteRef.current = null;
+    setSuccess(null);
+    if (pending) onComplete(pending);
+  }, [onComplete]);
+
+  useEffect(() => {
+    if (!success) return;
+    playSuccessSfx();
+    const id = window.setTimeout(() => finishSuccess(), 4000);
+    return () => window.clearTimeout(id);
+  }, [success, finishSuccess]);
 
   if (!open || typeof document === "undefined") return null;
 
@@ -197,14 +225,24 @@ export default function DailyCheckInModal({
       : `Day ${requiredDays}`;
 
   async function handleCheckIn() {
+    playTouchSfx();
     setLoading(true);
     setError("");
     try {
       const result = await performDailyCheckIn(walletAddress);
-      onComplete({
+      const complete = {
         day: result.day,
         milestone: result.milestone,
         infiniteSparkGranted: Boolean(result.reward?.granted),
+      };
+      pendingCompleteRef.current = complete;
+      setSuccess({
+        title: complete.infiniteSparkGranted
+          ? "Milestone reached!"
+          : "Check-in successful!",
+        body: complete.infiniteSparkGranted
+          ? "Infinite Spark is active for 24 hours. Play any game freely!"
+          : `Day ${complete.day} is locked in. Come back tomorrow to keep your streak!`,
       });
     } catch (err) {
       setError(formatChainError(err) || "Check-in failed. Try again.");
@@ -214,6 +252,7 @@ export default function DailyCheckInModal({
   }
 
   return createPortal(
+    <>
     <div className="player-modal-backdrop" role="dialog" aria-modal="true">
       <div className="player-modal daily-checkin-modal">
         <h2 className="daily-checkin-heading">
@@ -314,8 +353,8 @@ export default function DailyCheckInModal({
         <button
           type="button"
           className="daily-checkin-btn"
-          disabled={loading || !walletAddress}
-          onClick={handleCheckIn}
+          disabled={loading || !walletAddress || Boolean(success)}
+          onClick={() => void handleCheckIn()}
         >
           <span className="daily-checkin-btn-main">
             <ShieldCheckIcon />
@@ -324,7 +363,47 @@ export default function DailyCheckInModal({
           <span className="daily-checkin-btn-sub">No cost transaction</span>
         </button>
       </div>
-    </div>,
+    </div>
+    {success ? (
+      <div
+        className="spark-success-backdrop"
+        role="presentation"
+        onClick={() => {
+          playTouchSfx();
+          finishSuccess();
+        }}
+      >
+        <div
+          className="spark-success-popup"
+          role="alertdialog"
+          aria-live="polite"
+          aria-labelledby="daily-streak-success-title"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="spark-success-popup__icon" aria-hidden>
+            ✓
+          </span>
+          <h3
+            id="daily-streak-success-title"
+            className="spark-success-popup__title"
+          >
+            {success.title}
+          </h3>
+          <p className="spark-success-popup__body">{success.body}</p>
+          <button
+            type="button"
+            className="spark-success-popup__btn"
+            onClick={() => {
+              playTouchSfx();
+              finishSuccess();
+            }}
+          >
+            Great!
+          </button>
+        </div>
+      </div>
+    ) : null}
+    </>,
     document.body
   );
 }

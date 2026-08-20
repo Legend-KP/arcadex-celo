@@ -11,6 +11,7 @@ import {
   type ShuffleTheaterCard,
 } from "@/lib/shuffle-client";
 import { playShuffleSound } from "@/lib/shuffle-sound";
+import { playSuccessSfx, playTouchSfx } from "@/lib/sfx";
 import {
   fetchStreakStatus,
   refreshSessionFromCheckIn,
@@ -282,6 +283,8 @@ export default function DailyShuffleModal({
         DEFAULT_SHUFFLE_CAMPAIGN_ID
       );
 
+      playSuccessSfx();
+
       setTheater(prepare.theater);
       setWinnerId(prepare.outcome.id);
       setOutcome(prepare.outcome);
@@ -313,6 +316,7 @@ export default function DailyShuffleModal({
 
   function handlePick(cardId: string) {
     if (phase !== "pick" || !winnerId) return;
+    playTouchSfx();
     setPickedId(cardId);
     // Theater only: the tapped card reveals the server outcome (not the
     // fixed grid slot that happened to hold that outcome id).
@@ -320,6 +324,7 @@ export default function DailyShuffleModal({
   }
 
   async function handleContinue() {
+    playTouchSfx();
     if (needsClaim) {
       setPhase("claiming");
       setError("");
@@ -517,7 +522,10 @@ export default function DailyShuffleModal({
               type="button"
               className="daily-shuffle-cta"
               disabled={phase === "busy"}
-              onClick={() => void handleShuffle()}
+              onClick={() => {
+                playTouchSfx();
+                void handleShuffle();
+              }}
             >
               {phase === "busy" ? "Confirm in MiniPay…" : "Shuffle now · No cost"}
             </button>
