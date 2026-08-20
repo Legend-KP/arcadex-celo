@@ -47,7 +47,8 @@ export async function GET(request: Request) {
     if (walletRaw && isWalletAddress(walletRaw)) {
       const wallet = normalizeWalletAddress(walletRaw);
       const stats = await fetchUserActivityFromServer(wallet, week.weekId);
-      const rankInTop = findActivityRank(entries, wallet);
+      const rankInTop =
+        stats.sparksSpent > 0 ? findActivityRank(entries, wallet) : null;
       me = {
         rank: rankInTop,
         score: stats.sparksSpent,

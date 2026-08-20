@@ -2708,6 +2708,11 @@ export async function recordActivityEvent(
 
     await writePath(path, next);
 
+    // Public board is sparks-first — don't list visit-only / 0-spark users.
+    if (next.sparksSpent <= 0) {
+      return;
+    }
+
     const entry = activityEntryFromCounters(wallet, next);
     await writePath(activityEntriesPath(weekId, wallet), entry);
 
@@ -2748,7 +2753,7 @@ export async function fetchActivityLeaderboardFromServer(
   limit = ACTIVITY_LEADERBOARD_MAX_ENTRIES
 ): Promise<ActivityLeaderboardEntry[]> {
   const ranked = await ensureActivityTopMirror(weekId);
-  return ranked.slice(0, limit);
+  return ranked.filter((e) => e.score > 0).slice(0, limit);
 }
 
 export async function fetchUserActivityFromServer(

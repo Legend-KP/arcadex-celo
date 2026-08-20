@@ -146,7 +146,7 @@ export default function ActivityLeaderboardButton() {
           role="presentation"
         >
           <div
-            className="lb-sheet lb-sheet--contest activity-lb-sheet"
+            className="lb-sheet activity-lb-sheet"
             role="dialog"
             aria-modal="true"
             aria-label="Weekly activity leaderboard"
@@ -195,8 +195,10 @@ export default function ActivityLeaderboardButton() {
             {me && (
               <p className="activity-lb-you">
                 You ·{" "}
-                {me.rank != null ? `#${me.rank}` : "Unranked"} · {me.score}{" "}
-                {me.score === 1 ? "spark" : "sparks"}
+                {me.score > 0 && me.rank != null
+                  ? `#${me.rank}`
+                  : "Unranked"}{" "}
+                · {me.score} {me.score === 1 ? "spark" : "sparks"}
               </p>
             )}
 
@@ -219,11 +221,9 @@ export default function ActivityLeaderboardButton() {
                   return (
                     <div
                       key={`${e.walletAddress}-${i}`}
-                      className={`lb-row lb-row--contest${
-                        i === 0 ? " lb-row--first" : ""
-                      }${i < 3 ? " lb-row--podium" : ""}${
-                        isYou ? " activity-lb-row--you" : ""
-                      }`}
+                      className={`lb-row${i === 0 ? " lb-row--first" : ""}${
+                        i < 3 ? " lb-row--podium" : ""
+                      }${isYou ? " activity-lb-row--you" : ""}`}
                     >
                       <span
                         className={`lb-pos ${
