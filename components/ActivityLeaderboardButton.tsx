@@ -141,7 +141,7 @@ export default function ActivityLeaderboardButton() {
 
       {open && (
         <div
-          className="lb-backdrop"
+          className="lb-backdrop activity-lb-backdrop"
           onClick={() => setOpen(false)}
           role="presentation"
         >
