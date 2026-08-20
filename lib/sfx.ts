@@ -67,11 +67,42 @@ export function playSfx(name: SfxName) {
   }
 }
 
+let lastTouchAt = 0;
+
 export function playTouchSfx() {
+  const now = Date.now();
+  if (now - lastTouchAt < 40) return;
+  lastTouchAt = now;
   unlockSuccessSfx();
-  playSfx("touch");
+
+  const proto = getAudio("touch");
+  if (!proto) return;
+
+  try {
+    const node = proto.cloneNode(true) as HTMLAudioElement;
+    node.volume = proto.volume;
+    node.muted = false;
+    void node.play().catch(() => playSfx("touch"));
+  } catch {
+    playSfx("touch");
+  }
 }
 
 export function playSuccessSfx() {
-  playSfx("success");
+  const el = getAudio("success");
+  if (!el) return;
+
+  el.muted = false;
+  el.volume = 0.9;
+  try {
+    el.pause();
+    el.currentTime = 0;
+  } catch {
+    // ignore seek errors
+  }
+  void el.play().catch(() => {
+    const fallback = new Audio(SOURCES.success);
+    fallback.volume = 0.9;
+    void fallback.play().catch(() => {});
+  });
 }

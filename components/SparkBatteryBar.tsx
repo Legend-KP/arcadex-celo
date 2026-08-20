@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useSparks } from "@/components/SparkProvider";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { formatChainError } from "@/lib/celo-public-client";
-import { playSuccessSfx, playTouchSfx, preloadSfx } from "@/lib/sfx";
+import { playSuccessSfx } from "@/lib/sfx";
 import { formatSparkCountdown } from "@/lib/spark";
 
 export default function SparkBatteryBar() {
@@ -26,10 +26,6 @@ export default function SparkBatteryBar() {
       sessionStorage.removeItem("openSparkPanel");
       setOpen(true);
     }
-  }, []);
-
-  useEffect(() => {
-    preloadSfx();
   }, []);
 
   useEffect(() => {
@@ -94,10 +90,7 @@ export default function SparkBatteryBar() {
   const panel = open ? (
     <div
       className="spark-panel-backdrop"
-      onClick={() => {
-        playTouchSfx();
-        setOpen(false);
-      }}
+      onClick={() => setOpen(false)}
       role="presentation"
     >
       <div
@@ -110,10 +103,7 @@ export default function SparkBatteryBar() {
         <button
           type="button"
           className="spark-panel__close"
-          onClick={() => {
-            playTouchSfx();
-            setOpen(false);
-          }}
+          onClick={() => setOpen(false)}
           aria-label="Close"
         >
           ×
@@ -221,10 +211,7 @@ export default function SparkBatteryBar() {
                 type="button"
                 className="spark-shop-card__price"
                 disabled={refilling || loading || !walletAddress || sparks.available >= sparks.max}
-                onClick={() => {
-                  playTouchSfx();
-                  void handlePurchaseSparkRefill();
-                }}
+                onClick={handlePurchaseSparkRefill}
               >
                 {refilling ? "…" : "$0.05"}
               </button>
@@ -254,10 +241,7 @@ export default function SparkBatteryBar() {
                 type="button"
                 className="spark-shop-card__price"
                 disabled={purchasing || loading || !walletAddress}
-                onClick={() => {
-                  playTouchSfx();
-                  void handlePurchaseInfiniteSpark();
-                }}
+                onClick={handlePurchaseInfiniteSpark}
               >
                 {purchasing ? "…" : "$0.10"}
               </button>
@@ -288,10 +272,7 @@ export default function SparkBatteryBar() {
           <div
             className="spark-success-backdrop"
             role="presentation"
-            onClick={() => {
-              playTouchSfx();
-              setSuccessMessage(null);
-            }}
+            onClick={() => setSuccessMessage(null)}
           >
             <div
               className="spark-success-popup"
@@ -310,10 +291,7 @@ export default function SparkBatteryBar() {
               <button
                 type="button"
                 className="spark-success-popup__btn"
-                onClick={() => {
-                  playTouchSfx();
-                  setSuccessMessage(null);
-                }}
+                onClick={() => setSuccessMessage(null)}
               >
                 Great!
               </button>
@@ -329,10 +307,7 @@ export default function SparkBatteryBar() {
         <button
           type="button"
           className="spark-battery"
-          onClick={() => {
-            playTouchSfx();
-            setOpen(true);
-          }}
+          onClick={() => setOpen(true)}
           aria-expanded={open}
           aria-label={
             sparks.hasInfinite

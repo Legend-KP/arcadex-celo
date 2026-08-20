@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatChainError } from "@/lib/celo-public-client";
-import { playSuccessSfx, playTouchSfx } from "@/lib/sfx";
+import { playSuccessSfx } from "@/lib/sfx";
 import {
   fetchStreakStatus,
   performDailyCheckIn,
@@ -185,7 +185,6 @@ export default function DailyCheckInModal({
 
   useEffect(() => {
     if (!success) return;
-    playSuccessSfx();
     const id = window.setTimeout(() => finishSuccess(), 4000);
     return () => window.clearTimeout(id);
   }, [success, finishSuccess]);
@@ -225,11 +224,11 @@ export default function DailyCheckInModal({
       : `Day ${requiredDays}`;
 
   async function handleCheckIn() {
-    playTouchSfx();
     setLoading(true);
     setError("");
     try {
       const result = await performDailyCheckIn(walletAddress);
+      playSuccessSfx();
       const complete = {
         day: result.day,
         milestone: result.milestone,
@@ -368,10 +367,7 @@ export default function DailyCheckInModal({
       <div
         className="spark-success-backdrop"
         role="presentation"
-        onClick={() => {
-          playTouchSfx();
-          finishSuccess();
-        }}
+        onClick={() => finishSuccess()}
       >
         <div
           className="spark-success-popup"
@@ -393,10 +389,7 @@ export default function DailyCheckInModal({
           <button
             type="button"
             className="spark-success-popup__btn"
-            onClick={() => {
-              playTouchSfx();
-              finishSuccess();
-            }}
+            onClick={() => finishSuccess()}
           >
             Great!
           </button>
