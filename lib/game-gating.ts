@@ -19,23 +19,45 @@ function flagsFromGame(game: Game): GameGatingFlags {
 }
 
 /**
- * Hot-path gating: prefer RTDB mirror (zero Firestore). Fall back to cached
- * Firestore game doc and backfill RTDB on miss.
+ * Hot-path gating: prefer RTDB mirror, but always overlay catalog fields from
+ * the Firestore game doc when available. RTDB flags often omit hasLeaderboard;
+ * `undefined !== false` was defaulting those games to score mode (`s`), so
+ * level games never wrote D1 column `l`.
  */
 export async function resolveGameGating(
   gameId: string
 ): Promise<GameGatingFlags | null> {
-  const fromRtdb = await fetchGameGatingFlagsFromRtdb(gameId);
-  if (fromRtdb) return fromRtdb;
+  const [fromRtdb, game] = await Promise.all([
+    fetchGameGatingFlagsFromRtdb(gameId),
+    fetchGameFromServer(gameId).catch(() => null),
+  ]);
 
-  const game = await fetchGameFromServer(gameId);
-  if (!game) return null;
+  if (!fromRtdb && !game) return null;
 
-  const flags = flagsFromGame(game);
-  await syncGameGatingFlagsToRtdb(gameId, flags).catch(() => {
-    // Backfill is best-effort; cached Firestore doc is still valid.
-  });
-  return flags;
+  if (game) {
+    const fromGame = flagsFromGame(game);
+    const flags: GameGatingFlags = {
+      ...(fromRtdb ?? fromGame),
+      active: fromGame.active,
+      live: fromGame.live,
+      hasLeaderboard: fromGame.hasLeaderboard,
+    };
+
+    if (
+      !fromRtdb ||
+      fromRtdb.hasLeaderboard !== flags.hasLeaderboard ||
+      fromRtdb.active !== flags.active ||
+      fromRtdb.live !== flags.live
+    ) {
+      void syncGameGatingFlagsToRtdb(gameId, flags).catch(() => {
+        // Backfill is best-effort.
+      });
+    }
+
+    return flags;
+  }
+
+  return fromRtdb;
 }
 
 export function isGameVisibleFromFlags(flags: GameGatingFlags): boolean {

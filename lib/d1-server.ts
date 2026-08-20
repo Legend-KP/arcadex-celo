@@ -239,15 +239,17 @@ async function upsertProgressRow(
     stored.st && typeof stored.st === "object"
       ? JSON.stringify(stored.st)
       : null;
+  // COALESCE keeps the other field (s vs l, or st/r) when this write only
+  // touches one progress path — matches RTDB merge behavior.
   await db
     .prepare(
       `INSERT INTO game_progress (wallet, game_id, s, l, st_json, r)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(wallet, game_id) DO UPDATE SET
-         s = excluded.s,
-         l = excluded.l,
-         st_json = excluded.st_json,
-         r = excluded.r`
+         s = COALESCE(excluded.s, game_progress.s),
+         l = COALESCE(excluded.l, game_progress.l),
+         st_json = COALESCE(excluded.st_json, game_progress.st_json),
+         r = COALESCE(excluded.r, game_progress.r)`
     )
     .bind(
       wallet,
