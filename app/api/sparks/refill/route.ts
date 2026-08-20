@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   activateSparkRefillOnServer,
   SparkRefillActivationError,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import {
   checkRateLimit,
   getClientIp,

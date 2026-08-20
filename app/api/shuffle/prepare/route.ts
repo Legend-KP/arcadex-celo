@@ -19,7 +19,7 @@ import {
   saveShufflePending,
   shuffleUsdtReservationKey,
   type ShufflePendingRecord,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import { ensureDeviceBinding, withDeviceCookie } from "@/lib/device-binding";
 import {
   getShuffleTheaterCards,

@@ -4,7 +4,7 @@ import {
   getDeviceSeenAt,
   getWalletSessionDeviceHash,
   recordDeviceSeenIfAbsent,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 
 export const DEVICE_COOKIE_NAME = "ax_did";
 const DEVICE_COOKIE_MAX_AGE_SEC = 30 * 24 * 60 * 60;

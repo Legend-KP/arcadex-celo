@@ -1,6 +1,6 @@
 import { verifyAdminRequest } from "@/lib/admin-auth";
 import { fetchGamesFromServer, isGameVisible } from "@/lib/firestore-server";
-import { fetchGamePlayCountsForIds } from "@/lib/rtdb-server";
+import { fetchGamePlayCountsForIds } from "@/lib/player-backend";
 import { Game } from "@/types";
 
 export type CatalogListPayload = {

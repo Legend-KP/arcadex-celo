@@ -14,7 +14,7 @@ import {
   StreakSyncError,
   grantStreakInfiniteSparkOnServer,
   StreakRewardError,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import { invalidateStreakProgressCache } from "@/lib/streak-progress-cache";
 import { createWalletSessionToken } from "@/lib/wallet-session";

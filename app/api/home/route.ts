@@ -10,7 +10,7 @@ import {
 import {
   fetchUserFromServer,
   readSparkStateFromServer,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import { computeSparkSnapshot } from "@/lib/spark";
 import {
   isWalletAddress,

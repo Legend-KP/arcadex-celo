@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readSparkStateFromServer } from "@/lib/rtdb-server";
+import { readSparkStateFromServer } from "@/lib/player-backend";
 import { computeSparkSnapshot } from "@/lib/spark";
 import {
   checkRateLimit,

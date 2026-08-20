@@ -6,7 +6,7 @@ import {
 import {
   resolveGameProgressFromServer,
   saveGameProgressOnServer,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import {
   corsJsonResponse,
   handleCorsPreflightRequest,

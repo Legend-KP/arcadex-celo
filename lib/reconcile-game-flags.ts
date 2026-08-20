@@ -4,7 +4,7 @@ import {
   readPathShallow,
   syncGameGatingFlagsToRtdb,
   deleteGameGatingFlagsFromRtdb,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import { fetchGamesFromServer } from "@/lib/firestore-server";
 import { Game, GameGatingFlags } from "@/types";
 

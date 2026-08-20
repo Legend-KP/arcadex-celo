@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   activateInfiniteSparkOnServer,
   InfiniteSparkActivationError,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import {
   checkRateLimit,
   getClientIp,

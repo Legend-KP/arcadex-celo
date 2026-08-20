@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchUserFromServer, upsertUserOnServer } from "@/lib/rtdb-server";
+import { fetchUserFromServer, upsertUserOnServer } from "@/lib/player-backend";
 import {
   checkRateLimit,
   getClientIp,

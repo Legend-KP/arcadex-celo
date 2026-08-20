@@ -1,7 +1,7 @@
 import {
   fetchGameGatingFlagsFromRtdb,
   syncGameGatingFlagsToRtdb,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import { fetchGameFromServer } from "@/lib/firestore-server";
 import { Game, GameGatingFlags } from "@/types";
 

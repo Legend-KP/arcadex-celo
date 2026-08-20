@@ -21,7 +21,7 @@ import {
   shuffleUsdtReservationKey,
   StreakRewardError,
   StreakSyncError,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import { usdtToMicro } from "@/lib/shuffle-outcomes";
 import { invalidateStreakProgressCache } from "@/lib/streak-progress-cache";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";

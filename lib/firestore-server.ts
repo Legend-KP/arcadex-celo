@@ -21,7 +21,7 @@ import { invalidateGameFlagsCache } from "@/lib/rtdb-cache";
 import {
   deleteGameGatingFlagsFromRtdb,
   syncGameGatingFlagsToRtdb,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import { Game, GameGatingFlags } from "@/types";
 import { getFirebaseAccessToken, getProjectId, getServiceAccount } from "@/lib/firebase-admin";
 import { fetchWithTimeout } from "@/lib/firebase-fetch";
