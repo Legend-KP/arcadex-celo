@@ -12,6 +12,9 @@
 		"binding": "ASSETS"
 	},
 	"keep_vars": true,
+	"vars": {
+		"PLAYER_DATA_BACKEND": "d1"
+	},
 	"services": [
 		{
 			"binding": "WORKER_SELF_REFERENCE",
@@ -26,6 +29,15 @@
 			"binding": "RATE_LIMIT_KV",
 			"id": "55bfb54188784fac966da56f42c9fce6",
 			"preview_id": "afc93dfed6514875924b2511a39412cb"
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "arcadex-celo-preview",
+			"database_id": "81f8cd4f-6927-4561-861b-e5aa12eba7a6",
+			"migrations_dir": "migrations",
+			"preview_database_id": "arcadex-celo-preview-local"
 		}
 	]
 }
