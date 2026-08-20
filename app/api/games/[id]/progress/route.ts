@@ -6,7 +6,7 @@ import {
 import {
   resolveGameProgressFromServer,
   saveGameProgressOnServer,
-} from "@/lib/player-backend";
+} from "@/lib/rtdb-server";
 import {
   corsJsonResponse,
   handleCorsPreflightRequest,
@@ -24,7 +24,6 @@ import {
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import { requireWalletAuth } from "@/lib/wallet-session";
 import { readProgressNumber } from "@/lib/progress-value";
-import { gameHasLeaderboard } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -130,15 +129,10 @@ export async function GET(
     }
 
     const hasLeaderboard = flags.hasLeaderboard !== false;
-    // Prefer Firestore catalog when present (admin Leaderboard toggle).
-    const catalogGame = await fetchGameFromServer(id).catch(() => null);
-    const useLeaderboard = catalogGame
-      ? gameHasLeaderboard(catalogGame)
-      : hasLeaderboard;
     const progress = await resolveGameProgressFromServer(
       wallet,
       id,
-      useLeaderboard,
+      hasLeaderboard,
       { playerName: name }
     );
     const highScore = progress.score ?? 0;
@@ -146,7 +140,7 @@ export async function GET(
 
     const payload = {
       progress,
-      hasLeaderboard: useLeaderboard,
+      hasLeaderboard,
       highScore,
       score: highScore,
       level,
@@ -233,24 +227,20 @@ export async function POST(
     }
 
     const hasLeaderboard = flags.hasLeaderboard !== false;
-    const catalogGame = await fetchGameFromServer(id).catch(() => null);
-    const useLeaderboard = catalogGame
-      ? gameHasLeaderboard(catalogGame)
-      : hasLeaderboard;
     const progress = await saveGameProgressOnServer(
       body.walletAddress,
       id,
       scoreValue,
-      useLeaderboard,
+      hasLeaderboard,
       { playerName: body.playerName ?? body.name }
     );
-    const highScore = progress.score ?? (useLeaderboard ? scoreValue : 0);
-    const level = progress.level ?? (useLeaderboard ? 0 : scoreValue);
+    const highScore = progress.score ?? (hasLeaderboard ? scoreValue : 0);
+    const level = progress.level ?? (hasLeaderboard ? 0 : scoreValue);
 
     const payload = {
       success: true,
       progress,
-      hasLeaderboard: useLeaderboard,
+      hasLeaderboard,
       highScore,
       score: highScore,
       level,
@@ -261,7 +251,7 @@ export async function POST(
       normalizeWalletAddress(body.walletAddress),
       {
         progress,
-        hasLeaderboard: useLeaderboard,
+        hasLeaderboard,
         highScore,
         score: highScore,
         level,
