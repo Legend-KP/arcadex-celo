@@ -26,6 +26,7 @@ import { requireWalletAuth } from "@/lib/wallet-session";
 import {
   extractModeLevels,
   extractProgressExtras,
+  lineLinkFieldsFromModes,
   readProgressNumber,
 } from "@/lib/progress-value";
 
@@ -149,6 +150,7 @@ export async function GET(
       score: highScore,
       level,
       modes: progress.modes ?? null,
+      ...lineLinkFieldsFromModes(progress.modes),
     };
 
     setDebouncedProgressResponse(id, wallet, payload);
@@ -207,6 +209,11 @@ export async function POST(
       easy?: number;
       medium?: number;
       hard?: number;
+      advanced?: number;
+      easyLevel?: number;
+      mediumLevel?: number;
+      hardLevel?: number;
+      advancedLevel?: number;
       name?: string;
       playerName?: string;
       state?: Record<string, unknown>;
@@ -264,6 +271,7 @@ export async function POST(
     const highScore = progress.score ?? (hasLeaderboard ? progressValue : 0);
     const level = progress.level ?? (hasLeaderboard ? 0 : progressValue);
 
+    const resolvedModes = progress.modes ?? modes ?? null;
     const payload = {
       success: true,
       progress,
@@ -271,7 +279,8 @@ export async function POST(
       highScore,
       score: highScore,
       level,
-      modes: progress.modes ?? modes ?? null,
+      modes: resolvedModes,
+      ...lineLinkFieldsFromModes(resolvedModes),
     };
 
     setDebouncedProgressResponse(
@@ -283,6 +292,8 @@ export async function POST(
         highScore,
         score: highScore,
         level,
+        modes: resolvedModes,
+        ...lineLinkFieldsFromModes(resolvedModes),
       }
     );
 

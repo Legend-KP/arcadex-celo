@@ -39,6 +39,10 @@ import {
 } from "@/lib/rtdb-cache";
 import { coalesceProgressWrite } from "@/lib/progress-write-coalesce";
 import {
+  extractModeLevels,
+  modeLevelsToStoredState,
+} from "@/lib/progress-value";
+import {
   isWalletAddress,
   normalizeWalletAddress,
   tryNormalizeWalletAddress,
@@ -1526,20 +1530,9 @@ function readStoredModeLevels(
   const st = stored?.st;
   if (!st || typeof st !== "object" || Array.isArray(st)) return undefined;
 
-  const modesRaw = st.modes;
-  if (!modesRaw || typeof modesRaw !== "object" || Array.isArray(modesRaw)) {
-    return undefined;
-  }
-
-  const modes: Record<string, number> = {};
-  for (const [mode, level] of Object.entries(
-    modesRaw as Record<string, unknown>
-  )) {
-    if (typeof level === "number" && Number.isFinite(level) && level >= 0) {
-      modes[mode] = Math.floor(level);
-    }
-  }
-  return Object.keys(modes).length > 0 ? modes : undefined;
+  // Prefer canonical `st.modes`, but also recover Line Link's easyLevel /
+  // mediumLevel / advancedLevel keys if an older write stored only those.
+  return extractModeLevels(st as Record<string, unknown>);
 }
 
 function mergeModeLevels(
@@ -1776,16 +1769,19 @@ export async function saveGameProgressOnServer(
             const scalarImproved = nextScalar > currentValue;
 
             const currentState = readStoredGameState(current) ?? {};
+            const modeState = modeLevelsToStoredState(mergedModes);
             let nextState: Record<string, unknown> | undefined;
             let stateChanged = false;
 
-            if (hasModes) {
-              const prevModesJson = JSON.stringify(currentState.modes ?? null);
+            if (hasModes && modeState) {
+              const prevModesJson = JSON.stringify(
+                readStoredModeLevels(current) ?? null
+              );
               const nextModesJson = JSON.stringify(mergedModes ?? null);
               if (prevModesJson !== nextModesJson) {
                 nextState = {
                   ...currentState,
-                  ...(mergedModes ? { modes: mergedModes } : {}),
+                  ...modeState,
                 };
                 stateChanged = true;
               }
@@ -1795,7 +1791,7 @@ export async function saveGameProgressOnServer(
               nextState = {
                 ...(nextState ?? currentState),
                 ...extrasToApply,
-                ...(mergedModes ? { modes: mergedModes } : {}),
+                ...(modeState ?? {}),
               };
               stateChanged = true;
             }
@@ -1825,7 +1821,7 @@ export async function saveGameProgressOnServer(
                 ? {
                     st: {
                       ...extrasToApply,
-                      ...(hasModes ? { modes: modesToApply } : {}),
+                      ...(modeLevelsToStoredState(modesToApply) ?? {}),
                     },
                     r: 1,
                   }
@@ -1910,18 +1906,8 @@ function levelFromCheckpointState(
     }
   }
 
-  const modes = state.modes;
-  if (modes && typeof modes === "object" && !Array.isArray(modes)) {
-    let max = 0;
-    for (const raw of Object.values(modes as Record<string, unknown>)) {
-      if (typeof raw === "number" && Number.isFinite(raw) && raw > max) {
-        max = Math.floor(raw);
-      }
-    }
-    if (max > 0) return max;
-  }
-
-  return null;
+  const modesMax = maxModeLevel(extractModeLevels(state));
+  return modesMax > 0 ? modesMax : null;
 }
 
 export async function fetchGameStateFromServer(
@@ -1990,7 +1976,19 @@ export async function saveGameStateOnServer(
       }
 
       const currentState = readStoredGameState(current) ?? {};
-      const nextState = opts?.merge ? { ...currentState, ...incoming } : incoming;
+      let nextState = opts?.merge ? { ...currentState, ...incoming } : incoming;
+
+      // Normalize Line Link easyLevel/mediumLevel/advancedLevel into st.modes
+      // and mirror those fields so Unity can read either shape.
+      const mergedModes = mergeModeLevels(
+        readStoredModeLevels({ st: currentState } as StoredGameProgress),
+        extractModeLevels(nextState)
+      );
+      const modeState = modeLevelsToStoredState(mergedModes);
+      if (modeState) {
+        nextState = { ...nextState, ...modeState };
+      }
+
       const levelFromState = levelFromCheckpointState(nextState);
       const currentLevel = typeof current?.l === "number" ? current.l : 0;
       const nextLevel =

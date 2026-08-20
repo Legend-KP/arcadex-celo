@@ -5,7 +5,6 @@ const SOURCES = {
 
 export type SfxName = keyof typeof SOURCES;
 
-let successUnlocked = false;
 const elements = new Map<SfxName, HTMLAudioElement>();
 
 function getAudio(name: SfxName): HTMLAudioElement | null {
@@ -28,39 +27,12 @@ export function preloadSfx() {
   getAudio("success");
 }
 
-/**
- * Unlock the success clip during a tap so it can play later, after MiniPay.
- * The touch clip is unlocked by playing it for real.
- */
-function unlockSuccessSfx() {
-  if (successUnlocked || typeof window === "undefined") return;
-  successUnlocked = true;
-
-  const el = getAudio("success");
-  if (!el) return;
-
-  el.muted = true;
-  void el
-    .play()
-    .then(() => {
-      el.pause();
-      el.currentTime = 0;
-      el.muted = false;
-    })
-    .catch(() => {
-      el.muted = false;
-      successUnlocked = false;
-    });
-}
-
-export function playSfx(name: SfxName) {
-  const el = getAudio(name);
-  if (!el) return;
-
+function playElement(el: HTMLAudioElement, volume: number) {
   try {
     el.pause();
     el.currentTime = 0;
     el.muted = false;
+    el.volume = volume;
     void el.play().catch(() => {});
   } catch {
     // Autoplay blocked — ignore
@@ -73,36 +45,37 @@ export function playTouchSfx() {
   const now = Date.now();
   if (now - lastTouchAt < 40) return;
   lastTouchAt = now;
-  unlockSuccessSfx();
 
   const proto = getAudio("touch");
   if (!proto) return;
 
+  // Clone so we never touch the success element on button taps.
   try {
     const node = proto.cloneNode(true) as HTMLAudioElement;
     node.volume = proto.volume;
     node.muted = false;
-    void node.play().catch(() => playSfx("touch"));
+    void node.play().catch(() => playElement(proto, proto.volume));
   } catch {
-    playSfx("touch");
+    playElement(proto, proto.volume);
   }
 }
 
+/** Only for confirmed Spark Refill / Infinite Spark / daily streak-shuffle txs. */
 export function playSuccessSfx() {
   const el = getAudio("success");
   if (!el) return;
 
-  el.muted = false;
-  el.volume = 0.9;
   try {
     el.pause();
     el.currentTime = 0;
+    el.muted = false;
+    el.volume = 0.9;
+    void el.play().catch(() => {
+      const fallback = new Audio(SOURCES.success);
+      fallback.volume = 0.9;
+      void fallback.play().catch(() => {});
+    });
   } catch {
-    // ignore seek errors
+    // Autoplay blocked — ignore
   }
-  void el.play().catch(() => {
-    const fallback = new Audio(SOURCES.success);
-    fallback.volume = 0.9;
-    void fallback.play().catch(() => {});
-  });
 }

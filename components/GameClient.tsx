@@ -20,7 +20,7 @@ import {
   submitScoreToLeaderboard,
 } from "@/lib/leaderboard-client";
 import { buildGameIframeUrl, getShellOrigin } from "@/lib/game-iframe-url";
-import { extractProgressExtras, extractModeLevels, readProgressNumber } from "@/lib/progress-value";
+import { extractProgressExtras, extractModeLevels, lineLinkFieldsFromModes, readProgressNumber } from "@/lib/progress-value";
 import { getWalletSessionToken } from "@/lib/wallet-session-client";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { resolveWalletOnAppOpen } from "@/lib/walletAuth";
@@ -120,6 +120,7 @@ export default function GameClient({
       const storedValue = payload.hasLeaderboard
         ? payload.highScore
         : payload.level;
+      const lineLink = lineLinkFieldsFromModes(payload.modes);
       const progressMessage = {
         success: true,
         highScore: payload.highScore,
@@ -127,6 +128,7 @@ export default function GameClient({
         level: payload.level,
         value: storedValue,
         modes: payload.modes ?? null,
+        ...lineLink,
         hasLeaderboard: payload.hasLeaderboard,
       };
 
@@ -143,6 +145,7 @@ export default function GameClient({
           score: payload.highScore,
           value: storedValue,
           modes: payload.modes ?? null,
+          ...lineLink,
           hints: 0,
           tutorialComplete: false,
           gamePurchased: true,
@@ -457,23 +460,19 @@ export default function GameClient({
               ]);
               highScore = progress.score ?? 0;
               level = progress.level ?? 0;
-              modes = progress.modes ?? null;
-              personalBestRef.current = highScore;
-              if (stateResult) {
-                gameState = stateResult.state;
-                gameStateRevision = stateResult.revision;
-                gameStateFound = stateResult.found;
-                if (!modes) {
-                  const stateModes = stateResult.state?.modes;
-                  if (
-                    stateModes &&
-                    typeof stateModes === "object" &&
-                    !Array.isArray(stateModes)
-                  ) {
-                    modes = stateModes as Record<string, number>;
+                modes = progress.modes ?? null;
+                personalBestRef.current = highScore;
+                if (stateResult) {
+                  gameState = stateResult.state;
+                  gameStateRevision = stateResult.revision;
+                  gameStateFound = stateResult.found;
+                  if (!modes && stateResult.state) {
+                    modes =
+                      extractModeLevels(
+                        stateResult.state as Record<string, unknown>
+                      ) ?? null;
                   }
                 }
-              }
             } catch {
               // Progress is optional during bootstrap
             }
@@ -578,6 +577,7 @@ export default function GameClient({
               level: saved.level,
               value: leaderboardEnabled ? saved.highScore : saved.level,
               modes: saved.modes,
+              ...lineLinkFieldsFromModes(saved.modes),
             });
           } catch (err) {
             sendToUnity(iframeRef, saveCallback, {
