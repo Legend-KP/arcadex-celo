@@ -6,7 +6,7 @@ import {
 import {
   resolveGameProgressFromServer,
   saveGameProgressOnServer,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import {
   corsJsonResponse,
   handleCorsPreflightRequest,
@@ -24,6 +24,7 @@ import {
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import { requireWalletAuth } from "@/lib/wallet-session";
 import { readProgressNumber } from "@/lib/progress-value";
+import { gameHasLeaderboard } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,16 @@ const PROGRESS_WINDOW_MS = 60_000;
 
 export async function OPTIONS(request: Request) {
   return handleCorsPreflightRequest(request);
+}
+
+async function resolveHasLeaderboard(
+  gameId: string,
+  flagsHasLeaderboard: boolean
+): Promise<boolean> {
+  // Admin catalog is source of truth (Leaderboard toggle).
+  const catalogGame = await fetchGameFromServer(gameId).catch(() => null);
+  if (catalogGame) return gameHasLeaderboard(catalogGame);
+  return flagsHasLeaderboard !== false;
 }
 
 export async function GET(
@@ -128,7 +139,10 @@ export async function GET(
       );
     }
 
-    const hasLeaderboard = flags.hasLeaderboard !== false;
+    const hasLeaderboard = await resolveHasLeaderboard(
+      id,
+      flags.hasLeaderboard
+    );
     const progress = await resolveGameProgressFromServer(
       wallet,
       id,
@@ -226,7 +240,10 @@ export async function POST(
       );
     }
 
-    const hasLeaderboard = flags.hasLeaderboard !== false;
+    const hasLeaderboard = await resolveHasLeaderboard(
+      id,
+      flags.hasLeaderboard
+    );
     const progress = await saveGameProgressOnServer(
       body.walletAddress,
       id,

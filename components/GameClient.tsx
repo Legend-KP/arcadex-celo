@@ -426,13 +426,14 @@ export default function GameClient({
           let gameStateFound = false;
           if (wallet) {
             try {
-              const [{ progress }, stateResult] = await Promise.all([
-                getGameProgress(game.id, wallet, {
-                  playerName: bootstrapName || undefined,
-                  force: true,
-                }),
-                getGameState(game.id, wallet).catch(() => null),
-              ]);
+              const [{ progress, hasLeaderboard }, stateResult] =
+                await Promise.all([
+                  getGameProgress(game.id, wallet, {
+                    playerName: bootstrapName || undefined,
+                    force: true,
+                  }),
+                  getGameState(game.id, wallet).catch(() => null),
+                ]);
               highScore = progress.score ?? 0;
               level = progress.level ?? 0;
               personalBestRef.current = highScore;
@@ -441,6 +442,27 @@ export default function GameClient({
                 gameStateRevision = stateResult.revision;
                 gameStateFound = stateResult.found;
               }
+              const progressPayload = {
+                highScore,
+                level,
+                // Prefer API flag so level games never bootstrap as score mode.
+                hasLeaderboard,
+                gameState,
+                gameStateRevision,
+                gameStateFound,
+              };
+
+              deliverProgressToUnity(progressPayload, {
+                wallet,
+                playerName: bootstrapName,
+              });
+
+              scheduleProgressRetries(progressPayload, {
+                wallet,
+                playerName: bootstrapName,
+              });
+              replayStoredSubmitResult();
+              break;
             } catch {
               // Progress is optional during bootstrap
             }

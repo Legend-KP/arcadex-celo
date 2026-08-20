@@ -6,7 +6,7 @@ import {
   fetchGameStateFromServer,
   GameStateConflictError,
   saveGameStateOnServer,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import {
   corsJsonResponse,
   handleCorsPreflightRequest,

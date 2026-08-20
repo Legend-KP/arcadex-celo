@@ -7,6 +7,11 @@ export function readProgressNumber(input: {
   for (const key of ["value", "score", "level"] as const) {
     const raw = input[key];
     if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+    // Unity sometimes sends numeric fields as strings.
+    if (typeof raw === "string" && raw.trim() !== "") {
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed)) return parsed;
+    }
   }
   return undefined;
 }

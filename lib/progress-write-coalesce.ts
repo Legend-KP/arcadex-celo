@@ -6,7 +6,8 @@
  * - Overlapping saves: share one in-flight write of the max value seen.
  */
 
-export const PROGRESS_WRITE_COALESCE_MS = 2_000;
+/** Short settle window — long delays risk client abort before D1 flush. */
+export const PROGRESS_WRITE_COALESCE_MS = 400;
 
 type CoalesceEntry<T> = {
   value: number;

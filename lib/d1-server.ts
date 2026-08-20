@@ -1330,6 +1330,24 @@ export function readStoredScore(stored: StoredGameProgress | null): number {
   return 0;
 }
 
+/**
+ * Level column `l`, with fallback to `s` when older builds mis-routed
+ * hasLeaderboard=false games into the score field.
+ */
+function readStoredLevel(stored: StoredGameProgress | null): number {
+  if (!stored) return 0;
+  if (typeof stored.l === "number" && Number.isFinite(stored.l) && stored.l > 0) {
+    return stored.l;
+  }
+  if (typeof stored.s === "number" && Number.isFinite(stored.s) && stored.s > 0) {
+    return stored.s;
+  }
+  if (typeof stored.l === "number" && Number.isFinite(stored.l)) {
+    return stored.l;
+  }
+  return 0;
+}
+
 export function storedProgressToGameProgress(
   stored: StoredGameProgress | null,
   hasLeaderboard: boolean
@@ -1339,7 +1357,8 @@ export function storedProgressToGameProgress(
     const score = readStoredScore(stored);
     return score > 0 ? { score } : {};
   }
-  return stored.l !== undefined ? { level: stored.l } : {};
+  const level = readStoredLevel(stored);
+  return level > 0 || typeof stored.l === "number" ? { level } : {};
 }
 
 export async function fetchGameProgressFromServer(
@@ -1515,10 +1534,27 @@ export async function saveGameProgressOnServer(
       );
       const currentValue = hasLeaderboard
         ? readStoredScore(current)
-        : (current?.l ?? 0);
+        : readStoredLevel(current);
 
-      if (maxValue <= currentValue) {
+      if (maxValue <= currentValue && current) {
+        // Heal: if level lived only in `s`, copy into `l`.
+        if (
+          !hasLeaderboard &&
+          currentValue > 0 &&
+          (typeof current.l !== "number" || current.l < currentValue)
+        ) {
+          const healed: StoredGameProgress = {
+            ...current,
+            l: currentValue,
+          };
+          await upsertProgressRow(db, wallet, gameId, healed);
+          return storedProgressToGameProgress(healed, hasLeaderboard);
+        }
         return storedProgressToGameProgress(current, hasLeaderboard);
+      }
+
+      if (maxValue <= 0 && !current) {
+        return {};
       }
 
       const next: StoredGameProgress = {
@@ -1587,15 +1623,33 @@ function readStoredGameState(
   return stored.st;
 }
 
+function readPositiveLevel(raw: unknown): number | null {
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+    return Math.floor(raw);
+  }
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.floor(parsed);
+  }
+  return null;
+}
+
 /** Level games often put the unlocked level inside the checkpoint blob. */
 function levelFromCheckpointState(
   state: Record<string, unknown> | null | undefined
 ): number | null {
   if (!state) return null;
   for (const key of ["level", "l", "currentLevel", "unlockedLevel"] as const) {
-    const raw = state[key];
-    if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
-      return Math.floor(raw);
+    const direct = readPositiveLevel(state[key]);
+    if (direct != null) return direct;
+  }
+  for (const nestedKey of ["progress", "data", "save", "player"] as const) {
+    const nested = state[nestedKey];
+    if (!nested || typeof nested !== "object" || Array.isArray(nested)) continue;
+    const obj = nested as Record<string, unknown>;
+    for (const key of ["level", "l", "currentLevel", "unlockedLevel"] as const) {
+      const found = readPositiveLevel(obj[key]);
+      if (found != null) return found;
     }
   }
   return null;
@@ -1655,11 +1709,13 @@ export async function saveGameStateOnServer(
       ? { ...currentState, ...incoming }
       : incoming;
 
-    const currentLevel = typeof current?.l === "number" ? current.l : 0;
+    const currentLevel = readStoredLevel(current);
     const nextLevel =
       levelFromState != null && levelFromState > currentLevel
         ? levelFromState
-        : current?.l;
+        : currentLevel > 0
+          ? currentLevel
+          : undefined;
 
     const next: StoredGameProgress = {
       ...(current ?? {}),
@@ -1669,10 +1725,13 @@ export async function saveGameStateOnServer(
     };
 
     if (row) {
+      // COALESCE so a state-only write never nulls out s/l.
       const update = await db
         .prepare(
           `UPDATE game_progress
-           SET st_json = ?, r = ?, s = ?, l = ?
+           SET st_json = ?, r = ?,
+               s = COALESCE(?, s),
+               l = COALESCE(?, l)
            WHERE wallet = ? AND game_id = ? AND IFNULL(r, 0) = ?`
         )
         .bind(
