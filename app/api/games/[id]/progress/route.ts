@@ -23,7 +23,11 @@ import {
 } from "@/lib/rate-limit";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import { requireWalletAuth } from "@/lib/wallet-session";
-import { readProgressNumber } from "@/lib/progress-value";
+import {
+  extractModeLevels,
+  extractProgressExtras,
+  readProgressNumber,
+} from "@/lib/progress-value";
 
 export const dynamic = "force-dynamic";
 
@@ -144,6 +148,7 @@ export async function GET(
       highScore,
       score: highScore,
       level,
+      modes: progress.modes ?? null,
     };
 
     setDebouncedProgressResponse(id, wallet, payload);
@@ -195,8 +200,16 @@ export async function POST(
       value?: number;
       score?: number;
       level?: number;
+      mode?: string;
+      difficulty?: string;
+      modes?: Record<string, number>;
+      levels?: Record<string, number>;
+      easy?: number;
+      medium?: number;
+      hard?: number;
       name?: string;
       playerName?: string;
+      state?: Record<string, unknown>;
     };
 
     if (!body.walletAddress || !isWalletAddress(body.walletAddress)) {
@@ -216,26 +229,40 @@ export async function POST(
       );
     }
 
+    const bodyRecord = body as Record<string, unknown>;
     const scoreValue = readProgressNumber(body);
+    const modes = extractModeLevels(bodyRecord);
+    const extras = extractProgressExtras(bodyRecord);
 
-    if (typeof scoreValue !== "number") {
+    if (typeof scoreValue !== "number" && !modes && !extras) {
       return corsJsonResponse(
         request,
-        { error: "value, score, or level is required." },
+        { error: "value, score, level, modes, or state is required." },
         { status: 400 }
       );
     }
 
     const hasLeaderboard = flags.hasLeaderboard !== false;
+    const progressValue =
+      typeof scoreValue === "number"
+        ? scoreValue
+        : modes
+          ? Math.max(0, ...Object.values(modes))
+          : 0;
+
     const progress = await saveGameProgressOnServer(
       body.walletAddress,
       id,
-      scoreValue,
+      progressValue,
       hasLeaderboard,
-      { playerName: body.playerName ?? body.name }
+      {
+        playerName: body.playerName ?? body.name,
+        modes,
+        extras,
+      }
     );
-    const highScore = progress.score ?? (hasLeaderboard ? scoreValue : 0);
-    const level = progress.level ?? (hasLeaderboard ? 0 : scoreValue);
+    const highScore = progress.score ?? (hasLeaderboard ? progressValue : 0);
+    const level = progress.level ?? (hasLeaderboard ? 0 : progressValue);
 
     const payload = {
       success: true,
@@ -244,6 +271,7 @@ export async function POST(
       highScore,
       score: highScore,
       level,
+      modes: progress.modes ?? modes ?? null,
     };
 
     setDebouncedProgressResponse(

@@ -1496,11 +1496,76 @@ export function storedProgressToGameProgress(
   hasLeaderboard: boolean
 ): GameProgress {
   if (!stored) return {};
+
+  const modes = readStoredModeLevels(stored);
+
   if (hasLeaderboard) {
     const score = readStoredScore(stored);
-    return score > 0 ? { score } : {};
+    return {
+      ...(score > 0 ? { score } : {}),
+      ...(modes ? { modes } : {}),
+    };
   }
-  return stored.l !== undefined ? { level: stored.l } : {};
+
+  const level =
+    typeof stored.l === "number"
+      ? stored.l
+      : modes
+        ? Math.max(0, ...Object.values(modes))
+        : undefined;
+
+  return {
+    ...(level !== undefined ? { level } : {}),
+    ...(modes ? { modes } : {}),
+  };
+}
+
+function readStoredModeLevels(
+  stored: StoredGameProgress | null
+): Record<string, number> | undefined {
+  const st = stored?.st;
+  if (!st || typeof st !== "object" || Array.isArray(st)) return undefined;
+
+  const modesRaw = st.modes;
+  if (!modesRaw || typeof modesRaw !== "object" || Array.isArray(modesRaw)) {
+    return undefined;
+  }
+
+  const modes: Record<string, number> = {};
+  for (const [mode, level] of Object.entries(
+    modesRaw as Record<string, unknown>
+  )) {
+    if (typeof level === "number" && Number.isFinite(level) && level >= 0) {
+      modes[mode] = Math.floor(level);
+    }
+  }
+  return Object.keys(modes).length > 0 ? modes : undefined;
+}
+
+function mergeModeLevels(
+  current: Record<string, number> | undefined,
+  incoming: Record<string, number> | undefined
+): Record<string, number> | undefined {
+  if (!current && !incoming) return undefined;
+  const next: Record<string, number> = { ...(current ?? {}) };
+  if (incoming) {
+    for (const [mode, level] of Object.entries(incoming)) {
+      if (typeof level !== "number" || !Number.isFinite(level) || level < 0) {
+        continue;
+      }
+      next[mode] = Math.max(next[mode] ?? 0, Math.floor(level));
+    }
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function maxModeLevel(modes: Record<string, number> | undefined): number {
+  if (!modes) return 0;
+  let max = 0;
+  for (const level of Object.values(modes)) {
+    if (level > max) max = level;
+  }
+  return max;
 }
 
 export async function fetchGameProgressFromServer(
@@ -1667,7 +1732,11 @@ export async function saveGameProgressOnServer(
   gameId: string,
   value: number,
   hasLeaderboard: boolean,
-  _opts?: { playerName?: string }
+  opts?: {
+    playerName?: string;
+    modes?: Record<string, number>;
+    extras?: Record<string, unknown>;
+  }
 ): Promise<GameProgress> {
   if (!isWalletAddress(walletAddress)) {
     throw new Error("A valid wallet address is required.");
@@ -1677,34 +1746,97 @@ export async function saveGameProgressOnServer(
   }
 
   const wallet = normalizeWalletAddress(walletAddress);
+  const incomingModes = opts?.modes;
+  const incomingExtras = opts?.extras;
 
-  return coalesceProgressWrite(wallet, gameId, value, async (maxValue) => {
-    const field: "s" | "l" = hasLeaderboard ? "s" : "l";
+  return coalesceProgressWrite(
+    wallet,
+    gameId,
+    value,
+    async (batch) => {
+      const field: "s" | "l" = hasLeaderboard ? "s" : "l";
+      const modesToApply = batch.modes;
+      const extrasToApply = batch.extras;
+      const hasModes = Object.keys(modesToApply).length > 0;
+      const hasExtras = Object.keys(extrasToApply).length > 0;
 
-    const { committed, snapshot } =
-      await runRtdbTransaction<StoredGameProgress>(
-        gameProgressPath(wallet, gameId),
-        (current) => {
-          const currentValue = hasLeaderboard
-            ? readStoredScore(current)
-            : (current?.l ?? 0);
+      const { committed, snapshot } =
+        await runRtdbTransaction<StoredGameProgress>(
+          gameProgressPath(wallet, gameId),
+          (current) => {
+            const currentValue = hasLeaderboard
+              ? readStoredScore(current)
+              : (current?.l ?? 0);
+            const mergedModes = mergeModeLevels(
+              readStoredModeLevels(current),
+              modesToApply
+            );
+            const modesMax = maxModeLevel(mergedModes);
+            const nextScalar = Math.max(batch.value, modesMax);
+            const scalarImproved = nextScalar > currentValue;
 
-          if (maxValue <= currentValue) {
-            return undefined;
+            const currentState = readStoredGameState(current) ?? {};
+            let nextState: Record<string, unknown> | undefined;
+            let stateChanged = false;
+
+            if (hasModes) {
+              const prevModesJson = JSON.stringify(currentState.modes ?? null);
+              const nextModesJson = JSON.stringify(mergedModes ?? null);
+              if (prevModesJson !== nextModesJson) {
+                nextState = {
+                  ...currentState,
+                  ...(mergedModes ? { modes: mergedModes } : {}),
+                };
+                stateChanged = true;
+              }
+            }
+
+            if (hasExtras) {
+              nextState = {
+                ...(nextState ?? currentState),
+                ...extrasToApply,
+                ...(mergedModes ? { modes: mergedModes } : {}),
+              };
+              stateChanged = true;
+            }
+
+            if (!scalarImproved && !stateChanged) {
+              return undefined;
+            }
+
+            const next: StoredGameProgress = { ...(current ?? {}) };
+            if (scalarImproved || (hasModes && !hasLeaderboard && nextScalar > 0)) {
+              next[field] = Math.max(currentValue, nextScalar);
+            }
+            if (nextState) {
+              next.st = nextState;
+              next.r = (typeof current?.r === "number" ? current.r : 0) + 1;
+            }
+            return next;
           }
+        );
 
-          return { ...(current ?? {}), [field]: maxValue };
-        }
-      );
+      const stored =
+        snapshot ??
+        (committed
+          ? ({
+              [field]: batch.value,
+              ...(hasModes || hasExtras
+                ? {
+                    st: {
+                      ...extrasToApply,
+                      ...(hasModes ? { modes: modesToApply } : {}),
+                    },
+                    r: 1,
+                  }
+                : {}),
+            } as StoredGameProgress)
+          : await fetchGameProgressFromServer(wallet, gameId));
 
-    const stored =
-      snapshot ??
-      (committed
-        ? ({ [field]: maxValue } as StoredGameProgress)
-        : await fetchGameProgressFromServer(wallet, gameId));
-
-    return storedProgressToGameProgress(stored, hasLeaderboard);
-  });
+      return storedProgressToGameProgress(stored, hasLeaderboard);
+    },
+    { modes: incomingModes, extras: incomingExtras }
+  );
 }
 
 export type GameStateRecord = {
@@ -1764,6 +1896,32 @@ function readStoredGameState(
     return null;
   }
   return stored.st;
+}
+
+/** Level games often put the unlocked level inside the checkpoint blob. */
+function levelFromCheckpointState(
+  state: Record<string, unknown> | null | undefined
+): number | null {
+  if (!state) return null;
+  for (const key of ["level", "l", "currentLevel", "unlockedLevel"] as const) {
+    const raw = state[key];
+    if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+      return Math.floor(raw);
+    }
+  }
+
+  const modes = state.modes;
+  if (modes && typeof modes === "object" && !Array.isArray(modes)) {
+    let max = 0;
+    for (const raw of Object.values(modes as Record<string, unknown>)) {
+      if (typeof raw === "number" && Number.isFinite(raw) && raw > max) {
+        max = Math.floor(raw);
+      }
+    }
+    if (max > 0) return max;
+  }
+
+  return null;
 }
 
 export async function fetchGameStateFromServer(
@@ -1833,11 +1991,18 @@ export async function saveGameStateOnServer(
 
       const currentState = readStoredGameState(current) ?? {};
       const nextState = opts?.merge ? { ...currentState, ...incoming } : incoming;
+      const levelFromState = levelFromCheckpointState(nextState);
+      const currentLevel = typeof current?.l === "number" ? current.l : 0;
+      const nextLevel =
+        levelFromState != null && levelFromState > currentLevel
+          ? levelFromState
+          : current?.l;
 
       return {
         ...(current ?? {}),
         st: nextState,
         r: currentRevision + 1,
+        ...(typeof nextLevel === "number" ? { l: nextLevel } : {}),
       };
     }
   );

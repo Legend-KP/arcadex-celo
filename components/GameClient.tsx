@@ -20,7 +20,7 @@ import {
   submitScoreToLeaderboard,
 } from "@/lib/leaderboard-client";
 import { buildGameIframeUrl, getShellOrigin } from "@/lib/game-iframe-url";
-import { extractProgressExtras, readProgressNumber } from "@/lib/progress-value";
+import { extractProgressExtras, extractModeLevels, readProgressNumber } from "@/lib/progress-value";
 import { getWalletSessionToken } from "@/lib/wallet-session-client";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { resolveWalletOnAppOpen } from "@/lib/walletAuth";
@@ -106,6 +106,7 @@ export default function GameClient({
         highScore: number;
         level: number;
         hasLeaderboard: boolean;
+        modes?: Record<string, number> | null;
         gameState?: Record<string, unknown> | null;
         gameStateRevision?: number;
         gameStateFound?: boolean;
@@ -125,6 +126,7 @@ export default function GameClient({
         score: payload.highScore,
         level: payload.level,
         value: storedValue,
+        modes: payload.modes ?? null,
         hasLeaderboard: payload.hasLeaderboard,
       };
 
@@ -140,6 +142,7 @@ export default function GameClient({
           ...payload,
           score: payload.highScore,
           value: storedValue,
+          modes: payload.modes ?? null,
           hints: 0,
           tutorialComplete: false,
           gamePurchased: true,
@@ -164,6 +167,7 @@ export default function GameClient({
         highScore: number;
         level: number;
         hasLeaderboard: boolean;
+        modes?: Record<string, number> | null;
         gameState?: Record<string, unknown> | null;
         gameStateRevision?: number;
         gameStateFound?: boolean;
@@ -197,10 +201,22 @@ export default function GameClient({
   }, [markGameReady]);
 
   const persistProgress = useCallback(
-    async (value: number, name: string, resolvedWalletAddr: string) => {
+    async (
+      value: number,
+      name: string,
+      resolvedWalletAddr: string,
+      opts?: {
+        mode?: string;
+        modes?: Record<string, number>;
+        extras?: Record<string, unknown>;
+      }
+    ) => {
       const previousBest = personalBestRef.current;
       const result = await saveGameProgress(game.id, resolvedWalletAddr, value, {
         playerName: name,
+        mode: opts?.mode,
+        modes: opts?.modes,
+        extras: opts?.extras,
       });
       const highScore =
         result.progress.score ?? (leaderboardEnabled ? value : previousBest);
@@ -209,7 +225,11 @@ export default function GameClient({
       if (leaderboardEnabled && highScore > previousBest) {
         personalBestRef.current = highScore;
       }
-      return { highScore, level };
+      return {
+        highScore,
+        level,
+        modes: result.progress.modes ?? result.modes ?? opts?.modes ?? null,
+      };
     },
     [game.id, leaderboardEnabled]
   );
@@ -364,13 +384,14 @@ export default function GameClient({
         const highScore = progress.score ?? 0;
         const level = progress.level ?? 0;
         personalBestRef.current = Math.max(personalBestRef.current, highScore);
-        if (personalBestRef.current <= 0 && level <= 0) return;
+        if (personalBestRef.current <= 0 && level <= 0 && !progress.modes) return;
 
         deliverProgressToUnity(
           {
             highScore: personalBestRef.current,
             level,
             hasLeaderboard,
+            modes: progress.modes ?? null,
           },
           {
             wallet: resolvedWallet,
@@ -421,6 +442,7 @@ export default function GameClient({
           const bootstrapName = playerName || profile?.name || "";
           let highScore = 0;
           let level = 0;
+          let modes: Record<string, number> | null = null;
           let gameState: Record<string, unknown> | null = null;
           let gameStateRevision = 0;
           let gameStateFound = false;
@@ -435,11 +457,22 @@ export default function GameClient({
               ]);
               highScore = progress.score ?? 0;
               level = progress.level ?? 0;
+              modes = progress.modes ?? null;
               personalBestRef.current = highScore;
               if (stateResult) {
                 gameState = stateResult.state;
                 gameStateRevision = stateResult.revision;
                 gameStateFound = stateResult.found;
+                if (!modes) {
+                  const stateModes = stateResult.state?.modes;
+                  if (
+                    stateModes &&
+                    typeof stateModes === "object" &&
+                    !Array.isArray(stateModes)
+                  ) {
+                    modes = stateModes as Record<string, number>;
+                  }
+                }
               }
             } catch {
               // Progress is optional during bootstrap
@@ -450,6 +483,7 @@ export default function GameClient({
             highScore,
             level,
             hasLeaderboard: leaderboardEnabled,
+            modes,
             gameState,
             gameStateRevision,
             gameStateFound,
@@ -484,19 +518,21 @@ export default function GameClient({
             score?: number;
             value?: number;
             level?: number;
+            mode?: string;
             walletAddress?: string;
           };
           const progressValue = readProgressNumber(payload);
+          const modes = extractModeLevels(payload);
           const extras = extractProgressExtras(payload);
           const saveCallback =
             msg.type === "MINIPAY_SUBMIT_SCORE"
               ? "OnScoreSubmitted"
               : "OnProgressSaved";
 
-          if (typeof progressValue !== "number" && !extras) {
+          if (typeof progressValue !== "number" && !modes && !extras) {
             sendToUnity(iframeRef, saveCallback, {
               success: false,
-              error: "value, score, level, or state is required.",
+              error: "value, score, level, modes, or state is required.",
             });
             break;
           }
@@ -518,28 +554,30 @@ export default function GameClient({
             });
           }
           try {
-            let highScore = personalBestRef.current;
-            let level = 0;
-            if (typeof progressValue === "number") {
-              const saved = await persistProgress(
-                progressValue,
-                playerName || payload.name || "",
-                resolvedWalletAddr
-              );
-              highScore = saved.highScore;
-              level = saved.level;
-            }
-            if (extras) {
-              await saveGameState(game.id, resolvedWalletAddr, extras, {
-                merge: true,
-              });
-            }
+            const valueToSave =
+              typeof progressValue === "number"
+                ? progressValue
+                : modes
+                  ? Math.max(0, ...Object.values(modes))
+                  : 0;
+            const saved = await persistProgress(
+              valueToSave,
+              playerName || payload.name || "",
+              resolvedWalletAddr,
+              {
+                mode:
+                  typeof payload.mode === "string" ? payload.mode : undefined,
+                modes,
+                extras,
+              }
+            );
             sendToUnity(iframeRef, saveCallback, {
               success: true,
-              highScore,
-              score: highScore,
-              level,
-              value: leaderboardEnabled ? highScore : level,
+              highScore: saved.highScore,
+              score: saved.highScore,
+              level: saved.level,
+              value: leaderboardEnabled ? saved.highScore : saved.level,
+              modes: saved.modes,
             });
           } catch (err) {
             sendToUnity(iframeRef, saveCallback, {
@@ -573,6 +611,7 @@ export default function GameClient({
               highScore: progress.score ?? 0,
               level: progress.level ?? 0,
               hasLeaderboard,
+              modes: progress.modes ?? null,
             };
             personalBestRef.current = payload.highScore;
             deliverProgressToUnity(payload, {

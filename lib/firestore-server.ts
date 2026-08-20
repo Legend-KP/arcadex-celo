@@ -52,6 +52,23 @@ function parseField(value: FirestoreValue | undefined): unknown {
   return undefined;
 }
 
+/** Admin toggles must stay false when explicitly off (string/number safe). */
+function parseBooleanFlag(value: unknown, defaultTrue: boolean): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "false" || normalized === "0" || normalized === "no") {
+      return false;
+    }
+    if (normalized === "true" || normalized === "1" || normalized === "yes") {
+      return true;
+    }
+  }
+  if (value === undefined || value === null) return defaultTrue;
+  return defaultTrue;
+}
+
 function docToGame(doc: FirestoreDocument): Game {
   const id = doc.name.split("/").pop() ?? "";
   const fields = doc.fields;
@@ -65,9 +82,9 @@ function docToGame(doc: FirestoreDocument): Game {
     fallbackImage: normalizeImageAssetUrl(
       parseField(fields.fallbackImage)
     ),
-    active: parseField(fields.active) !== false,
-    live: parseField(fields.live) !== false,
-    hasLeaderboard: parseField(fields.hasLeaderboard) !== false,
+    active: parseBooleanFlag(parseField(fields.active), true),
+    live: parseBooleanFlag(parseField(fields.live), true),
+    hasLeaderboard: parseBooleanFlag(parseField(fields.hasLeaderboard), true),
     contestLive: parseField(fields.contestLive) === true,
     contestDurationDays: parseField(fields.contestDurationDays) as
       | Game["contestDurationDays"]

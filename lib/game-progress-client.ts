@@ -4,6 +4,7 @@ import { walletAuthHeaders } from "@/lib/wallet-session-client";
 export interface GameProgressResponse {
   progress: GameProgress;
   hasLeaderboard: boolean;
+  modes?: Record<string, number> | null;
 }
 
 /** Shell-side throttle — Unity direct HTTP is capped server-side. */
@@ -44,6 +45,7 @@ export async function getGameProgress(
   const result = {
     progress: data.progress ?? {},
     hasLeaderboard: data.hasLeaderboard ?? true,
+    modes: data.progress?.modes ?? data.modes ?? null,
   };
 
   lastProgressFetchAt.set(key, now);
@@ -56,7 +58,12 @@ export async function saveGameProgress(
   gameId: string,
   walletAddress: string,
   value: number,
-  opts?: { playerName?: string }
+  opts?: {
+    playerName?: string;
+    mode?: string;
+    modes?: Record<string, number>;
+    extras?: Record<string, unknown>;
+  }
 ): Promise<GameProgressResponse & { success: boolean }> {
   const res = await fetch(`/api/games/${gameId}/progress`, {
     method: "POST",
@@ -69,6 +76,9 @@ export async function saveGameProgress(
       ...(opts?.playerName?.trim()
         ? { playerName: opts.playerName.trim() }
         : {}),
+      ...(opts?.mode ? { mode: opts.mode } : {}),
+      ...(opts?.modes ? { modes: opts.modes } : {}),
+      ...(opts?.extras ? opts.extras : {}),
     }),
   });
 
@@ -85,6 +95,7 @@ export async function saveGameProgress(
     success: data.success ?? true,
     progress: data.progress ?? {},
     hasLeaderboard: data.hasLeaderboard ?? true,
+    modes: data.progress?.modes ?? data.modes ?? null,
   };
 
   const key = progressClientKey(gameId, walletAddress);
