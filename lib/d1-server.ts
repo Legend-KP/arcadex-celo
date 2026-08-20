@@ -1587,6 +1587,20 @@ function readStoredGameState(
   return stored.st;
 }
 
+/** Level games often put the unlocked level inside the checkpoint blob. */
+function levelFromCheckpointState(
+  state: Record<string, unknown> | null | undefined
+): number | null {
+  if (!state) return null;
+  for (const key of ["level", "l", "currentLevel", "unlockedLevel"] as const) {
+    const raw = state[key];
+    if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+      return Math.floor(raw);
+    }
+  }
+  return null;
+}
+
 export async function fetchGameStateFromServer(
   walletAddress: string,
   gameId: string
@@ -1617,6 +1631,7 @@ export async function saveGameStateOnServer(
   const incoming = sanitizeGameStateObject(state);
   const wallet = normalizeWalletAddress(walletAddress);
   const db = await requireD1();
+  const levelFromState = levelFromCheckpointState(incoming);
 
   for (let attempt = 0; attempt < D1_TX_MAX_RETRIES; attempt++) {
     const row = await readProgressRow(db, wallet, gameId);
@@ -1639,10 +1654,18 @@ export async function saveGameStateOnServer(
     const nextState = opts?.merge
       ? { ...currentState, ...incoming }
       : incoming;
+
+    const currentLevel = typeof current?.l === "number" ? current.l : 0;
+    const nextLevel =
+      levelFromState != null && levelFromState > currentLevel
+        ? levelFromState
+        : current?.l;
+
     const next: StoredGameProgress = {
       ...(current ?? {}),
       st: nextState,
       r: currentRevision + 1,
+      ...(typeof nextLevel === "number" ? { l: nextLevel } : {}),
     };
 
     if (row) {

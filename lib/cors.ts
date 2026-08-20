@@ -64,7 +64,20 @@ function isOriginAllowed(origin: string | null, request?: Request): boolean {
 
   if (isArcadeXWorkersPreviewOrigin(origin)) return true;
 
-  // Optional suffix match for game CDNs, e.g. ".trenchverse.com" or ".pages.dev"
+  // Game CDNs live on trenchverse (Unity often calls shell APIs directly).
+  try {
+    const { hostname } = new URL(origin);
+    if (
+      hostname === "trenchverse.com" ||
+      hostname.endsWith(".trenchverse.com")
+    ) {
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+
+  // Optional suffix match for other game CDNs, e.g. ".pages.dev"
   const suffix = process.env.ALLOWED_CORS_ORIGIN_SUFFIX?.trim();
   if (suffix && origin.endsWith(suffix)) return true;
 
