@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import {
   ActivityLeaderboardEntry,
@@ -47,6 +48,7 @@ function TrophyIcon() {
 export default function ActivityLeaderboardButton() {
   const { walletAddress } = usePlayerProfile();
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [entries, setEntries] = useState<ActivityLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState("");
@@ -59,6 +61,10 @@ export default function ActivityLeaderboardButton() {
   } | null>(null);
   const touchStartY = useRef<number | null>(null);
   const pingedRef = useRef(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!walletAddress || pingedRef.current) return;
@@ -127,6 +133,124 @@ export default function ActivityLeaderboardButton() {
 
   const myWallet = walletAddress?.toLowerCase() ?? "";
 
+  const sheet =
+    open && mounted
+      ? createPortal(
+          <div
+            className="lb-backdrop activity-lb-backdrop"
+            onClick={() => setOpen(false)}
+            role="presentation"
+          >
+            <div
+              className="lb-sheet activity-lb-sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Weekly activity leaderboard"
+              onClick={(e) => e.stopPropagation()}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+            >
+              <div className="lb-header">
+                <div className="lb-title-wrap">
+                  <span className="lb-trophy-hex" aria-hidden="true">
+                    🏆
+                  </span>
+                  <div className="lb-title-stack">
+                    <span className="lb-title">Weekly Activity</span>
+                    <span className="lb-live-badge">
+                      <span className="lb-live-dot" aria-hidden="true" />
+                      THIS WEEK
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="lb-close"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close leaderboard"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="activity-lb-hint">
+                Come daily and play games to climb the board.
+              </p>
+
+              <div className="lb-timer-panel" role="status">
+                <div className="lb-timer-panel__glow" aria-hidden="true" />
+                <div className="lb-timer-panel__content">
+                  <p className="lb-timer-panel__label">Resets in</p>
+                  <p className="lb-timer-panel__value">{countdown || "…"}</p>
+                </div>
+                <div className="lb-timer-panel__trophy" aria-hidden="true">
+                  🏆
+                </div>
+              </div>
+
+              {me && (
+                <p className="activity-lb-you">
+                  You ·{" "}
+                  {me.score > 0 && me.rank != null
+                    ? `#${me.rank}`
+                    : "Unranked"}{" "}
+                  · {me.score} {me.score === 1 ? "spark" : "sparks"}
+                </p>
+              )}
+
+              <div className="lb-table-head" aria-hidden="true">
+                <span className="lb-table-head__rank">#</span>
+                <span className="lb-table-head__player">PLAYER</span>
+                <span className="lb-table-head__score">SCORE</span>
+              </div>
+
+              <div className="lb-list">
+                {loading && <p className="lb-empty">Loading...</p>}
+                {!loading && entries.length === 0 && (
+                  <p className="lb-empty">No activity yet — play a game!</p>
+                )}
+                {!loading &&
+                  entries.map((e, i) => {
+                    const isYou =
+                      Boolean(myWallet) &&
+                      e.walletAddress.toLowerCase() === myWallet;
+                    return (
+                      <div
+                        key={`${e.walletAddress}-${i}`}
+                        className={`lb-row${i === 0 ? " lb-row--first" : ""}${
+                          i < 3 ? " lb-row--podium" : ""
+                        }${isYou ? " activity-lb-row--you" : ""}`}
+                      >
+                        <span
+                          className={`lb-pos ${
+                            i < 3 ? ["gold", "silver", "bronze"][i] : "other"
+                          }`}
+                        >
+                          {i < 3 ? MEDALS[i] : `#${i + 1}`}
+                        </span>
+                        <span className="lb-name">
+                          {e.name}
+                          {isYou ? " (you)" : ""}
+                        </span>
+                        <span className="lb-score">
+                          {e.score.toLocaleString()}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {weekId && (
+                <p className="activity-lb-week-id" aria-hidden="true">
+                  {weekId}
+                </p>
+              )}
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
     <>
       <button
@@ -138,118 +262,7 @@ export default function ActivityLeaderboardButton() {
         <TrophyIcon />
         <span className="activity-lb-btn__label">Board</span>
       </button>
-
-      {open && (
-        <div
-          className="lb-backdrop activity-lb-backdrop"
-          onClick={() => setOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="lb-sheet activity-lb-sheet"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Weekly activity leaderboard"
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-          >
-            <div className="lb-header">
-              <div className="lb-title-wrap">
-                <span className="lb-trophy-hex" aria-hidden="true">
-                  🏆
-                </span>
-                <div className="lb-title-stack">
-                  <span className="lb-title">Weekly Activity</span>
-                  <span className="lb-live-badge">
-                    <span className="lb-live-dot" aria-hidden="true" />
-                    THIS WEEK
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="lb-close"
-                onClick={() => setOpen(false)}
-                aria-label="Close leaderboard"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="activity-lb-hint">
-              Come daily and play games to climb the board.
-            </p>
-
-            <div className="lb-timer-panel" role="status">
-              <div className="lb-timer-panel__glow" aria-hidden="true" />
-              <div className="lb-timer-panel__content">
-                <p className="lb-timer-panel__label">Resets in</p>
-                <p className="lb-timer-panel__value">{countdown || "…"}</p>
-              </div>
-              <div className="lb-timer-panel__trophy" aria-hidden="true">
-                🏆
-              </div>
-            </div>
-
-            {me && (
-              <p className="activity-lb-you">
-                You ·{" "}
-                {me.score > 0 && me.rank != null
-                  ? `#${me.rank}`
-                  : "Unranked"}{" "}
-                · {me.score} {me.score === 1 ? "spark" : "sparks"}
-              </p>
-            )}
-
-            <div className="lb-table-head" aria-hidden="true">
-              <span className="lb-table-head__rank">#</span>
-              <span className="lb-table-head__player">PLAYER</span>
-              <span className="lb-table-head__score">SCORE</span>
-            </div>
-
-            <div className="lb-list">
-              {loading && <p className="lb-empty">Loading...</p>}
-              {!loading && entries.length === 0 && (
-                <p className="lb-empty">No activity yet — play a game!</p>
-              )}
-              {!loading &&
-                entries.map((e, i) => {
-                  const isYou =
-                    Boolean(myWallet) &&
-                    e.walletAddress.toLowerCase() === myWallet;
-                  return (
-                    <div
-                      key={`${e.walletAddress}-${i}`}
-                      className={`lb-row${i === 0 ? " lb-row--first" : ""}${
-                        i < 3 ? " lb-row--podium" : ""
-                      }${isYou ? " activity-lb-row--you" : ""}`}
-                    >
-                      <span
-                        className={`lb-pos ${
-                          i < 3 ? ["gold", "silver", "bronze"][i] : "other"
-                        }`}
-                      >
-                        {i < 3 ? MEDALS[i] : `#${i + 1}`}
-                      </span>
-                      <span className="lb-name">
-                        {e.name}
-                        {isYou ? " (you)" : ""}
-                      </span>
-                      <span className="lb-score">{e.score.toLocaleString()}</span>
-                    </div>
-                  );
-                })}
-            </div>
-
-            {weekId && (
-              <p className="activity-lb-week-id" aria-hidden="true">
-                {weekId}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+      {sheet}
     </>
   );
 }
