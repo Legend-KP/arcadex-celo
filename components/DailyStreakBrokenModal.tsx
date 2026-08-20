@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { playTouchSfx } from "@/lib/sfx";
 
 interface DailyStreakBrokenModalProps {
   open: boolean;
@@ -158,7 +159,10 @@ export default function DailyStreakBrokenModal({
         <button
           type="button"
           className="streak-broken-btn"
-          onClick={onContinue}
+          onClick={() => {
+            playTouchSfx();
+            onContinue();
+          }}
           disabled={phase !== "message"}
         >
           Start fresh
