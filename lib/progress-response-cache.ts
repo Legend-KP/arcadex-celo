@@ -9,6 +9,10 @@ export type ProgressGetPayload = {
   highScore: number;
   score: number;
   level: number;
+  modes?: Record<string, number> | null;
+  easyLevel?: number;
+  mediumLevel?: number;
+  advancedLevel?: number;
 };
 
 type DebounceEntry = {
