@@ -115,11 +115,11 @@ export default function SparkBatteryBar() {
         <header className="spark-panel__header">
           <div className="spark-panel__title-row">
             <h2 id="spark-panel-title" className="spark-panel__title">
-              Sparks
+              Your Sparks
             </h2>
           </div>
           <p className="spark-panel__intro">
-            Use Sparks to play any game. Once inside, play freely and infinitely!
+            Use Sparks to start any game. Once inside, play freely!
           </p>
         </header>
 
