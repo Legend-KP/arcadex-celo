@@ -31,7 +31,6 @@ export default function SparkBatteryBar() {
   useEffect(() => {
     if (!successMessage) return;
 
-    playSuccessSfx();
     const id = window.setTimeout(() => setSuccessMessage(null), 4000);
     return () => window.clearTimeout(id);
   }, [successMessage]);
@@ -60,6 +59,7 @@ export default function SparkBatteryBar() {
     setPurchasing(true);
     try {
       await purchaseInfiniteSpark();
+      playSuccessSfx();
       setSuccessMessage({
         title: "Purchase successful!",
         body: "Infinite Spark is active for 24 hours. Play any game freely!",
@@ -76,6 +76,7 @@ export default function SparkBatteryBar() {
     setRefilling(true);
     try {
       await purchaseSparkRefill();
+      playSuccessSfx();
       setSuccessMessage({
         title: "Purchase successful!",
         body: "Your Spark bar is full. You're ready to play!",
