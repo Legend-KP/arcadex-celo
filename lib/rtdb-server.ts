@@ -652,7 +652,8 @@ export async function spendSparkOnServer(
   );
 
   // Count every successful game-start (including Infinite Spark) toward weekly activity.
-  recordActivityEventBestEffort(wallet, "play");
+  // Must await: Cloudflare freezes the isolate after the response is sent.
+  await recordActivityEvent(wallet, "play");
 
   return {
     state,
@@ -748,7 +749,7 @@ export async function activateInfiniteSparkOnServer(
     throw err;
   }
 
-  recordActivityEventBestEffort(wallet, "spend", { spendUnits: 2 });
+  await recordActivityEvent(wallet, "spend", { spendUnits: 2 });
 
   return {
     state: nextState,
@@ -843,7 +844,7 @@ export async function activateSparkRefillOnServer(
     throw err;
   }
 
-  recordActivityEventBestEffort(wallet, "spend", { spendUnits: 1 });
+  await recordActivityEvent(wallet, "spend", { spendUnits: 1 });
 
   return {
     state: nextState,
@@ -1734,7 +1735,7 @@ export async function activateScoreSubmitOnServer(
     playerName,
   });
 
-  recordActivityEventBestEffort(wallet, "spend", {
+  await recordActivityEvent(wallet, "spend", {
     spendUnits: 1,
     name: playerName,
   });
