@@ -25,7 +25,7 @@ const PROGRESS_META_KEYS = new Set([
   "playerName",
 ]);
 
-/** Extra Unity fields that must be stored alongside s/l (Coin Sort stage, board, …). */
+/** Extra Unity fields that must be stored alongside s/l (Coin Sort stage, board, â¦). */
 export function extractProgressExtras(
   payload: Record<string, unknown> | null | undefined
 ): Record<string, unknown> | undefined {

@@ -19,10 +19,9 @@ function flagsFromGame(game: Game): GameGatingFlags {
 }
 
 /**
- * Hot-path gating: prefer RTDB mirror, but always overlay catalog fields from
- * the Firestore game doc when available. RTDB flags often omit hasLeaderboard;
- * `undefined !== false` was defaulting those games to score mode (`s`), so
- * level games never wrote D1 column `l`.
+ * Prefer RTDB mirror for speed, but always overlay catalog fields from
+ * Firestore when available. Missing RTDB hasLeaderboard used to default to
+ * true and write level progress into `s` instead of `l`.
  */
 export async function resolveGameGating(
   gameId: string

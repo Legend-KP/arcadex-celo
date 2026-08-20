@@ -1536,8 +1536,14 @@ export async function saveGameProgressOnServer(
         ? readStoredScore(current)
         : readStoredLevel(current);
 
+<<<<<<< Updated upstream
       if (maxValue <= currentValue && current) {
         // Heal: if level lived only in `s`, copy into `l`.
+=======
+      // Always persist when raising the high-water mark.
+      if (maxValue <= currentValue && current) {
+        // Heal: if level lived only in `s`, copy into `l` on read-path save.
+>>>>>>> Stashed changes
         if (
           !hasLeaderboard &&
           currentValue > 0 &&
@@ -1553,6 +1559,10 @@ export async function saveGameProgressOnServer(
         return storedProgressToGameProgress(current, hasLeaderboard);
       }
 
+<<<<<<< Updated upstream
+=======
+      // First write of level/score 0 is a no-op (matches RTDB / Coin Sort docs).
+>>>>>>> Stashed changes
       if (maxValue <= 0 && !current) {
         return {};
       }
