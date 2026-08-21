@@ -24,6 +24,7 @@ import {
   refreshSessionFromCheckIn,
   type StreakStatus,
 } from "@/lib/streak-client";
+import { ensureWalletSession } from "@/lib/walletAuth";
 
 type Phase =
   | "intro"
@@ -40,6 +41,7 @@ type Phase =
 interface DailyShuffleModalProps {
   open: boolean;
   walletAddress: string;
+  campaignId?: number;
   status: StreakStatus | null;
   onComplete: (result: {
     day: number;
@@ -201,6 +203,7 @@ function CardFaceContent({
 export default function DailyShuffleModal({
   open,
   walletAddress,
+  campaignId: campaignIdProp,
   status,
   onComplete,
 }: DailyShuffleModalProps) {
@@ -218,19 +221,24 @@ export default function DailyShuffleModal({
   /** Intro: show USDT amounts, then flip to ?. */
   const [introFaceUp, setIntroFaceUp] = useState(true);
   const [introFlipping, setIntroFlipping] = useState(false);
-  const recoverAttemptedRef = useRef(false);
+  const openGenRef = useRef(0);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
+  const statusRef = useRef(status);
+  statusRef.current = status;
   const campaignId =
-    status?.campaignId && Number.isFinite(status.campaignId)
+    (typeof campaignIdProp === "number" && Number.isFinite(campaignIdProp)
+      ? campaignIdProp
+      : null) ??
+    (status?.campaignId && Number.isFinite(status.campaignId)
       ? Number(status.campaignId)
-      : DEFAULT_SHUFFLE_CAMPAIGN_ID;
+      : DEFAULT_SHUFFLE_CAMPAIGN_ID);
 
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!open) {
-      recoverAttemptedRef.current = false;
+      openGenRef.current += 1;
       setPhase("intro");
       setError("");
       setTheater([]);
@@ -243,41 +251,62 @@ export default function DailyShuffleModal({
       return;
     }
 
-    if (recoverAttemptedRef.current) return;
-    recoverAttemptedRef.current = true;
-
-    let cancelled = false;
-    // Probe chain first so already-done users never see "Shuffle now · No cost".
+    const gen = ++openGenRef.current;
+    // Never flash "Shuffle now" until we know today is still available.
     setPhase("checking");
+    setError("");
 
     (async () => {
       try {
         const fresh = await fetchStreakStatus(walletAddress, campaignId, {
           fresh: true,
         });
-        if (cancelled) return;
+        if (openGenRef.current !== gen) return;
 
-        if (!fresh.canCheckIn && fresh.lastCheckInAt > 0) {
+        const alreadyDone = !fresh.canCheckIn && fresh.lastCheckInAt > 0;
+        if (alreadyDone) {
           setPhase("restoring");
-          await refreshSessionFromCheckIn(walletAddress, campaignId);
-          if (cancelled) return;
-          onCompleteRef.current({
-            day: fresh.currentDay || 1,
-            milestone: false,
-            infiniteSparkGranted: false,
-          });
+          try {
+            try {
+              await refreshSessionFromCheckIn(walletAddress, campaignId);
+            } catch {
+              // Device/session cookie mismatch — MiniPay personal_sign fallback.
+              await ensureWalletSession(walletAddress);
+            }
+            if (openGenRef.current !== gen) return;
+            onCompleteRef.current({
+              day: fresh.currentDay || 1,
+              milestone: false,
+              infiniteSparkGranted: false,
+            });
+          } catch (restoreErr) {
+            if (openGenRef.current !== gen) return;
+            setError(
+              restoreErr instanceof Error
+                ? restoreErr.message
+                : "Could not restore your session. Pull to refresh and try again."
+            );
+          }
           return;
         }
 
-        if (!cancelled) setPhase("intro");
-      } catch {
-        if (!cancelled) setPhase("intro");
+        setPhase("intro");
+      } catch (err) {
+        if (openGenRef.current !== gen) return;
+        const known = statusRef.current;
+        // If parent already knew today was done, never offer another shuffle.
+        if (known && !known.canCheckIn && known.lastCheckInAt > 0) {
+          setPhase("restoring");
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Could not restore your session. Pull to refresh and try again."
+          );
+          return;
+        }
+        setPhase("intro");
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [open, walletAddress, campaignId]);
 
   useEffect(() => {
@@ -308,17 +337,25 @@ export default function DailyShuffleModal({
     [theater, winnerId]
   );
 
+  async function enterAfterAlreadyDone(fresh: StreakStatus) {
+    try {
+      await refreshSessionFromCheckIn(walletAddress, campaignId);
+    } catch {
+      await ensureWalletSession(walletAddress);
+    }
+    onCompleteRef.current({
+      day: fresh.currentDay || 1,
+      milestone: false,
+      infiniteSparkGranted: false,
+    });
+  }
+
   async function recoverIfAlreadyDone() {
     const fresh = await fetchStreakStatus(walletAddress, campaignId, {
       fresh: true,
     });
     if (!fresh.canCheckIn && fresh.lastCheckInAt > 0) {
-      await refreshSessionFromCheckIn(walletAddress, campaignId);
-      onCompleteRef.current({
-        day: fresh.currentDay || 1,
-        milestone: false,
-        infiniteSparkGranted: false,
-      });
+      await enterAfterAlreadyDone(fresh);
       return true;
     }
     return false;
@@ -582,11 +619,48 @@ export default function DailyShuffleModal({
           ) : null}
 
           {phase === "checking" || phase === "restoring" ? (
-            <p className="daily-shuffle-hint daily-shuffle-hint-ornament">
-              {phase === "restoring"
-                ? "Restoring your session…"
-                : "Checking today’s shuffle…"}
-            </p>
+            <>
+              <p className="daily-shuffle-hint daily-shuffle-hint-ornament">
+                {phase === "restoring"
+                  ? "Restoring your session…"
+                  : "Checking today’s shuffle…"}
+              </p>
+              {error ? (
+                <button
+                  type="button"
+                  className="daily-shuffle-cta"
+                  onClick={() => {
+                    const gen = ++openGenRef.current;
+                    setError("");
+                    setPhase("restoring");
+                    void (async () => {
+                      try {
+                        const fresh = await fetchStreakStatus(
+                          walletAddress,
+                          campaignId,
+                          { fresh: true }
+                        );
+                        if (openGenRef.current !== gen) return;
+                        if (!fresh.canCheckIn && fresh.lastCheckInAt > 0) {
+                          await enterAfterAlreadyDone(fresh);
+                          return;
+                        }
+                        setPhase("intro");
+                      } catch (err) {
+                        if (openGenRef.current !== gen) return;
+                        setError(
+                          err instanceof Error
+                            ? err.message
+                            : "Could not restore your session."
+                        );
+                      }
+                    })();
+                  }}
+                >
+                  Try again
+                </button>
+              ) : null}
+            </>
           ) : null}
 
           {phase === "pick" ? (

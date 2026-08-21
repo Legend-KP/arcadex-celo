@@ -260,8 +260,19 @@ export default function PlayerProfileProvider({
                 err.code === "NEED_CHECKIN"
               ) {
                 clearWalletSessionToken();
-                // Already completed today's shuffle/check-in: still open the
-                // modal so it can restore the session — not to request a new tx.
+                // Already shuffled/checked in today but JWT mint failed —
+                // try personal_sign before showing the daily modal.
+                if (!status.canCheckIn && status.lastCheckInAt > 0) {
+                  try {
+                    await ensureWalletSession(wallet);
+                    await finishProfileLoad(wallet);
+                    return;
+                  } catch {
+                    setShowCheckIn(true);
+                    setIsReady(true);
+                    return;
+                  }
+                }
                 setShowCheckIn(true);
                 setIsReady(true);
                 return;
@@ -501,6 +512,7 @@ export default function PlayerProfileProvider({
       <DailyShuffleModal
         open={checkInVisible && dailyPlayMode === "shuffle"}
         walletAddress={walletAddress}
+        campaignId={dailyCampaignId}
         status={streakStatus}
         onComplete={handleCheckInComplete}
       />
