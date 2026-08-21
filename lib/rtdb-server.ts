@@ -10,10 +10,10 @@ import {
 } from "@/types";
 import {
   SPARK_MAX,
+  applySparkSpend,
   computeSparkSnapshot,
   coerceSparkState,
   defaultSparkState,
-  findReadySparkSlotIndex,
   normalizeSparkState,
   sparkStateForRtdb,
 } from "@/lib/spark";
@@ -628,19 +628,14 @@ export async function spendSparkOnServer(
         return sparkStateForRtdb(state);
       }
 
-      const readyIndex = findReadySparkSlotIndex(state.slots, now);
-      if (readyIndex === -1) {
+      const next = applySparkSpend(state, now);
+      if (!next) {
         abortNoSparks = true;
         return undefined;
       }
 
-      const slots = [...state.slots];
-      slots[readyIndex] = now + state.regenMs;
       spent = true;
-      return sparkStateForRtdb({
-        ...state,
-        slots,
-      });
+      return sparkStateForRtdb(next);
     }
   );
 

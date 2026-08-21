@@ -172,6 +172,10 @@ export default function SparkBatteryBar() {
                     <span className="spark-panel__segment-time">
                       {formatSparkCountdown(slot.timeRemainingMs)}
                     </span>
+                  ) : slot.status === "queued" ? (
+                    <span className="spark-panel__segment-time spark-panel__segment-time--queued">
+                      Waiting
+                    </span>
                   ) : (
                     <span className="spark-panel__segment-time spark-panel__segment-time--ready">
                       Ready
@@ -186,8 +190,9 @@ export default function SparkBatteryBar() {
             )}
 
             <p className="spark-panel__info">
-              <span aria-hidden>ℹ</span> 1 Spark = 1 game entry. Each Spark
-              refills in 3 hours.
+              <span aria-hidden>ℹ</span> 1 Spark = 1 game entry. Sparks refill
+              one at a time — each takes 3 hours, and the next starts only after
+              the previous one is ready.
             </p>
           </section>
         )}

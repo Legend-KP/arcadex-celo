@@ -83,7 +83,7 @@ export function coerceSparkState(raw: unknown): StoredSparkState {
   };
 }
 
-/** Rightmost ready slot — each consumed spark gets its own regen timer. */
+/** Rightmost ready slot. */
 export function findReadySparkSlotIndex(
   slots: (number | null)[],
   now = Date.now()
@@ -95,15 +95,85 @@ export function findReadySparkSlotIndex(
   return -1;
 }
 
-/** Normalize expired regen timestamps back to ready (`null`). */
+/**
+ * Sequential refill: only one Spark regenerates at a time.
+ * A newly spent Spark becomes ready at `latestPendingReadyAt + regenMs`
+ * (or `now + regenMs` if nothing is regenerating).
+ */
+export function nextSequentialReadyAt(
+  slots: (number | null)[],
+  now: number,
+  regenMs: number
+): number {
+  let latestPending = now;
+  for (const slot of slots) {
+    if (slot !== null && slot > now) {
+      latestPending = Math.max(latestPending, slot);
+    }
+  }
+  return latestPending + regenMs;
+}
+
+/**
+ * Rewrite pending readyAts so they are spaced exactly `regenMs` apart.
+ * Migrates old parallel timers (many slots sharing ~the same readyAt).
+ */
+export function rechainSparkSlots(
+  slots: (number | null)[],
+  now: number,
+  regenMs: number
+): (number | null)[] {
+  const pendingIndexes: number[] = [];
+  for (let i = 0; i < slots.length; i++) {
+    const slot = slots[i];
+    if (slot !== null && slot > now) pendingIndexes.push(i);
+  }
+  if (pendingIndexes.length <= 1) return slots;
+
+  pendingIndexes.sort((a, b) => (slots[a] as number) - (slots[b] as number));
+
+  const next = [...slots];
+  let cursor = slots[pendingIndexes[0]] as number;
+  next[pendingIndexes[0]] = cursor;
+  for (let i = 1; i < pendingIndexes.length; i++) {
+    cursor += regenMs;
+    next[pendingIndexes[i]] = cursor;
+  }
+  return next;
+}
+
+/** Spend one ready Spark and enqueue its sequential regen timer. */
+export function applySparkSpend(
+  state: StoredSparkState,
+  now = Date.now()
+): StoredSparkState | null {
+  const normalized = normalizeSparkState(state, now);
+  const readyIndex = findReadySparkSlotIndex(normalized.slots, now);
+  if (readyIndex === -1) return null;
+
+  const slots = [...normalized.slots];
+  slots[readyIndex] = nextSequentialReadyAt(
+    normalized.slots,
+    now,
+    normalized.regenMs
+  );
+
+  return {
+    ...normalized,
+    slots,
+  };
+}
+
+/** Normalize expired regen timestamps and enforce sequential chaining. */
 export function normalizeSparkState(
   raw: StoredSparkState | unknown,
   now = Date.now()
 ): StoredSparkState {
   const state = coerceSparkState(raw);
-  const slots = state.slots.map((slot) =>
+  const expired = state.slots.map((slot) =>
     slot !== null && slot <= now ? null : slot
   );
+  const slots = rechainSparkSlots(expired, now, state.regenMs);
   const infiniteUntil =
     state.infiniteUntil && state.infiniteUntil > now
       ? state.infiniteUntil
@@ -123,7 +193,19 @@ function slotFill(
   regenMs: number
 ): number {
   if (readyAt === null || now >= readyAt) return 1;
-  return 1 - (readyAt - now) / regenMs;
+  const remaining = readyAt - now;
+  // Queued slots (waiting for the previous Spark) have not started filling.
+  if (remaining >= regenMs) return 0;
+  return 1 - remaining / regenMs;
+}
+
+function slotStatus(
+  readyAt: number | null,
+  now: number,
+  regenMs: number
+): SparkSlotView["status"] {
+  if (readyAt === null || now >= readyAt) return "ready";
+  return readyAt - now > regenMs ? "queued" : "regenerating";
 }
 
 export function computeSparkSnapshot(
@@ -149,22 +231,22 @@ export function computeSparkSnapshot(
     .sort((a, b) => a - b);
   const timeToFullMs =
     pending.length === 0 ? 0 : pending[pending.length - 1] - now;
-  const timeToNextMs =
-    pending.length === 0 ? 0 : pending[0] - now;
+  const timeToNextMs = pending.length === 0 ? 0 : pending[0] - now;
 
   const slotViews: SparkSlotView[] = slots.map((slot, index) => {
-    if (slot === null || slot <= now) {
+    const status = slotStatus(slot, now, regenMs);
+    if (status === "ready") {
       return {
         index,
-        status: "ready",
+        status,
         fillPercent: 100,
         timeRemainingMs: 0,
       };
     }
-    const timeRemainingMs = slot - now;
+    const timeRemainingMs = (slot as number) - now;
     return {
       index,
-      status: "regenerating",
+      status,
       fillPercent: Math.round(slotFill(slot, now, regenMs) * 100),
       timeRemainingMs,
     };
