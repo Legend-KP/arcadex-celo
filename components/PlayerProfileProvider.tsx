@@ -17,6 +17,10 @@ import PlayerNameModal from "@/components/PlayerNameModal";
 import { fetchDailyPlayConfig } from "@/lib/daily-play-config-client";
 import type { DailyPlayMode } from "@/lib/daily-play-mode";
 import {
+  hasShuffleDoneToday,
+  markShuffleDoneToday,
+} from "@/lib/shuffle-done-today";
+import {
   hasSeenOnboarding,
   markOnboardingSeen,
   preloadOnboardingSlides,
@@ -244,7 +248,17 @@ export default function PlayerProfileProvider({
           if (cancelled) return;
           setStreakStatus(status);
 
-          if (status.canCheckIn) {
+          const shuffleAlreadyDone =
+            config.shuffle &&
+            (hasShuffleDoneToday(wallet, config.campaignId) ||
+              (!status.canCheckIn && status.lastCheckInAt > 0));
+
+          if (shuffleAlreadyDone) {
+            markShuffleDoneToday(wallet, config.campaignId);
+          }
+
+          // Shuffle UI only when today is still available — never reopen if done.
+          if (status.canCheckIn && !shuffleAlreadyDone) {
             clearWalletSessionToken();
             setShowCheckIn(true);
             setIsReady(true);
@@ -260,18 +274,15 @@ export default function PlayerProfileProvider({
                 err.code === "NEED_CHECKIN"
               ) {
                 clearWalletSessionToken();
-                // Already shuffled/checked in today but JWT mint failed —
-                // try personal_sign before showing the daily modal.
-                if (!status.canCheckIn && status.lastCheckInAt > 0) {
+                // Already done today: restore session silently — do not show Shuffle UI.
+                if (!status.canCheckIn || shuffleAlreadyDone) {
                   try {
                     await ensureWalletSession(wallet);
-                    await finishProfileLoad(wallet);
-                    return;
                   } catch {
-                    setShowCheckIn(true);
-                    setIsReady(true);
-                    return;
+                    // Continue into the app; API calls may prompt auth later.
                   }
+                  await finishProfileLoad(wallet);
+                  return;
                 }
                 setShowCheckIn(true);
                 setIsReady(true);
@@ -336,6 +347,10 @@ export default function PlayerProfileProvider({
       const wallet = pendingWalletRef.current || walletAddress;
       if (!wallet) return;
 
+      if (dailyPlayMode === "shuffle") {
+        markShuffleDoneToday(wallet, dailyCampaignId);
+      }
+
       try {
         await refreshStreakStatus();
         await finishProfileLoad(wallet);
@@ -351,7 +366,13 @@ export default function PlayerProfileProvider({
         setShowModal(true);
       }
     },
-    [finishProfileLoad, refreshStreakStatus, walletAddress]
+    [
+      dailyCampaignId,
+      dailyPlayMode,
+      finishProfileLoad,
+      refreshStreakStatus,
+      walletAddress,
+    ]
   );
 
   const handleSubmit = useCallback(
@@ -387,7 +408,7 @@ export default function PlayerProfileProvider({
               fresh: true,
             });
             setStreakStatus(status);
-            if (status.canCheckIn) {
+            if (status.canCheckIn && !hasShuffleDoneToday(wallet, config.campaignId)) {
               setShowCheckIn(true);
               throw new Error(
                 config.shuffle
@@ -485,6 +506,12 @@ export default function PlayerProfileProvider({
 
   const dailyCheckInVisible =
     checkInVisible && dailyPlayMode !== "shuffle" && !streakBrokenVisible;
+  const shuffleVisible =
+    checkInVisible &&
+    dailyPlayMode === "shuffle" &&
+    Boolean(walletAddress) &&
+    !hasShuffleDoneToday(walletAddress, dailyCampaignId) &&
+    streakStatus?.canCheckIn === true;
   const nameModalVisible =
     onboardingResolved &&
     !onboardingVisible &&
@@ -510,7 +537,7 @@ export default function PlayerProfileProvider({
         onComplete={handleCheckInComplete}
       />
       <DailyShuffleModal
-        open={checkInVisible && dailyPlayMode === "shuffle"}
+        open={shuffleVisible}
         walletAddress={walletAddress}
         campaignId={dailyCampaignId}
         status={streakStatus}

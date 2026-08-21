@@ -10,6 +10,10 @@ import {
   clearCachedStreakStatus,
 } from "@/lib/streak-client-cache";
 import {
+  hasShuffleDoneToday,
+  markShuffleDoneToday,
+} from "@/lib/shuffle-done-today";
+import {
   fetchStreakStatus,
   isAlreadyCheckedInError,
   refreshSessionFromCheckIn,
@@ -116,6 +120,23 @@ export async function performDailyShuffle(
   sync: ShuffleSyncResult;
   txHash: string;
 }> {
+  if (hasShuffleDoneToday(walletAddress, campaignId)) {
+    throw new Error("Already shuffled today. Come back after the daily interval.");
+  }
+
+  const preStatus = await fetchStreakStatus(walletAddress, campaignId, {
+    fresh: true,
+  });
+  if (!preStatus.canCheckIn) {
+    markShuffleDoneToday(walletAddress, campaignId);
+    try {
+      await refreshSessionFromCheckIn(walletAddress, campaignId);
+    } catch {
+      // ignore
+    }
+    throw new Error("Already shuffled today. Come back after the daily interval.");
+  }
+
   try {
     const prepare = await prepareDailyShuffle(walletAddress, campaignId);
     const { txHash } = await spinOnChain({
@@ -133,10 +154,16 @@ export async function performDailyShuffle(
       campaignId: prepare.campaignId,
       nonce: prepare.nonce,
     });
+    markShuffleDoneToday(walletAddress, campaignId);
     return { prepare, sync, txHash };
   } catch (err) {
     if (isAlreadyCheckedInError(err)) {
-      await refreshSessionFromCheckIn(walletAddress, campaignId);
+      markShuffleDoneToday(walletAddress, campaignId);
+      try {
+        await refreshSessionFromCheckIn(walletAddress, campaignId);
+      } catch {
+        // ignore
+      }
       throw err;
     }
 
@@ -145,6 +172,7 @@ export async function performDailyShuffle(
         fresh: true,
       });
       if (!status.canCheckIn && status.lastCheckInAt > 0) {
+        markShuffleDoneToday(walletAddress, campaignId);
         await refreshSessionFromCheckIn(walletAddress, campaignId);
       }
     } catch {

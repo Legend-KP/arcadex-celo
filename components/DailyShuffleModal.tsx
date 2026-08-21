@@ -24,13 +24,15 @@ import {
   refreshSessionFromCheckIn,
   type StreakStatus,
 } from "@/lib/streak-client";
+import {
+  hasShuffleDoneToday,
+  markShuffleDoneToday,
+} from "@/lib/shuffle-done-today";
 import { ensureWalletSession } from "@/lib/walletAuth";
 
 type Phase =
   | "intro"
   | "busy"
-  | "checking"
-  | "restoring"
   | "showcase"
   | "shuffling"
   | "pick"
@@ -221,11 +223,8 @@ export default function DailyShuffleModal({
   /** Intro: show USDT amounts, then flip to ?. */
   const [introFaceUp, setIntroFaceUp] = useState(true);
   const [introFlipping, setIntroFlipping] = useState(false);
-  const openGenRef = useRef(0);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
-  const statusRef = useRef(status);
-  statusRef.current = status;
   const campaignId =
     (typeof campaignIdProp === "number" && Number.isFinite(campaignIdProp)
       ? campaignIdProp
@@ -238,7 +237,6 @@ export default function DailyShuffleModal({
 
   useEffect(() => {
     if (!open) {
-      openGenRef.current += 1;
       setPhase("intro");
       setError("");
       setTheater([]);
@@ -251,66 +249,19 @@ export default function DailyShuffleModal({
       return;
     }
 
-    const gen = ++openGenRef.current;
-    // Never flash "Shuffle now" until we know today is still available.
-    setPhase("checking");
-    setError("");
-
-    (async () => {
-      try {
-        const fresh = await fetchStreakStatus(walletAddress, campaignId, {
-          fresh: true,
-        });
-        if (openGenRef.current !== gen) return;
-
-        const alreadyDone = !fresh.canCheckIn && fresh.lastCheckInAt > 0;
-        if (alreadyDone) {
-          setPhase("restoring");
-          try {
-            try {
-              await refreshSessionFromCheckIn(walletAddress, campaignId);
-            } catch {
-              // Device/session cookie mismatch — MiniPay personal_sign fallback.
-              await ensureWalletSession(walletAddress);
-            }
-            if (openGenRef.current !== gen) return;
-            onCompleteRef.current({
-              day: fresh.currentDay || 1,
-              milestone: false,
-              infiniteSparkGranted: false,
-            });
-          } catch (restoreErr) {
-            if (openGenRef.current !== gen) return;
-            setError(
-              restoreErr instanceof Error
-                ? restoreErr.message
-                : "Could not restore your session. Pull to refresh and try again."
-            );
-          }
-          return;
-        }
-
-        setPhase("intro");
-      } catch (err) {
-        if (openGenRef.current !== gen) return;
-        const known = statusRef.current;
-        // If parent already knew today was done, never offer another shuffle.
-        if (known && !known.canCheckIn && known.lastCheckInAt > 0) {
-          setPhase("restoring");
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Could not restore your session. Pull to refresh and try again."
-          );
-          return;
-        }
-        setPhase("intro");
-      }
-    })();
-  }, [open, walletAddress, campaignId]);
-
-  useEffect(() => {
-    if (!open || phase !== "intro") return;
+    // Safety net: if already done, close immediately — never show Shuffle UI.
+    if (
+      hasShuffleDoneToday(walletAddress, campaignId) ||
+      (status && !status.canCheckIn && status.lastCheckInAt > 0)
+    ) {
+      markShuffleDoneToday(walletAddress, campaignId);
+      onCompleteRef.current({
+        day: status?.currentDay || 1,
+        milestone: false,
+        infiniteSparkGranted: false,
+      });
+      return;
+    }
 
     let cancelled = false;
     setIntroFaceUp(true);
@@ -330,27 +281,36 @@ export default function DailyShuffleModal({
       cancelled = true;
       window.clearTimeout(flipTimer);
     };
-  }, [open, phase]);
+  }, [open, walletAddress, campaignId, status]);
 
   const winnerCard = useMemo(
     () => theater.find((c) => c.id === winnerId) ?? null,
     [theater, winnerId]
   );
 
-  async function enterAfterAlreadyDone(fresh: StreakStatus) {
+  async function enterAfterAlreadyDone(fresh?: StreakStatus | null) {
+    markShuffleDoneToday(walletAddress, campaignId);
     try {
       await refreshSessionFromCheckIn(walletAddress, campaignId);
     } catch {
-      await ensureWalletSession(walletAddress);
+      try {
+        await ensureWalletSession(walletAddress);
+      } catch {
+        // Still dismiss UI — do not ask for another shuffle tx.
+      }
     }
     onCompleteRef.current({
-      day: fresh.currentDay || 1,
+      day: fresh?.currentDay || status?.currentDay || 1,
       milestone: false,
       infiniteSparkGranted: false,
     });
   }
 
   async function recoverIfAlreadyDone() {
+    if (hasShuffleDoneToday(walletAddress, campaignId)) {
+      await enterAfterAlreadyDone(status);
+      return true;
+    }
     const fresh = await fetchStreakStatus(walletAddress, campaignId, {
       fresh: true,
     });
@@ -367,11 +327,23 @@ export default function DailyShuffleModal({
     setPhase("busy");
 
     try {
+      // Never prompt MiniPay if today is already done.
+      if (await recoverIfAlreadyDone()) return;
+
+      const fresh = await fetchStreakStatus(walletAddress, campaignId, {
+        fresh: true,
+      });
+      if (!fresh.canCheckIn) {
+        await enterAfterAlreadyDone(fresh);
+        return;
+      }
+
       const { prepare, sync } = await performDailyShuffle(
         walletAddress,
         campaignId
       );
 
+      markShuffleDoneToday(walletAddress, campaignId);
       playSuccessSfx();
 
       setTheater(prepare.theater);
@@ -417,6 +389,7 @@ export default function DailyShuffleModal({
       setError("");
       try {
         await claimDailyShuffleReward(campaignId);
+        markShuffleDoneToday(walletAddress, campaignId);
         setNeedsClaim(false);
         setPhase("done");
         onComplete({
@@ -431,6 +404,7 @@ export default function DailyShuffleModal({
       return;
     }
 
+    markShuffleDoneToday(walletAddress, campaignId);
     onComplete({
       day: 1,
       milestone: outcome?.type === "spark",
@@ -471,10 +445,7 @@ export default function DailyShuffleModal({
           One no-cost shuffle per day (resets 00:00 UTC).
         </p>
 
-        {phase === "intro" ||
-        phase === "busy" ||
-        phase === "checking" ||
-        phase === "restoring" ? (
+        {phase === "intro" || phase === "busy" ? (
           <div className="daily-shuffle-hero">
             <div className="daily-shuffle-hero-cards" aria-hidden>
               {INTRO_USDT_PREVIEW.map((card) => (
@@ -497,11 +468,6 @@ export default function DailyShuffleModal({
                 </div>
               ))}
             </div>
-            {phase === "restoring" ? (
-              <p className="daily-shuffle-hint">
-                Already shuffled today — restoring your session…
-              </p>
-            ) : null}
           </div>
         ) : null}
 
@@ -616,51 +582,6 @@ export default function DailyShuffleModal({
             >
               {phase === "busy" ? "Confirm in MiniPay…" : "Shuffle now · No cost"}
             </button>
-          ) : null}
-
-          {phase === "checking" || phase === "restoring" ? (
-            <>
-              <p className="daily-shuffle-hint daily-shuffle-hint-ornament">
-                {phase === "restoring"
-                  ? "Restoring your session…"
-                  : "Checking today’s shuffle…"}
-              </p>
-              {error ? (
-                <button
-                  type="button"
-                  className="daily-shuffle-cta"
-                  onClick={() => {
-                    const gen = ++openGenRef.current;
-                    setError("");
-                    setPhase("restoring");
-                    void (async () => {
-                      try {
-                        const fresh = await fetchStreakStatus(
-                          walletAddress,
-                          campaignId,
-                          { fresh: true }
-                        );
-                        if (openGenRef.current !== gen) return;
-                        if (!fresh.canCheckIn && fresh.lastCheckInAt > 0) {
-                          await enterAfterAlreadyDone(fresh);
-                          return;
-                        }
-                        setPhase("intro");
-                      } catch (err) {
-                        if (openGenRef.current !== gen) return;
-                        setError(
-                          err instanceof Error
-                            ? err.message
-                            : "Could not restore your session."
-                        );
-                      }
-                    })();
-                  }}
-                >
-                  Try again
-                </button>
-              ) : null}
-            </>
           ) : null}
 
           {phase === "pick" ? (
