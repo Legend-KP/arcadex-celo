@@ -260,6 +260,8 @@ export default function PlayerProfileProvider({
                 err.code === "NEED_CHECKIN"
               ) {
                 clearWalletSessionToken();
+                // Already completed today's shuffle/check-in: still open the
+                // modal so it can restore the session — not to request a new tx.
                 setShowCheckIn(true);
                 setIsReady(true);
                 return;

@@ -62,6 +62,7 @@ import {
   getPreviousIsoWeekWindow,
   utcDayKey,
   computeActivityXp,
+  resolveActivityEntryXp,
 } from "@/lib/activity-week";
 
 type StoredUser = Omit<PlayerProfile, "id">;
@@ -2539,6 +2540,7 @@ function activityEntryFromCounters(
     name: counters.name?.trim() || "Player",
     score: computeActivityXp(counters),
     walletAddress: normalizeWalletAddress(wallet),
+    sparksSpent: counters.sparksSpent,
     activeDays: counters.activeDays,
     txs: counters.txs,
     spendUnits: counters.spendUnits,
@@ -2558,18 +2560,24 @@ function mapToActivityEntries(
     }
     const wallet = tryNormalizeWalletAddress(value.walletAddress);
     if (!wallet) continue;
-    out.push({
-      name: value.name,
-      score: value.score,
-      walletAddress: wallet,
-      activeDays:
-        typeof value.activeDays === "number" ? value.activeDays : undefined,
-      txs: typeof value.txs === "number" ? value.txs : undefined,
-      spendUnits:
-        typeof value.spendUnits === "number" ? value.spendUnits : undefined,
-      updatedAt:
-        typeof value.updatedAt === "number" ? value.updatedAt : undefined,
-    });
+    out.push(
+      resolveActivityEntryXp({
+        name: value.name,
+        score: value.score,
+        walletAddress: wallet,
+        sparksSpent:
+          typeof (value as ActivityLeaderboardEntry).sparksSpent === "number"
+            ? (value as ActivityLeaderboardEntry).sparksSpent
+            : undefined,
+        activeDays:
+          typeof value.activeDays === "number" ? value.activeDays : undefined,
+        txs: typeof value.txs === "number" ? value.txs : undefined,
+        spendUnits:
+          typeof value.spendUnits === "number" ? value.spendUnits : undefined,
+        updatedAt:
+          typeof value.updatedAt === "number" ? value.updatedAt : undefined,
+      })
+    );
   }
   return out;
 }

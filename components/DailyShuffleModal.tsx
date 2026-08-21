@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { formatChainError } from "@/lib/celo-public-client";
 import { DEFAULT_SHUFFLE_CAMPAIGN_ID } from "@/lib/daily-play-mode";
@@ -21,6 +28,8 @@ import {
 type Phase =
   | "intro"
   | "busy"
+  | "checking"
+  | "restoring"
   | "showcase"
   | "shuffling"
   | "pick"
@@ -209,11 +218,19 @@ export default function DailyShuffleModal({
   /** Intro: show USDT amounts, then flip to ?. */
   const [introFaceUp, setIntroFaceUp] = useState(true);
   const [introFlipping, setIntroFlipping] = useState(false);
+  const recoverAttemptedRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+  const campaignId =
+    status?.campaignId && Number.isFinite(status.campaignId)
+      ? Number(status.campaignId)
+      : DEFAULT_SHUFFLE_CAMPAIGN_ID;
 
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!open) {
+      recoverAttemptedRef.current = false;
       setPhase("intro");
       setError("");
       setTheater([]);
@@ -225,6 +242,46 @@ export default function DailyShuffleModal({
       setIntroFlipping(false);
       return;
     }
+
+    if (recoverAttemptedRef.current) return;
+    recoverAttemptedRef.current = true;
+
+    let cancelled = false;
+    // Probe chain first so already-done users never see "Shuffle now · No cost".
+    setPhase("checking");
+
+    (async () => {
+      try {
+        const fresh = await fetchStreakStatus(walletAddress, campaignId, {
+          fresh: true,
+        });
+        if (cancelled) return;
+
+        if (!fresh.canCheckIn && fresh.lastCheckInAt > 0) {
+          setPhase("restoring");
+          await refreshSessionFromCheckIn(walletAddress, campaignId);
+          if (cancelled) return;
+          onCompleteRef.current({
+            day: fresh.currentDay || 1,
+            milestone: false,
+            infiniteSparkGranted: false,
+          });
+          return;
+        }
+
+        if (!cancelled) setPhase("intro");
+      } catch {
+        if (!cancelled) setPhase("intro");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, walletAddress, campaignId]);
+
+  useEffect(() => {
+    if (!open || phase !== "intro") return;
 
     let cancelled = false;
     setIntroFaceUp(true);
@@ -244,7 +301,7 @@ export default function DailyShuffleModal({
       cancelled = true;
       window.clearTimeout(flipTimer);
     };
-  }, [open]);
+  }, [open, phase]);
 
   const winnerCard = useMemo(
     () => theater.find((c) => c.id === winnerId) ?? null,
@@ -252,17 +309,12 @@ export default function DailyShuffleModal({
   );
 
   async function recoverIfAlreadyDone() {
-    const fresh = await fetchStreakStatus(
-      walletAddress,
-      DEFAULT_SHUFFLE_CAMPAIGN_ID,
-      { fresh: true }
-    );
+    const fresh = await fetchStreakStatus(walletAddress, campaignId, {
+      fresh: true,
+    });
     if (!fresh.canCheckIn && fresh.lastCheckInAt > 0) {
-      await refreshSessionFromCheckIn(
-        walletAddress,
-        DEFAULT_SHUFFLE_CAMPAIGN_ID
-      );
-      onComplete({
+      await refreshSessionFromCheckIn(walletAddress, campaignId);
+      onCompleteRef.current({
         day: fresh.currentDay || 1,
         milestone: false,
         infiniteSparkGranted: false,
@@ -280,7 +332,7 @@ export default function DailyShuffleModal({
     try {
       const { prepare, sync } = await performDailyShuffle(
         walletAddress,
-        DEFAULT_SHUFFLE_CAMPAIGN_ID
+        campaignId
       );
 
       playSuccessSfx();
@@ -327,7 +379,7 @@ export default function DailyShuffleModal({
       setPhase("claiming");
       setError("");
       try {
-        await claimDailyShuffleReward(DEFAULT_SHUFFLE_CAMPAIGN_ID);
+        await claimDailyShuffleReward(campaignId);
         setNeedsClaim(false);
         setPhase("done");
         onComplete({
@@ -382,7 +434,10 @@ export default function DailyShuffleModal({
           One no-cost shuffle per day (resets 00:00 UTC).
         </p>
 
-        {phase === "intro" || phase === "busy" ? (
+        {phase === "intro" ||
+        phase === "busy" ||
+        phase === "checking" ||
+        phase === "restoring" ? (
           <div className="daily-shuffle-hero">
             <div className="daily-shuffle-hero-cards" aria-hidden>
               {INTRO_USDT_PREVIEW.map((card) => (
@@ -405,7 +460,7 @@ export default function DailyShuffleModal({
                 </div>
               ))}
             </div>
-            {status && !status.canCheckIn ? (
+            {phase === "restoring" ? (
               <p className="daily-shuffle-hint">
                 Already shuffled today — restoring your session…
               </p>
@@ -524,6 +579,14 @@ export default function DailyShuffleModal({
             >
               {phase === "busy" ? "Confirm in MiniPay…" : "Shuffle now · No cost"}
             </button>
+          ) : null}
+
+          {phase === "checking" || phase === "restoring" ? (
+            <p className="daily-shuffle-hint daily-shuffle-hint-ornament">
+              {phase === "restoring"
+                ? "Restoring your session…"
+                : "Checking today’s shuffle…"}
+            </p>
           ) : null}
 
           {phase === "pick" ? (

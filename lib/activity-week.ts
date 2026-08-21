@@ -33,6 +33,8 @@ export interface ActivityLeaderboardEntry {
   /** Display XP (composite — see computeActivityXp). */
   score: number;
   walletAddress: string;
+  /** Plays counted this week (needed to recompute XP on read). */
+  sparksSpent?: number;
   activeDays?: number;
   txs?: number;
   spendUnits?: number;
@@ -59,6 +61,34 @@ export function computeActivityXp(counters: Pick<
     Math.max(0, counters.txs) * ACTIVITY_XP_PER_TX +
     Math.max(0, counters.spendUnits) * ACTIVITY_XP_PER_SPEND_UNIT
   );
+}
+
+/**
+ * Normalize a stored board row to current XP.
+ * Legacy rows used `score` as sparksSpent before the composite formula.
+ */
+export function resolveActivityEntryXp(
+  entry: ActivityLeaderboardEntry
+): ActivityLeaderboardEntry {
+  const hasSparksField =
+    typeof entry.sparksSpent === "number" && Number.isFinite(entry.sparksSpent);
+  const sparksSpent = hasSparksField
+    ? Math.max(0, Math.floor(entry.sparksSpent!))
+    : Math.max(0, Math.floor(entry.score));
+  const activeDays =
+    typeof entry.activeDays === "number" ? Math.max(0, entry.activeDays) : 0;
+  const txs = typeof entry.txs === "number" ? Math.max(0, entry.txs) : 0;
+  const spendUnits =
+    typeof entry.spendUnits === "number" ? Math.max(0, entry.spendUnits) : 0;
+
+  return {
+    ...entry,
+    sparksSpent,
+    activeDays,
+    txs,
+    spendUnits,
+    score: computeActivityXp({ sparksSpent, activeDays, txs, spendUnits }),
+  };
 }
 
 /** Monday 00:00 UTC of the ISO week containing `now`. */
