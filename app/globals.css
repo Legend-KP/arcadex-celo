@@ -447,6 +447,11 @@ a { color: inherit; text-decoration: none; }
   text-transform: uppercase;
 }
 
+.spark-panel__segment-time--queued {
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 700;
+}
+
 .spark-panel__segment-time--ready {
   color: #69e36c;
   display: flex;

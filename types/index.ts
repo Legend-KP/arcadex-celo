@@ -143,19 +143,24 @@ export interface GameProgress {
   level?: number;
 }
 
-/** Raw RTDB shape at `users/{wallet}/sparks`. */
+/** Raw RTDB / D1 shape at `users/{wallet}/sparks`. */
 export interface StoredSparkState {
   max: number;
   regenMs: number;
-  /** `null` = ready; number = ms timestamp when this slot refills */
+  /**
+   * `null` = ready; number = ms timestamp when this slot becomes ready.
+   * Timers are sequential: only one slot regenerates at a time; later empty
+   * slots are chained at +regenMs after the previous slot's readyAt.
+   */
   slots: (number | null)[];
   infiniteUntil?: number;
 }
 
-/** Per-slot view for UI (independent regen timers). */
+/** Per-slot view for UI (sequential regen queue). */
 export interface SparkSlotView {
   index: number;
-  status: "ready" | "regenerating";
+  /** `queued` = waiting for the previous Spark to finish regenerating. */
+  status: "ready" | "regenerating" | "queued";
   fillPercent: number;
   timeRemainingMs: number;
 }

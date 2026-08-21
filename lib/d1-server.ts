@@ -14,9 +14,9 @@ import {
 } from "@/types";
 import {
   SPARK_MAX,
+  applySparkSpend,
   computeSparkSnapshot,
   defaultSparkState,
-  findReadySparkSlotIndex,
   normalizeSparkState,
 } from "@/lib/spark";
 import { INFINITE_SPARK_DURATION_MS } from "@/lib/infinite-spark";
@@ -652,14 +652,11 @@ export async function spendSparkOnServer(
       };
     }
 
-    const readyIndex = findReadySparkSlotIndex(state.slots, now);
-    if (readyIndex === -1) {
+    const next = applySparkSpend(state, now);
+    if (!next) {
       throw new SparkSpendError("No Sparks available.", "NO_SPARKS");
     }
 
-    const slots = [...state.slots];
-    slots[readyIndex] = now + state.regenMs;
-    const next: StoredSparkState = { ...state, slots };
     const packed = sparkStateForD1(next);
 
     if (!row) {
