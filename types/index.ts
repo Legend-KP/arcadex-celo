@@ -141,6 +141,8 @@ export interface StoredGameProgress {
 export interface GameProgress {
   score?: number;
   level?: number;
+  /** Per-mode high levels (e.g. Line Link easy/medium/hard). */
+  modes?: Record<string, number>;
 }
 
 /** Raw RTDB / D1 shape at `users/{wallet}/sparks`. */
