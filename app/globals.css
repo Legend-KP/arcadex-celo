@@ -221,7 +221,9 @@ a { color: inherit; text-decoration: none; }
 
 .activity-lb-sheet .lb-title {
   color: #1a1a2e;
-  font-size: 18px;
+  font-size: 16px;
+  white-space: normal;
+  line-height: 1.2;
 }
 
 .activity-lb-sheet .lb-live-badge {

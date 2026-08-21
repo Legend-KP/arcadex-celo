@@ -53,7 +53,6 @@ export default function ActivityLeaderboardButton() {
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState("");
   const [endsAt, setEndsAt] = useState(0);
-  const [weekId, setWeekId] = useState("");
   const [me, setMe] = useState<{
     rank: number | null;
     score: number;
@@ -82,7 +81,6 @@ export default function ActivityLeaderboardButton() {
       .then((data) => {
         setEntries(data.entries ?? []);
         setEndsAt(data.endsAtMs || data.endsAt || 0);
-        setWeekId(data.weekId);
         setMe(data.me);
         if (data.resetsIn) setCountdown(data.resetsIn);
       })
@@ -145,7 +143,7 @@ export default function ActivityLeaderboardButton() {
               className="lb-sheet activity-lb-sheet"
               role="dialog"
               aria-modal="true"
-              aria-label="Weekly activity leaderboard"
+              aria-label="Weekly Activity Leaderboard"
               onClick={(e) => e.stopPropagation()}
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
@@ -156,7 +154,7 @@ export default function ActivityLeaderboardButton() {
                     🏆
                   </span>
                   <div className="lb-title-stack">
-                    <span className="lb-title">Weekly Activity</span>
+                    <span className="lb-title">Weekly Activity Leaderboard</span>
                     <span className="lb-live-badge">
                       <span className="lb-live-dot" aria-hidden="true" />
                       THIS WEEK
@@ -194,14 +192,14 @@ export default function ActivityLeaderboardButton() {
                   {me.score > 0 && me.rank != null
                     ? `#${me.rank}`
                     : "Unranked"}{" "}
-                  · {me.score} {me.score === 1 ? "spark" : "sparks"}
+                  · {me.score.toLocaleString()} XP
                 </p>
               )}
 
               <div className="lb-table-head" aria-hidden="true">
                 <span className="lb-table-head__rank">#</span>
                 <span className="lb-table-head__player">PLAYER</span>
-                <span className="lb-table-head__score">SCORE</span>
+                <span className="lb-table-head__score">XP</span>
               </div>
 
               <div className="lb-list">
@@ -233,18 +231,12 @@ export default function ActivityLeaderboardButton() {
                           {isYou ? " (you)" : ""}
                         </span>
                         <span className="lb-score">
-                          {e.score.toLocaleString()}
+                          {e.score.toLocaleString()} XP
                         </span>
                       </div>
                     );
                   })}
               </div>
-
-              {weekId && (
-                <p className="activity-lb-week-id" aria-hidden="true">
-                  {weekId}
-                </p>
-              )}
             </div>
           </div>,
           document.body

@@ -61,6 +61,7 @@ import {
   getIsoWeekWindow,
   getPreviousIsoWeekWindow,
   utcDayKey,
+  computeActivityXp,
 } from "@/lib/activity-week";
 
 type StoredUser = Omit<PlayerProfile, "id">;
@@ -2536,7 +2537,7 @@ function activityEntryFromCounters(
 ): ActivityLeaderboardEntry {
   return {
     name: counters.name?.trim() || "Player",
-    score: counters.sparksSpent,
+    score: computeActivityXp(counters),
     walletAddress: normalizeWalletAddress(wallet),
     activeDays: counters.activeDays,
     txs: counters.txs,

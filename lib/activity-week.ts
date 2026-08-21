@@ -30,13 +30,35 @@ export interface ActivityCounters {
 
 export interface ActivityLeaderboardEntry {
   name: string;
-  /** Display score = sparks spent this week. */
+  /** Display XP (composite — see computeActivityXp). */
   score: number;
   walletAddress: string;
   activeDays?: number;
   txs?: number;
   spendUnits?: number;
   updatedAt?: number;
+}
+
+/**
+ * Simple XP shown on the board.
+ * Plays dominate; active days and txs add enough that same-play totals don't look identical.
+ * UI never explains these weights.
+ */
+export const ACTIVITY_XP_PER_PLAY = 10;
+export const ACTIVITY_XP_PER_ACTIVE_DAY = 5;
+export const ACTIVITY_XP_PER_TX = 1;
+export const ACTIVITY_XP_PER_SPEND_UNIT = 1;
+
+export function computeActivityXp(counters: Pick<
+  ActivityCounters,
+  "sparksSpent" | "activeDays" | "txs" | "spendUnits"
+>): number {
+  return (
+    Math.max(0, counters.sparksSpent) * ACTIVITY_XP_PER_PLAY +
+    Math.max(0, counters.activeDays) * ACTIVITY_XP_PER_ACTIVE_DAY +
+    Math.max(0, counters.txs) * ACTIVITY_XP_PER_TX +
+    Math.max(0, counters.spendUnits) * ACTIVITY_XP_PER_SPEND_UNIT
+  );
 }
 
 /** Monday 00:00 UTC of the ISO week containing `now`. */
@@ -119,21 +141,12 @@ export function coerceActivityCounters(raw: unknown): ActivityCounters {
   };
 }
 
-/** Sparks spent first; then activeDays, txs, spendUnits; then earlier updatedAt. */
+/** Higher XP first; earlier updatedAt breaks remaining ties. */
 export function compareActivityEntries(
   a: ActivityLeaderboardEntry,
   b: ActivityLeaderboardEntry
 ): number {
   if (b.score !== a.score) return b.score - a.score;
-  const aDays = a.activeDays ?? 0;
-  const bDays = b.activeDays ?? 0;
-  if (bDays !== aDays) return bDays - aDays;
-  const aTxs = a.txs ?? 0;
-  const bTxs = b.txs ?? 0;
-  if (bTxs !== aTxs) return bTxs - aTxs;
-  const aSpend = a.spendUnits ?? 0;
-  const bSpend = b.spendUnits ?? 0;
-  if (bSpend !== aSpend) return bSpend - aSpend;
   const aUpdated = a.updatedAt ?? Number.MAX_SAFE_INTEGER;
   const bUpdated = b.updatedAt ?? Number.MAX_SAFE_INTEGER;
   if (aUpdated !== bUpdated) return aUpdated - bUpdated;
