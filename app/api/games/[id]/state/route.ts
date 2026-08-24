@@ -50,6 +50,24 @@ export async function GET(
 
     const wallet = normalizeWalletAddress(walletRaw);
     const ip = getClientIp(request);
+
+    const auth = await requireWalletAuth(request, wallet);
+    if (!auth.ok) {
+      recordApiMetric({
+        endpoint: "/api/games/[id]/state",
+        method: "GET",
+        status: auth.status,
+        gameId: id,
+        wallet,
+        durationMs: Date.now() - started,
+      });
+      return corsJsonResponse(
+        request,
+        { error: auth.error },
+        { status: auth.status }
+      );
+    }
+
     const ipAllowed = await checkRateLimit(
       `state:ip:${ip}`,
       STATE_IP_LIMIT,
@@ -96,6 +114,7 @@ export async function GET(
       wallet,
       durationMs: Date.now() - started,
       firestoreReads: 0,
+      cacheHit: true,
     });
 
     return corsJsonResponse(request, {

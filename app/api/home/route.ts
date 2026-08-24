@@ -7,14 +7,13 @@ import {
   getClientIp,
   rateLimitResponse,
 } from "@/lib/rate-limit";
-import {
-  fetchHomePlayerFromServer,
-} from "@/lib/player-backend";
+import { fetchHomePlayerFromServer } from "@/lib/player-backend";
 import { computeSparkSnapshot } from "@/lib/spark";
 import {
   isWalletAddress,
   normalizeWalletAddress,
 } from "@/lib/wallet-address";
+import { requireWalletAuth } from "@/lib/wallet-session";
 
 export const dynamic = "force-dynamic";
 
@@ -41,22 +40,27 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const walletRaw = searchParams.get("walletAddress")?.trim() ?? "";
 
+    // Public: games + playCounts. Private: user / sparks — require session.
     let user = null;
     let state = null;
     let sparks = null;
 
     if (walletRaw && isWalletAddress(walletRaw)) {
       const wallet = normalizeWalletAddress(walletRaw);
-      try {
-        const homePlayer = await fetchHomePlayerFromServer(wallet);
-        user = homePlayer.user;
-        state = homePlayer.state;
-        sparks = computeSparkSnapshot(homePlayer.state);
-      } catch {
-        user = null;
-        state = null;
-        sparks = null;
+      const auth = await requireWalletAuth(request, wallet);
+      if (auth.ok) {
+        try {
+          const homePlayer = await fetchHomePlayerFromServer(wallet);
+          user = homePlayer.user;
+          state = homePlayer.state;
+          sparks = computeSparkSnapshot(homePlayer.state);
+        } catch {
+          user = null;
+          state = null;
+          sparks = null;
+        }
       }
+      // Unauthenticated or mismatched session: omit private fields (no IDOR leak).
     }
 
     recordApiMetric({
@@ -64,14 +68,15 @@ export async function GET(request: Request) {
       method: "GET",
       status: 200,
       durationMs: Date.now() - started,
-      firestoreReads: 0,
-      cacheHit: true,
+      firestoreReads: catalog.firestoreReads,
+      cacheHit: catalog.cacheHit,
       cacheLayer: "list",
     });
 
     return NextResponse.json(
       {
-        ...catalog,
+        games: catalog.games,
+        playCounts: catalog.playCounts,
         user,
         state,
         sparks,
@@ -80,7 +85,7 @@ export async function GET(request: Request) {
         headers: {
           "Cache-Control": GAMES_API_CACHE_CONTROL,
           "CDN-Cache-Control": "no-store",
-          Vary: "Cookie",
+          Vary: "Cookie, Authorization",
         },
       }
     );

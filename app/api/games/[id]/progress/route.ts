@@ -1,4 +1,5 @@
 import { fetchGameFromServer } from "@/lib/firestore-server";
+import { withFirestoreReadCounter } from "@/lib/firestore-read-counter";
 import {
   isGameVisibleFromFlags,
   resolveGameGating,
@@ -68,6 +69,23 @@ export async function GET(
 
     const wallet = normalizeWalletAddress(walletRaw);
     const ip = getClientIp(request);
+
+    const auth = await requireWalletAuth(request, wallet);
+    if (!auth.ok) {
+      recordApiMetric({
+        endpoint: "/api/games/[id]/progress",
+        method: "GET",
+        status: auth.status,
+        gameId: id,
+        wallet,
+        durationMs: Date.now() - started,
+      });
+      return corsJsonResponse(
+        request,
+        { error: auth.error },
+        { status: auth.status }
+      );
+    }
 
     const ipAllowed = await checkRateLimit(
       `progress:ip:${ip}`,
@@ -139,10 +157,10 @@ export async function GET(
       );
     }
 
-    const hasLeaderboard = await resolveHasLeaderboard(
-      id,
-      flags.hasLeaderboard
-    );
+    const { result: hasLeaderboard, firestoreReads } =
+      await withFirestoreReadCounter(() =>
+        resolveHasLeaderboard(id, flags.hasLeaderboard)
+      );
     const progress = await resolveGameProgressFromServer(
       wallet,
       id,
@@ -169,8 +187,8 @@ export async function GET(
       gameId: id,
       wallet,
       durationMs: Date.now() - started,
-      firestoreReads: 0,
-      cacheHit: false,
+      firestoreReads,
+      cacheHit: firestoreReads === 0,
     });
 
     return corsJsonResponse(request, payload);
@@ -240,10 +258,10 @@ export async function POST(
       );
     }
 
-    const hasLeaderboard = await resolveHasLeaderboard(
-      id,
-      flags.hasLeaderboard
-    );
+    const { result: hasLeaderboard, firestoreReads } =
+      await withFirestoreReadCounter(() =>
+        resolveHasLeaderboard(id, flags.hasLeaderboard)
+      );
     const progress = await saveGameProgressOnServer(
       body.walletAddress,
       id,
@@ -281,7 +299,7 @@ export async function POST(
       status: 200,
       gameId: id,
       durationMs: Date.now() - started,
-      firestoreReads: 0,
+      firestoreReads,
     });
 
     return corsJsonResponse(request, payload);

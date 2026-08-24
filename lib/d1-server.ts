@@ -37,10 +37,9 @@ import {
   getCachedGameFlags,
   getCachedPlayCounts,
   invalidateGameFlagsCache,
-  invalidateSharedPlayCountsCache,
-  invalidateSharedPlayCountsKv,
   loadPlayCountsWithSharedCache,
   mergeCachedPlayCounts,
+  schedulePlayCountsKvPersist,
   setCachedGameFlags,
 } from "@/lib/rtdb-cache";
 import { coalesceProgressWrite } from "@/lib/progress-write-coalesce";
@@ -1144,10 +1143,6 @@ export async function fetchGamePlayCountsForIds(
     return Object.fromEntries(unique.map((id) => [id, cached[id]]));
   }
 
-  if (cached) {
-    await invalidateSharedPlayCountsCache();
-  }
-
   const all = await loadPlayCountsWithSharedCache(readAllPlayCounts);
   return Object.fromEntries(
     unique.map((id) => [id, typeof all[id] === "number" ? all[id] : 0])
@@ -1186,7 +1181,7 @@ export async function incrementGamePlayCount(gameId: string): Promise<number> {
     .run();
 
   const bumped = bumpCachedPlayCount(gameId, 1);
-  void invalidateSharedPlayCountsKv().catch(() => {});
+  schedulePlayCountsKvPersist();
 
   if (typeof bumped === "number") return bumped;
   return fetchGamePlayCount(gameId);

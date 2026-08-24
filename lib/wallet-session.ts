@@ -49,6 +49,23 @@ export function extractBearerToken(request: Request): string | null {
   return token || null;
 }
 
+/**
+ * Bearer header, or `arcadexSession` query (Unity iframe self-fetch).
+ * Prefer Authorization when both are present.
+ */
+export function extractSessionToken(request: Request): string | null {
+  const bearer = extractBearerToken(request);
+  if (bearer) return bearer;
+  try {
+    const fromQuery = new URL(request.url).searchParams
+      .get("arcadexSession")
+      ?.trim();
+    return fromQuery || null;
+  } catch {
+    return null;
+  }
+}
+
 export type WalletAuthResult =
   | { ok: true; wallet: string }
   | { ok: false; error: string; status: number };
@@ -73,7 +90,7 @@ export async function requireWalletAuth(
     };
   }
 
-  const token = extractBearerToken(request);
+  const token = extractSessionToken(request);
   if (!token) {
     return { ok: false, error: "Authentication required.", status: 401 };
   }

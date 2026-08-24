@@ -3,6 +3,7 @@ import {
   isWalletAddress,
   normalizeWalletAddress,
 } from "@/lib/wallet-address";
+import { walletAuthHeaders } from "@/lib/wallet-session-client";
 
 export type HomeShellPayload = {
   games: Game[];
@@ -39,7 +40,10 @@ export async function fetchHomeShell(
       key !== "*"
         ? `?walletAddress=${encodeURIComponent(key)}`
         : "";
-    const res = await fetch(`/api/home${params}`, { cache: "no-store" });
+    const res = await fetch(`/api/home${params}`, {
+      cache: "no-store",
+      headers: walletAuthHeaders(),
+    });
     const data = (await res.json()) as HomeShellPayload & { error?: string };
     if (!res.ok) {
       throw new Error(data.error ?? "Could not load ArcadeX.");

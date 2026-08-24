@@ -37,20 +37,20 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { games, playCounts } = await loadCatalogListForRequest(request);
+    const catalog = await loadCatalogListForRequest(request);
 
     recordApiMetric({
       endpoint: "/api/games",
       method: "GET",
       status: 200,
       durationMs: Date.now() - started,
-      firestoreReads: 0,
-      cacheHit: true,
+      firestoreReads: catalog.firestoreReads,
+      cacheHit: catalog.cacheHit,
       cacheLayer: "list",
     });
 
     return NextResponse.json(
-      { games, playCounts },
+      { games: catalog.games, playCounts: catalog.playCounts },
       {
         headers: {
           "Cache-Control": GAMES_API_CACHE_CONTROL,

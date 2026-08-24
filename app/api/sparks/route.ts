@@ -7,6 +7,7 @@ import {
   rateLimitResponse,
 } from "@/lib/rate-limit";
 import { normalizeWalletAddress } from "@/lib/wallet-address";
+import { requireWalletAuth } from "@/lib/wallet-session";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,14 @@ export async function GET(request: Request) {
     const wallet = normalizeWalletAddress(rawWallet);
     if (!(await checkRateLimit(`sparks-get:wallet:${wallet}`, 60, 60_000))) {
       return rateLimitResponse();
+    }
+
+    const auth = await requireWalletAuth(request, wallet);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: auth.error },
+        { status: auth.status }
+      );
     }
 
     const state = await readSparkStateFromServer(wallet);

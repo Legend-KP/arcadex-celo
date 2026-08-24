@@ -14,7 +14,9 @@ export async function getGameState(
   walletAddress: string
 ): Promise<GameStateResponse> {
   const params = new URLSearchParams({ wallet: walletAddress });
-  const res = await fetch(`/api/games/${gameId}/state?${params}`);
+  const res = await fetch(`/api/games/${gameId}/state?${params}`, {
+    headers: walletAuthHeaders(),
+  });
   const data = (await res.json()) as GameStateResponse & { error?: string };
 
   if (!res.ok) {

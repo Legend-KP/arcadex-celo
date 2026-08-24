@@ -8,10 +8,12 @@
     "build:cf": "opennextjs-cloudflare build",
     "start": "next start",
     "lint": "next lint",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
-    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview --env preview",
+    "deploy": "npm run deploy:preview",
+    "deploy:preview": "opennextjs-cloudflare build && opennextjs-cloudflare deploy --env preview",
+    "deploy:production": "opennextjs-cloudflare build && opennextjs-cloudflare deploy --env production",
+    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload --env preview",
+    "cf-typegen": "wrangler types --env preview --env-interface CloudflareEnv cloudflare-env.d.ts",
     "verify:cdn": "node scripts/verify-game-cdn.mjs"
   },
   "dependencies": {
