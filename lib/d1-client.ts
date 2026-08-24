@@ -5,18 +5,26 @@
  * Production MiniPay stays on RTDB until you flip the var after migration.
  */
 
-type D1PreparedStatement = {
+import { getWorkerContext } from "@/lib/worker-context";
+
+export type D1PreparedStatement = {
   bind: (...values: unknown[]) => D1PreparedStatement;
   first: <T = unknown>() => Promise<T | null>;
   all: <T = unknown>() => Promise<{ results: T[] }>;
   run: () => Promise<{ success: boolean; meta?: { changes?: number } }>;
 };
 
+export type D1Result<T = unknown> = {
+  success: boolean;
+  results?: T[];
+  meta?: { changes?: number };
+};
+
 export type D1DatabaseLike = {
   prepare: (query: string) => D1PreparedStatement;
-  batch: (
+  batch: <T = unknown>(
     statements: D1PreparedStatement[]
-  ) => Promise<Array<{ success: boolean }>>;
+  ) => Promise<Array<D1Result<T>>>;
 };
 
 type EnvWithD1 = {
@@ -25,13 +33,8 @@ type EnvWithD1 = {
 };
 
 async function getEnv(): Promise<EnvWithD1 | null> {
-  try {
-    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-    const ctx = await getCloudflareContext({ async: true });
-    return (ctx.env as EnvWithD1) ?? null;
-  } catch {
-    return null;
-  }
+  const ctx = await getWorkerContext();
+  return (ctx?.env as EnvWithD1) ?? null;
 }
 
 export async function useD1PlayerData(): Promise<boolean> {
@@ -61,4 +64,11 @@ export async function requireD1(): Promise<D1DatabaseLike> {
     );
   }
   return db;
+}
+
+export function d1BatchFirst<T>(
+  result: D1Result<unknown> | D1Result<T> | undefined
+): T | null {
+  const row = result?.results?.[0];
+  return (row as T | undefined) ?? null;
 }

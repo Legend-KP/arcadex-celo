@@ -8,8 +8,7 @@ import {
   rateLimitResponse,
 } from "@/lib/rate-limit";
 import {
-  fetchUserFromServer,
-  readSparkStateFromServer,
+  fetchHomePlayerFromServer,
 } from "@/lib/player-backend";
 import { computeSparkSnapshot } from "@/lib/spark";
 import {
@@ -48,13 +47,16 @@ export async function GET(request: Request) {
 
     if (walletRaw && isWalletAddress(walletRaw)) {
       const wallet = normalizeWalletAddress(walletRaw);
-      const [profile, sparkState] = await Promise.all([
-        fetchUserFromServer(wallet).catch(() => null),
-        readSparkStateFromServer(wallet),
-      ]);
-      user = profile;
-      state = sparkState;
-      sparks = computeSparkSnapshot(sparkState);
+      try {
+        const homePlayer = await fetchHomePlayerFromServer(wallet);
+        user = homePlayer.user;
+        state = homePlayer.state;
+        sparks = computeSparkSnapshot(homePlayer.state);
+      } catch {
+        user = null;
+        state = null;
+        sparks = null;
+      }
     }
 
     recordApiMetric({

@@ -1,11 +1,12 @@
 /**
  * Player-data facade: routes to D1 or RTDB based on PLAYER_DATA_BACKEND.
- * Game gating + raw RTDB helpers always stay on RTDB.
+ * Game gating flags + weekly activity follow the same switch.
  */
 
 import { useD1PlayerData } from "@/lib/d1-client";
 import * as d1 from "@/lib/d1-server";
 import * as rtdb from "@/lib/rtdb-server";
+import { scheduleWorkerWork } from "@/lib/worker-context";
 
 export type { GameStateRecord, ShufflePendingRecord } from "@/lib/rtdb-server";
 
@@ -22,10 +23,9 @@ export {
   storedProgressToGameProgress,
   shuffleUtcDayKey,
   shuffleUsdtReservationKey,
-  // Always RTDB — Firestore catalog mirror / admin reconcile
-  fetchGameGatingFlagsFromRtdb,
-  syncGameGatingFlagsToRtdb,
-  deleteGameGatingFlagsFromRtdb,
+  resolveActivityWeekId,
+  findActivityRank,
+  // Raw RTDB shallow read (admin tools that still need RTDB trees)
   readPathShallow,
 } from "@/lib/rtdb-server";
 
@@ -35,6 +35,88 @@ async function withPlayerBackend<T>(
 ): Promise<T> {
   if (await useD1PlayerData()) return d1Fn();
   return rtdbFn();
+}
+
+// ─── Game gating flags ───────────────────────────────────────────────────────
+
+export async function fetchGameGatingFlagsFromRtdb(
+  ...args: Parameters<typeof rtdb.fetchGameGatingFlagsFromRtdb>
+): ReturnType<typeof rtdb.fetchGameGatingFlagsFromRtdb> {
+  return withPlayerBackend(
+    () => d1.fetchGameGatingFlagsFromRtdb(...args),
+    () => rtdb.fetchGameGatingFlagsFromRtdb(...args)
+  );
+}
+
+export async function syncGameGatingFlagsToRtdb(
+  ...args: Parameters<typeof rtdb.syncGameGatingFlagsToRtdb>
+): ReturnType<typeof rtdb.syncGameGatingFlagsToRtdb> {
+  return withPlayerBackend(
+    () => d1.syncGameGatingFlagsToRtdb(...args),
+    () => rtdb.syncGameGatingFlagsToRtdb(...args)
+  );
+}
+
+export async function deleteGameGatingFlagsFromRtdb(
+  ...args: Parameters<typeof rtdb.deleteGameGatingFlagsFromRtdb>
+): ReturnType<typeof rtdb.deleteGameGatingFlagsFromRtdb> {
+  return withPlayerBackend(
+    () => d1.deleteGameGatingFlagsFromRtdb(...args),
+    () => rtdb.deleteGameGatingFlagsFromRtdb(...args)
+  );
+}
+
+export async function listGameGatingFlagIds(
+  ...args: Parameters<typeof rtdb.listGameGatingFlagIds>
+): ReturnType<typeof rtdb.listGameGatingFlagIds> {
+  return withPlayerBackend(
+    () => d1.listGameGatingFlagIds(...args),
+    () => rtdb.listGameGatingFlagIds(...args)
+  );
+}
+
+// ─── Weekly activity ─────────────────────────────────────────────────────────
+
+export async function recordActivityEvent(
+  ...args: Parameters<typeof rtdb.recordActivityEvent>
+): ReturnType<typeof rtdb.recordActivityEvent> {
+  return withPlayerBackend(
+    () => d1.recordActivityEvent(...args),
+    () => rtdb.recordActivityEvent(...args)
+  );
+}
+
+export function recordActivityEventBestEffort(
+  ...args: Parameters<typeof rtdb.recordActivityEventBestEffort>
+): ReturnType<typeof rtdb.recordActivityEventBestEffort> {
+  // waitUntil is primed by rate-limit KV / D1 earlier in the request.
+  scheduleWorkerWork(
+    (async () => {
+      if (await useD1PlayerData()) {
+        await d1.recordActivityEvent(...args);
+      } else {
+        await rtdb.recordActivityEvent(...args);
+      }
+    })()
+  );
+}
+
+export async function fetchActivityLeaderboardFromServer(
+  ...args: Parameters<typeof rtdb.fetchActivityLeaderboardFromServer>
+): ReturnType<typeof rtdb.fetchActivityLeaderboardFromServer> {
+  return withPlayerBackend(
+    () => d1.fetchActivityLeaderboardFromServer(...args),
+    () => rtdb.fetchActivityLeaderboardFromServer(...args)
+  );
+}
+
+export async function fetchUserActivityFromServer(
+  ...args: Parameters<typeof rtdb.fetchUserActivityFromServer>
+): ReturnType<typeof rtdb.fetchUserActivityFromServer> {
+  return withPlayerBackend(
+    () => d1.fetchUserActivityFromServer(...args),
+    () => rtdb.fetchUserActivityFromServer(...args)
+  );
 }
 
 // ─── Users ───────────────────────────────────────────────────────────────────
@@ -74,6 +156,15 @@ export async function readSparkStateFromServer(
   return withPlayerBackend(
     () => d1.readSparkStateFromServer(...args),
     () => rtdb.readSparkStateFromServer(...args)
+  );
+}
+
+export async function fetchHomePlayerFromServer(
+  ...args: Parameters<typeof rtdb.fetchHomePlayerFromServer>
+): ReturnType<typeof rtdb.fetchHomePlayerFromServer> {
+  return withPlayerBackend(
+    () => d1.fetchHomePlayerFromServer(...args),
+    () => rtdb.fetchHomePlayerFromServer(...args)
   );
 }
 

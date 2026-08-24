@@ -29,7 +29,7 @@ export interface PlayerProfile {
   updatedAt: number;
 }
 
-/** Gating fields mirrored in RTDB (`gameFlags/{id}`) for hot-path reads. */
+/** Gating fields mirrored for hot-path reads (`gameFlags/{id}` on RTDB, `game_flags` on D1). */
 export interface GameGatingFlags {
   active: boolean;
   live: boolean;

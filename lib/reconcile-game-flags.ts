@@ -1,7 +1,7 @@
 import { invalidateGameFlagsCache } from "@/lib/rtdb-cache";
 import {
   fetchGameGatingFlagsFromRtdb,
-  readPathShallow,
+  listGameGatingFlagIds,
   syncGameGatingFlagsToRtdb,
   deleteGameGatingFlagsFromRtdb,
 } from "@/lib/player-backend";
@@ -74,7 +74,8 @@ function compareFlags(
 }
 
 /**
- * Compare Firestore games catalog against RTDB `gameFlags/*`.
+ * Compare Firestore games catalog against player-backend game flags
+ * (RTDB `gameFlags/*` or D1 `game_flags` depending on PLAYER_DATA_BACKEND).
  * When `repair` is true, sync missing/mismatched flags and delete orphans.
  */
 export async function reconcileGameFlags(options?: {
@@ -84,8 +85,7 @@ export async function reconcileGameFlags(options?: {
   invalidateGameFlagsCache();
 
   const games = await fetchGamesFromServer();
-  const rtdbKeys = (await readPathShallow("gameFlags")) ?? {};
-  const rtdbIds = new Set(Object.keys(rtdbKeys));
+  const flagIds = new Set(await listGameGatingFlagIds());
 
   const missing: GatingMismatch[] = [];
   const mismatches: GatingMismatch[] = [];
@@ -122,7 +122,7 @@ export async function reconcileGameFlags(options?: {
     }
   }
 
-  for (const id of rtdbIds) {
+  for (const id of flagIds) {
     if (firestoreIds.has(id)) continue;
     orphans.push({
       gameId: id,
@@ -138,7 +138,7 @@ export async function reconcileGameFlags(options?: {
 
   return {
     firestoreCount: games.length,
-    rtdbFlagCount: rtdbIds.size,
+    rtdbFlagCount: flagIds.size,
     missing,
     orphans,
     mismatches,

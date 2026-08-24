@@ -1,10 +1,11 @@
 /**
  * D1-backed player-data API — same signatures as lib/rtdb-server.ts.
- * Game gating flags stay on RTDB (not implemented here).
+ * Includes game gating flags + weekly activity when PLAYER_DATA_BACKEND=d1.
  */
 
 import {
   GameProgress,
+  GameGatingFlags,
   LEADERBOARD_MAX_ENTRIES,
   CONTEST_MAX_ENTRIES,
   LeaderboardEntry,
@@ -24,14 +25,23 @@ import { verifyInfiniteSparkPaymentTx } from "@/lib/infinite-spark-verify";
 import { verifySparkRefillPaymentTx } from "@/lib/spark-refill-verify";
 import { verifyScoreSubmitPaymentTx } from "@/lib/score-submit-verify";
 import type { Hash } from "viem";
-import { requireD1, type D1DatabaseLike } from "@/lib/d1-client";
+import {
+  d1BatchFirst,
+  requireD1,
+  type D1DatabaseLike,
+  type D1PreparedStatement,
+} from "@/lib/d1-client";
+import { scheduleWorkerWork } from "@/lib/worker-context";
 import {
   bumpCachedPlayCount,
+  getCachedGameFlags,
   getCachedPlayCounts,
+  invalidateGameFlagsCache,
   invalidateSharedPlayCountsCache,
   invalidateSharedPlayCountsKv,
   loadPlayCountsWithSharedCache,
   mergeCachedPlayCounts,
+  setCachedGameFlags,
 } from "@/lib/rtdb-cache";
 import { coalesceProgressWrite } from "@/lib/progress-write-coalesce";
 import {
@@ -40,6 +50,21 @@ import {
   tryNormalizeWalletAddress,
 } from "@/lib/wallet-address";
 import { SHUFFLE_DAILY_USDT_BUDGET_MICRO } from "@/lib/shuffle-outcomes";
+import {
+  ACTIVITY_LEADERBOARD_MAX_ENTRIES,
+  ACTIVITY_PLAY_COOLDOWN_MS,
+  ACTIVITY_TOP_MIRROR_SIZE,
+  ActivityCounters,
+  ActivityEventKind,
+  ActivityLeaderboardEntry,
+  coerceActivityCounters,
+  compareActivityEntries,
+  emptyActivityCounters,
+  getIsoWeekWindow,
+  utcDayKey,
+  computeActivityXp,
+  resolveActivityEntryXp,
+} from "@/lib/activity-week";
 import {
   GameStateConflictError,
   InfiniteSparkActivationError,
@@ -51,6 +76,7 @@ import {
   type GameStateRecord,
   type ShufflePendingRecord,
 } from "@/lib/rtdb-server";
+import { scrubSecrets } from "@/lib/firebase-admin";
 
 type StoredUser = Omit<PlayerProfile, "id">;
 
@@ -578,6 +604,51 @@ export async function readSparkStateFromServer(
   return sparksRowToState(row) ?? defaultSparkState();
 }
 
+/** One D1 round trip for home: users + sparks. */
+export async function fetchHomePlayerFromServer(walletAddress: string): Promise<{
+  user: PlayerProfile | null;
+  state: StoredSparkState;
+}> {
+  const wallet = tryNormalizeWalletAddress(walletAddress);
+  if (!wallet) {
+    return { user: null, state: defaultSparkState() };
+  }
+
+  const db = await requireD1();
+  const [userRes, sparkRes] = await db.batch([
+    db
+      .prepare(
+        `SELECT wallet, name, created_at, updated_at FROM users WHERE wallet = ?`
+      )
+      .bind(wallet),
+    db
+      .prepare(
+        `SELECT wallet, max, regen_ms, slots_json, infinite_until FROM sparks WHERE wallet = ?`
+      )
+      .bind(wallet),
+  ]);
+
+  const userRow = d1BatchFirst<{
+    wallet: string;
+    name: string;
+    created_at: number;
+    updated_at: number;
+  }>(userRes);
+  const sparkRow = d1BatchFirst<SparksRow>(sparkRes);
+
+  return {
+    user: userRow
+      ? toPlayerProfile(wallet, {
+          name: userRow.name,
+          walletAddress: userRow.wallet,
+          createdAt: userRow.created_at,
+          updatedAt: userRow.updated_at,
+        })
+      : null,
+    state: sparksRowToState(sparkRow) ?? defaultSparkState(),
+  };
+}
+
 /** @deprecated Use readSparkStateFromServer — GET must not create rows. */
 export async function fetchSparkStateFromServer(
   walletAddress: string
@@ -645,6 +716,7 @@ export async function spendSparkOnServer(
 
     if (state.infiniteUntil && state.infiniteUntil > now) {
       if (!row) await writeSparksState(db, wallet, state);
+      recordActivityEventBestEffort(wallet, "play");
       return {
         state,
         sparks: computeSparkSnapshot(state),
@@ -661,6 +733,7 @@ export async function spendSparkOnServer(
 
     if (!row) {
       await writeSparksState(db, wallet, next);
+      recordActivityEventBestEffort(wallet, "play");
       return {
         state: next,
         sparks: computeSparkSnapshot(next),
@@ -684,6 +757,7 @@ export async function spendSparkOnServer(
       .run();
 
     if (update.meta?.changes === 1) {
+      recordActivityEventBestEffort(wallet, "play");
       return {
         state: next,
         sparks: computeSparkSnapshot(next),
@@ -783,6 +857,8 @@ export async function activateInfiniteSparkOnServer(
     throw err;
   }
 
+  recordActivityEventBestEffort(wallet, "spend", { spendUnits: 2 });
+
   return {
     state: nextState,
     sparks: computeSparkSnapshot(nextState),
@@ -878,6 +954,8 @@ export async function activateSparkRefillOnServer(
     await deleteGuard(normalizedTxHash, "spark_payment").catch(() => {});
     throw err;
   }
+
+  recordActivityEventBestEffort(wallet, "spend", { spendUnits: 1 });
 
   return {
     state: nextState,
@@ -1500,6 +1578,11 @@ export async function activateScoreSubmitOnServer(
   const leaderboardScore = await fetchUserSubmittedScoreFromServer(gameId, {
     walletAddress: wallet,
     playerName,
+  });
+
+  recordActivityEventBestEffort(wallet, "spend", {
+    spendUnits: 1,
+    name: playerName,
   });
 
   return { highScore, leaderboardScore, submitted: true };
@@ -2216,4 +2299,419 @@ export async function grantShuffleInfiniteSparkOnServer(
     sparks: computeSparkSnapshot(nextState),
     granted: true,
   };
+}
+
+// ─── Game gating flags (Firestore mirror for hot paths) ───────────────────────
+
+type GameFlagsRow = {
+  game_id: string;
+  active: number;
+  live: number;
+  has_leaderboard: number;
+  contest_live: number;
+  contest_duration_days: number | null;
+  contest_task: string | null;
+  contest_started_at: number | null;
+  contest_ends_at: number | null;
+};
+
+function rowToGameFlags(row: GameFlagsRow): GameGatingFlags {
+  return {
+    active: row.active !== 0,
+    live: row.live !== 0,
+    hasLeaderboard: row.has_leaderboard !== 0,
+    contestLive: row.contest_live !== 0,
+    contestDurationDays:
+      typeof row.contest_duration_days === "number"
+        ? (row.contest_duration_days as GameGatingFlags["contestDurationDays"])
+        : undefined,
+    contestTask: row.contest_task ?? undefined,
+    contestStartedAt:
+      typeof row.contest_started_at === "number"
+        ? row.contest_started_at
+        : undefined,
+    contestEndsAt:
+      typeof row.contest_ends_at === "number" ? row.contest_ends_at : undefined,
+  };
+}
+
+export async function fetchGameGatingFlagsFromRtdb(
+  gameId: string
+): Promise<GameGatingFlags | null> {
+  const cached = getCachedGameFlags(gameId);
+  if (cached) return cached;
+
+  const db = await requireD1();
+  const row = await db
+    .prepare(
+      `SELECT game_id, active, live, has_leaderboard, contest_live,
+              contest_duration_days, contest_task, contest_started_at, contest_ends_at
+       FROM game_flags WHERE game_id = ?`
+    )
+    .bind(gameId)
+    .first<GameFlagsRow>();
+
+  if (!row) return null;
+  const flags = rowToGameFlags(row);
+  setCachedGameFlags(gameId, flags);
+  return flags;
+}
+
+export async function syncGameGatingFlagsToRtdb(
+  gameId: string,
+  flags: GameGatingFlags
+): Promise<void> {
+  const db = await requireD1();
+  await db
+    .prepare(
+      `INSERT INTO game_flags (
+         game_id, active, live, has_leaderboard, contest_live,
+         contest_duration_days, contest_task, contest_started_at, contest_ends_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(game_id) DO UPDATE SET
+         active = excluded.active,
+         live = excluded.live,
+         has_leaderboard = excluded.has_leaderboard,
+         contest_live = excluded.contest_live,
+         contest_duration_days = excluded.contest_duration_days,
+         contest_task = excluded.contest_task,
+         contest_started_at = excluded.contest_started_at,
+         contest_ends_at = excluded.contest_ends_at`
+    )
+    .bind(
+      gameId,
+      flags.active !== false ? 1 : 0,
+      flags.live !== false ? 1 : 0,
+      flags.hasLeaderboard !== false ? 1 : 0,
+      flags.contestLive === true ? 1 : 0,
+      typeof flags.contestDurationDays === "number"
+        ? flags.contestDurationDays
+        : null,
+      flags.contestTask ?? null,
+      typeof flags.contestStartedAt === "number" ? flags.contestStartedAt : null,
+      typeof flags.contestEndsAt === "number" ? flags.contestEndsAt : null
+    )
+    .run();
+  setCachedGameFlags(gameId, flags);
+}
+
+export async function deleteGameGatingFlagsFromRtdb(
+  gameId: string
+): Promise<void> {
+  const db = await requireD1();
+  await db
+    .prepare(`DELETE FROM game_flags WHERE game_id = ?`)
+    .bind(gameId)
+    .run();
+  invalidateGameFlagsCache(gameId);
+}
+
+export async function listGameGatingFlagIds(): Promise<string[]> {
+  const db = await requireD1();
+  const { results } = await db
+    .prepare(`SELECT game_id FROM game_flags`)
+    .all<{ game_id: string }>();
+  return (results ?? []).map((r) => r.game_id);
+}
+
+// ─── Weekly activity leaderboard ─────────────────────────────────────────────
+
+type ActivityRow = {
+  wallet: string;
+  week_id: string;
+  sparks_spent: number;
+  active_days: number;
+  txs: number;
+  spend_units: number;
+  last_active_day: string | null;
+  last_play_at: number | null;
+  updated_at: number | null;
+  name: string | null;
+};
+
+type ActivityLbRow = {
+  week_id: string;
+  wallet: string;
+  name: string;
+  score: number;
+  sparks_spent: number;
+  active_days: number;
+  txs: number;
+  spend_units: number;
+  updated_at: number | null;
+};
+
+function activityRowToCounters(row: ActivityRow | null): ActivityCounters {
+  if (!row) return emptyActivityCounters();
+  return coerceActivityCounters({
+    sparksSpent: row.sparks_spent,
+    activeDays: row.active_days,
+    txs: row.txs,
+    spendUnits: row.spend_units,
+    lastActiveDay: row.last_active_day ?? undefined,
+    lastPlayAt: row.last_play_at ?? undefined,
+    updatedAt: row.updated_at ?? undefined,
+    name: row.name ?? undefined,
+  });
+}
+
+function activityEntryFromCounters(
+  wallet: string,
+  counters: ActivityCounters
+): ActivityLeaderboardEntry {
+  return {
+    name: counters.name?.trim() || "Player",
+    score: computeActivityXp(counters),
+    walletAddress: normalizeWalletAddress(wallet),
+    sparksSpent: counters.sparksSpent,
+    activeDays: counters.activeDays,
+    txs: counters.txs,
+    spendUnits: counters.spendUnits,
+    updatedAt: counters.updatedAt,
+  };
+}
+
+function lbRowToEntry(row: ActivityLbRow): ActivityLeaderboardEntry {
+  return resolveActivityEntryXp({
+    name: row.name,
+    score: row.score,
+    walletAddress: normalizeWalletAddress(row.wallet),
+    sparksSpent: row.sparks_spent,
+    activeDays: row.active_days,
+    txs: row.txs,
+    spendUnits: row.spend_units,
+    updatedAt: row.updated_at ?? undefined,
+  });
+}
+
+function activityCountersStatement(
+  db: D1DatabaseLike,
+  wallet: string,
+  weekId: string,
+  counters: ActivityCounters
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO user_activity (
+         wallet, week_id, sparks_spent, active_days, txs, spend_units,
+         last_active_day, last_play_at, updated_at, name
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(wallet, week_id) DO UPDATE SET
+         sparks_spent = excluded.sparks_spent,
+         active_days = excluded.active_days,
+         txs = excluded.txs,
+         spend_units = excluded.spend_units,
+         last_active_day = excluded.last_active_day,
+         last_play_at = excluded.last_play_at,
+         updated_at = excluded.updated_at,
+         name = excluded.name`
+    )
+    .bind(
+      wallet,
+      weekId,
+      counters.sparksSpent,
+      counters.activeDays,
+      counters.txs,
+      counters.spendUnits,
+      counters.lastActiveDay ?? null,
+      counters.lastPlayAt ?? null,
+      counters.updatedAt ?? null,
+      counters.name ?? null
+    );
+}
+
+function activityLeaderboardStatement(
+  db: D1DatabaseLike,
+  weekId: string,
+  entry: ActivityLeaderboardEntry
+): D1PreparedStatement {
+  const wallet = normalizeWalletAddress(entry.walletAddress);
+  return db
+    .prepare(
+      `INSERT INTO activity_leaderboard_entries (
+         week_id, wallet, name, score, sparks_spent, active_days, txs, spend_units, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(week_id, wallet) DO UPDATE SET
+         name = excluded.name,
+         score = excluded.score,
+         sparks_spent = excluded.sparks_spent,
+         active_days = excluded.active_days,
+         txs = excluded.txs,
+         spend_units = excluded.spend_units,
+         updated_at = excluded.updated_at`
+    )
+    .bind(
+      weekId,
+      wallet,
+      entry.name,
+      entry.score,
+      entry.sparksSpent ?? 0,
+      entry.activeDays ?? 0,
+      entry.txs ?? 0,
+      entry.spendUnits ?? 0,
+      entry.updatedAt ?? null
+    );
+}
+
+/**
+ * Best-effort activity bump. Never throws to callers — log and swallow.
+ * `spendUnits` only applies when kind is "spend".
+ */
+export async function recordActivityEvent(
+  walletAddress: string,
+  kind: ActivityEventKind,
+  opts?: { spendUnits?: number; name?: string }
+): Promise<void> {
+  try {
+    if (!isWalletAddress(walletAddress)) return;
+    const wallet = normalizeWalletAddress(walletAddress);
+    const now = Date.now();
+    const { weekId } = getIsoWeekWindow(now);
+    const day = utcDayKey(now);
+    const spendUnits =
+      kind === "spend" &&
+      typeof opts?.spendUnits === "number" &&
+      Number.isFinite(opts.spendUnits)
+        ? Math.max(0, Math.floor(opts.spendUnits))
+        : 0;
+
+    const db = await requireD1();
+    const profileNameOpt = opts?.name?.trim() || "";
+
+    // One round trip: optional profile name + current week counters.
+    const [userRes, activityRes] = await db.batch([
+      db.prepare(`SELECT name FROM users WHERE wallet = ?`).bind(wallet),
+      db
+        .prepare(
+          `SELECT wallet, week_id, sparks_spent, active_days, txs, spend_units,
+                  last_active_day, last_play_at, updated_at, name
+           FROM user_activity WHERE wallet = ? AND week_id = ?`
+        )
+        .bind(wallet, weekId),
+    ]);
+
+    const profileName =
+      profileNameOpt ||
+      String(d1BatchFirst<{ name: string }>(userRes)?.name ?? "").trim();
+
+    const existing = activityRowToCounters(
+      d1BatchFirst<ActivityRow>(activityRes)
+    );
+    const next: ActivityCounters = { ...existing };
+
+    if (kind === "play") {
+      if (
+        typeof next.lastPlayAt === "number" &&
+        now - next.lastPlayAt < ACTIVITY_PLAY_COOLDOWN_MS
+      ) {
+        return;
+      }
+      next.sparksSpent += 1;
+      next.lastPlayAt = now;
+    }
+
+    if (
+      kind === "tx" ||
+      kind === "spend" ||
+      kind === "play" ||
+      kind === "visit"
+    ) {
+      if (next.lastActiveDay !== day) {
+        next.activeDays += 1;
+        next.lastActiveDay = day;
+      }
+    }
+
+    if (kind === "tx" || kind === "spend") {
+      next.txs += 1;
+    }
+
+    if (kind === "spend" && spendUnits > 0) {
+      next.spendUnits += spendUnits;
+    }
+
+    if (profileName) next.name = profileName;
+    next.updatedAt = now;
+
+    if (
+      kind === "visit" &&
+      existing.lastActiveDay === day &&
+      next.sparksSpent === existing.sparksSpent &&
+      next.activeDays === existing.activeDays
+    ) {
+      return;
+    }
+
+    const writes: D1PreparedStatement[] = [
+      activityCountersStatement(db, wallet, weekId, next),
+    ];
+
+    // Public board is sparks-first — don't list visit-only / 0-spark users.
+    if (next.sparksSpent > 0) {
+      writes.push(
+        activityLeaderboardStatement(
+          db,
+          weekId,
+          activityEntryFromCounters(wallet, next)
+        )
+      );
+    }
+
+    await db.batch(writes);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[ArcadeX][activity] recordActivityEvent failed: ${scrubSecrets(message)}`
+    );
+  }
+}
+
+/** Schedule activity after the response via waitUntil (Worker) / fire-and-forget (dev). */
+export function recordActivityEventBestEffort(
+  walletAddress: string,
+  kind: ActivityEventKind,
+  opts?: { spendUnits?: number; name?: string }
+): void {
+  scheduleWorkerWork(recordActivityEvent(walletAddress, kind, opts));
+}
+
+export async function fetchActivityLeaderboardFromServer(
+  weekId: string,
+  limit = ACTIVITY_LEADERBOARD_MAX_ENTRIES
+): Promise<ActivityLeaderboardEntry[]> {
+  const db = await requireD1();
+  const { results } = await db
+    .prepare(
+      `SELECT week_id, wallet, name, score, sparks_spent, active_days, txs, spend_units, updated_at
+       FROM activity_leaderboard_entries
+       WHERE week_id = ? AND sparks_spent > 0
+       ORDER BY score DESC, updated_at ASC
+       LIMIT ?`
+    )
+    .bind(weekId, Math.max(limit, ACTIVITY_TOP_MIRROR_SIZE))
+    .all<ActivityLbRow>();
+
+  return (results ?? [])
+    .map(lbRowToEntry)
+    .sort(compareActivityEntries)
+    .filter((e) => e.score > 0)
+    .slice(0, limit);
+}
+
+export async function fetchUserActivityFromServer(
+  walletAddress: string,
+  weekId: string
+): Promise<ActivityCounters> {
+  if (!isWalletAddress(walletAddress)) return emptyActivityCounters();
+  const wallet = normalizeWalletAddress(walletAddress);
+  const db = await requireD1();
+  const row = await db
+    .prepare(
+      `SELECT wallet, week_id, sparks_spent, active_days, txs, spend_units,
+              last_active_day, last_play_at, updated_at, name
+       FROM user_activity WHERE wallet = ? AND week_id = ?`
+    )
+    .bind(wallet, weekId)
+    .first<ActivityRow>();
+  return activityRowToCounters(row);
 }

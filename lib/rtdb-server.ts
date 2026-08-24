@@ -26,6 +26,7 @@ import { verifyScoreSubmitPaymentTx } from "@/lib/score-submit-verify";
 import type { Hash } from "viem";
 import { getDatabaseUrl, getFirebaseAccessToken, scrubSecrets } from "./firebase-admin";
 import { fetchWithTimeout } from "@/lib/firebase-fetch";
+import { scheduleWorkerWork } from "@/lib/worker-context";
 import {
   bumpCachedPlayCount,
   getCachedGameFlags,
@@ -44,6 +45,22 @@ import {
   tryNormalizeWalletAddress,
 } from "@/lib/wallet-address";
 import { SHUFFLE_DAILY_USDT_BUDGET_MICRO } from "@/lib/shuffle-outcomes";
+import {
+  ACTIVITY_LEADERBOARD_MAX_ENTRIES,
+  ACTIVITY_PLAY_COOLDOWN_MS,
+  ACTIVITY_TOP_MIRROR_SIZE,
+  ActivityCounters,
+  ActivityEventKind,
+  ActivityLeaderboardEntry,
+  coerceActivityCounters,
+  compareActivityEntries,
+  emptyActivityCounters,
+  getIsoWeekWindow,
+  getPreviousIsoWeekWindow,
+  utcDayKey,
+  computeActivityXp,
+  resolveActivityEntryXp,
+} from "@/lib/activity-week";
 
 type StoredUser = Omit<PlayerProfile, "id">;
 type LeaderboardMap = Record<string, LeaderboardEntry>;
@@ -474,6 +491,23 @@ export async function readSparkStateFromServer(
   return normalizeSparkState(existing);
 }
 
+/** Parallel user + sparks for home (RTDB has no batch API). */
+export async function fetchHomePlayerFromServer(walletAddress: string): Promise<{
+  user: PlayerProfile | null;
+  state: StoredSparkState;
+}> {
+  const wallet = tryNormalizeWalletAddress(walletAddress);
+  if (!wallet) {
+    return { user: null, state: defaultSparkState() };
+  }
+
+  const [user, state] = await Promise.all([
+    fetchUserFromServer(wallet).catch(() => null),
+    readSparkStateFromServer(wallet),
+  ]);
+  return { user, state };
+}
+
 /** @deprecated Use readSparkStateFromServer — GET must not create rows. */
 export async function fetchSparkStateFromServer(
   walletAddress: string
@@ -628,6 +662,9 @@ export async function spendSparkOnServer(
     now
   );
 
+  // Count every successful game-start (including Infinite Spark) toward weekly activity.
+  recordActivityEventBestEffort(wallet, "play");
+
   return {
     state,
     sparks: computeSparkSnapshot(state),
@@ -722,6 +759,8 @@ export async function activateInfiniteSparkOnServer(
     throw err;
   }
 
+  recordActivityEventBestEffort(wallet, "spend", { spendUnits: 2 });
+
   return {
     state: nextState,
     sparks: computeSparkSnapshot(nextState),
@@ -814,6 +853,8 @@ export async function activateSparkRefillOnServer(
     await deletePath(guardPath).catch(() => {});
     throw err;
   }
+
+  recordActivityEventBestEffort(wallet, "spend", { spendUnits: 1 });
 
   return {
     state: nextState,
@@ -1053,6 +1094,12 @@ export async function syncGameGatingFlagsToRtdb(
 export async function deleteGameGatingFlagsFromRtdb(gameId: string): Promise<void> {
   await deletePath(gameFlagsPath(gameId));
   invalidateGameFlagsCache(gameId);
+}
+
+/** Child keys under `gameFlags/` — used by admin reconcile. */
+export async function listGameGatingFlagIds(): Promise<string[]> {
+  const keys = (await readPathShallow("gameFlags")) ?? {};
+  return Object.keys(keys);
 }
 
 // ─── Game play counts ──────────────────────────────────────────────────────────
@@ -1648,6 +1695,11 @@ export async function activateScoreSubmitOnServer(
   const leaderboardScore = await fetchUserSubmittedScoreFromServer(gameId, {
     walletAddress: wallet,
     playerName,
+  });
+
+  recordActivityEventBestEffort(wallet, "spend", {
+    spendUnits: 1,
+    name: playerName,
   });
 
   return {
@@ -2313,4 +2365,308 @@ export async function grantShuffleInfiniteSparkOnServer(
     sparks: computeSparkSnapshot(nextState),
     granted: true,
   };
+}
+
+// ─── Weekly activity leaderboard ─────────────────────────────────────────────
+//
+// users/{wallet}/activity/{weekId}
+// activityLeaderboards/{weekId}/entries/{wallet}
+// activityLeaderboards/{weekId}/top/{wallet}
+
+type ActivityLeaderboardMap = Record<string, ActivityLeaderboardEntry>;
+
+function userActivityPath(wallet: string, weekId: string): string {
+  return `users/${normalizeWalletAddress(wallet)}/activity/${weekId}`;
+}
+
+function activityEntriesPath(weekId: string, wallet: string): string {
+  return `activityLeaderboards/${weekId}/entries/${normalizeWalletAddress(wallet)}`;
+}
+
+function activityTopPath(weekId: string): string {
+  return `activityLeaderboards/${weekId}/top`;
+}
+
+function activityEntryFromCounters(
+  wallet: string,
+  counters: ActivityCounters
+): ActivityLeaderboardEntry {
+  return {
+    name: counters.name?.trim() || "Player",
+    score: computeActivityXp(counters),
+    walletAddress: normalizeWalletAddress(wallet),
+    sparksSpent: counters.sparksSpent,
+    activeDays: counters.activeDays,
+    txs: counters.txs,
+    spendUnits: counters.spendUnits,
+    updatedAt: counters.updatedAt,
+  };
+}
+
+function mapToActivityEntries(
+  map: ActivityLeaderboardMap | null | undefined
+): ActivityLeaderboardEntry[] {
+  if (!map || typeof map !== "object") return [];
+  const out: ActivityLeaderboardEntry[] = [];
+  for (const value of Object.values(map)) {
+    if (!value || typeof value !== "object") continue;
+    if (typeof value.score !== "number" || typeof value.name !== "string") {
+      continue;
+    }
+    const wallet = tryNormalizeWalletAddress(value.walletAddress);
+    if (!wallet) continue;
+    out.push(
+      resolveActivityEntryXp({
+        name: value.name,
+        score: value.score,
+        walletAddress: wallet,
+        sparksSpent:
+          typeof (value as ActivityLeaderboardEntry).sparksSpent === "number"
+            ? (value as ActivityLeaderboardEntry).sparksSpent
+            : undefined,
+        activeDays:
+          typeof value.activeDays === "number" ? value.activeDays : undefined,
+        txs: typeof value.txs === "number" ? value.txs : undefined,
+        spendUnits:
+          typeof value.spendUnits === "number" ? value.spendUnits : undefined,
+        updatedAt:
+          typeof value.updatedAt === "number" ? value.updatedAt : undefined,
+      })
+    );
+  }
+  return out;
+}
+
+function activityEntriesToTopMap(
+  entries: ActivityLeaderboardEntry[]
+): ActivityLeaderboardMap {
+  const map: ActivityLeaderboardMap = {};
+  for (const entry of entries) {
+    map[normalizeWalletAddress(entry.walletAddress)] = entry;
+  }
+  return map;
+}
+
+function mergeActivityIntoTopMirror(
+  currentTop: ActivityLeaderboardMap | null,
+  payload: ActivityLeaderboardEntry,
+  mirrorSize: number
+): ActivityLeaderboardMap | null {
+  const ranked = mapToActivityEntries(currentTop).sort(compareActivityEntries);
+  const wallet = normalizeWalletAddress(payload.walletAddress);
+  const withoutUser = ranked.filter(
+    (e) => normalizeWalletAddress(e.walletAddress) !== wallet
+  );
+  const lowestKept = withoutUser[mirrorSize - 1];
+  const alreadyInTop = ranked.some(
+    (e) => normalizeWalletAddress(e.walletAddress) === wallet
+  );
+
+  if (
+    !alreadyInTop &&
+    withoutUser.length >= mirrorSize &&
+    lowestKept &&
+    compareActivityEntries(payload, lowestKept) > 0
+  ) {
+    return null;
+  }
+
+  const next = [...withoutUser, payload]
+    .sort(compareActivityEntries)
+    .slice(0, mirrorSize);
+
+  return activityEntriesToTopMap(next);
+}
+
+async function ensureActivityTopMirror(
+  weekId: string
+): Promise<ActivityLeaderboardEntry[]> {
+  const top = await readPath<ActivityLeaderboardMap>(activityTopPath(weekId));
+  if (top && Object.keys(top).length > 0) {
+    return mapToActivityEntries(top).sort(compareActivityEntries);
+  }
+
+  const nested = await readPath<ActivityLeaderboardMap>(
+    `activityLeaderboards/${weekId}/entries`
+  );
+  const ranked = mapToActivityEntries(nested)
+    .sort(compareActivityEntries)
+    .slice(0, ACTIVITY_TOP_MIRROR_SIZE);
+
+  if (ranked.length > 0) {
+    await writePath(activityTopPath(weekId), activityEntriesToTopMap(ranked)).catch(
+      () => {}
+    );
+  }
+  return ranked;
+}
+
+/**
+ * Best-effort activity bump. Never throws to callers ΓÇö log and swallow.
+ * `spendUnits` only applies when kind is "spend".
+ */
+export async function recordActivityEvent(
+  walletAddress: string,
+  kind: ActivityEventKind,
+  opts?: { spendUnits?: number; name?: string }
+): Promise<void> {
+  try {
+    if (!isWalletAddress(walletAddress)) return;
+    const wallet = normalizeWalletAddress(walletAddress);
+    const now = Date.now();
+    const { weekId } = getIsoWeekWindow(now);
+    const day = utcDayKey(now);
+    const spendUnits =
+      kind === "spend" &&
+      typeof opts?.spendUnits === "number" &&
+      Number.isFinite(opts.spendUnits)
+        ? Math.max(0, Math.floor(opts.spendUnits))
+        : 0;
+
+    let profileName = opts?.name?.trim() || "";
+    if (!profileName) {
+      const profile = await fetchUserFromServer(wallet).catch(() => null);
+      profileName = profile?.name?.trim() || "";
+    }
+
+    const path = userActivityPath(wallet, weekId);
+    const existing = coerceActivityCounters(await readPath<unknown>(path));
+    const next: ActivityCounters = { ...existing };
+
+    if (kind === "play") {
+      if (
+        typeof next.lastPlayAt === "number" &&
+        now - next.lastPlayAt < ACTIVITY_PLAY_COOLDOWN_MS
+      ) {
+        return;
+      }
+      next.sparksSpent += 1;
+      next.lastPlayAt = now;
+    }
+
+    if (kind === "tx" || kind === "spend" || kind === "play" || kind === "visit") {
+      if (next.lastActiveDay !== day) {
+        next.activeDays += 1;
+        next.lastActiveDay = day;
+      }
+    }
+
+    if (kind === "tx" || kind === "spend") {
+      next.txs += 1;
+    }
+
+    if (kind === "spend" && spendUnits > 0) {
+      next.spendUnits += spendUnits;
+    }
+
+    if (profileName) next.name = profileName;
+    next.updatedAt = now;
+
+    if (
+      kind === "visit" &&
+      existing.lastActiveDay === day &&
+      next.sparksSpent === existing.sparksSpent &&
+      next.activeDays === existing.activeDays
+    ) {
+      return;
+    }
+
+    await writePath(path, next);
+
+    // Public board is sparks-first ΓÇö don't list visit-only / 0-spark users.
+    if (next.sparksSpent <= 0) {
+      return;
+    }
+
+    const entry = activityEntryFromCounters(wallet, next);
+    await writePath(activityEntriesPath(weekId, wallet), entry);
+
+    await runRtdbTransaction<ActivityLeaderboardMap>(
+      activityTopPath(weekId),
+      (current) => {
+        const merged = mergeActivityIntoTopMirror(
+          current,
+          entry,
+          ACTIVITY_TOP_MIRROR_SIZE
+        );
+        if (merged) return merged;
+        if (!current || Object.keys(current).length === 0) {
+          return activityEntriesToTopMap([entry]);
+        }
+        return undefined;
+      }
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[ArcadeX][activity] recordActivityEvent failed: ${scrubSecrets(message)}`
+    );
+  }
+}
+
+/** Fire-and-forget via waitUntil so the Worker isolate stays alive after the response. */
+export function recordActivityEventBestEffort(
+  walletAddress: string,
+  kind: ActivityEventKind,
+  opts?: { spendUnits?: number; name?: string }
+): void {
+  // Rate-limit / KV paths prime getWorkerContext() earlier in the same request.
+  scheduleWorkerWork(recordActivityEvent(walletAddress, kind, opts));
+}
+
+export async function fetchActivityLeaderboardFromServer(
+  weekId: string,
+  limit = ACTIVITY_LEADERBOARD_MAX_ENTRIES
+): Promise<ActivityLeaderboardEntry[]> {
+  const ranked = await ensureActivityTopMirror(weekId);
+  return ranked.filter((e) => e.score > 0).slice(0, limit);
+}
+
+export async function fetchUserActivityFromServer(
+  walletAddress: string,
+  weekId: string
+): Promise<ActivityCounters> {
+  if (!isWalletAddress(walletAddress)) return emptyActivityCounters();
+  const wallet = normalizeWalletAddress(walletAddress);
+  const raw = await readPath<unknown>(userActivityPath(wallet, weekId));
+  return coerceActivityCounters(raw);
+}
+
+export function resolveActivityWeekId(
+  weekParam: string | null | undefined,
+  now = Date.now()
+): { weekId: string; startsAt: number; endsAt: number; isCurrent: boolean } {
+  const current = getIsoWeekWindow(now);
+  const previous = getPreviousIsoWeekWindow(now);
+
+  if (!weekParam || weekParam === "current") {
+    return { ...current, isCurrent: true };
+  }
+  if (weekParam === "prev" || weekParam === "previous") {
+    return { ...previous, isCurrent: false };
+  }
+  if (weekParam === current.weekId) {
+    return { ...current, isCurrent: true };
+  }
+  if (weekParam === previous.weekId) {
+    return { ...previous, isCurrent: false };
+  }
+  return {
+    weekId: weekParam,
+    startsAt: 0,
+    endsAt: 0,
+    isCurrent: false,
+  };
+}
+
+export function findActivityRank(
+  entries: ActivityLeaderboardEntry[],
+  walletAddress: string
+): number | null {
+  const wallet = tryNormalizeWalletAddress(walletAddress);
+  if (!wallet) return null;
+  const idx = entries.findIndex(
+    (e) => normalizeWalletAddress(e.walletAddress) === wallet
+  );
+  return idx >= 0 ? idx + 1 : null;
 }
