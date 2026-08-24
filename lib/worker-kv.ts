@@ -2,8 +2,9 @@
 
 import { getWorkerContext } from "@/lib/worker-context";
 
-type KvLike = {
+export type KvLike = {
   get(key: string): Promise<string | null>;
+  get(keys: string[]): Promise<Map<string, string | null>>;
   put(
     key: string,
     value: string,

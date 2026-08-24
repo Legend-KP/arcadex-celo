@@ -1,15 +1,20 @@
 /**
  * Distributed rate limiting via Cloudflare KV when available.
  * Falls back to per-isolate memory for local `next dev` only.
+ *
+ * KV allows 1 write/sec per key. Counters are sharded so concurrent
+ * requests increment different keys, then summed with one bulk get.
  */
 
-import { getWorkerKv } from "@/lib/worker-kv";
+import { getWorkerKv, type KvLike } from "@/lib/worker-kv";
 
 type RateBucket = { count: number; resetAt: number };
 
 const memoryBuckets = new Map<string, RateBucket>();
 
-type KvLike = NonNullable<Awaited<ReturnType<typeof getWorkerKv>>>;
+/** 32 shards → ~32 writes/sec per logical key before hitting KV's per-key cap. */
+const RATE_LIMIT_SHARDS = 32;
+const SHARD_PUT_RETRIES = 4;
 
 let warnedMissingKv = false;
 
@@ -52,6 +57,39 @@ function memoryCheck(key: string, limit: number, windowMs: number): boolean {
   return true;
 }
 
+function parseCount(raw: string | null | undefined): number {
+  if (!raw) return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function shardKey(key: string, windowId: number, shard: number): string {
+  return `rl:${key}:${windowId}:${shard}`;
+}
+
+function pickShard(): number {
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return bytes[0] % RATE_LIMIT_SHARDS;
+}
+
+async function readShardCounts(
+  kv: KvLike,
+  keys: string[]
+): Promise<number[]> {
+  try {
+    const map = await kv.get(keys);
+    if (map && typeof map.get === "function") {
+      return keys.map((k) => parseCount(map.get(k)));
+    }
+  } catch {
+    // Preview / mock KV may not support bulk get.
+  }
+
+  const singles = await Promise.all(keys.map((k) => kv.get(k)));
+  return singles.map((raw) => parseCount(raw));
+}
+
 async function kvCheck(
   kv: KvLike,
   key: string,
@@ -60,21 +98,34 @@ async function kvCheck(
 ): Promise<boolean> {
   const now = Date.now();
   const windowId = Math.floor(now / windowMs);
-  const kvKey = `rl:${key}:${windowId}`;
   const ttlSec = Math.max(60, Math.ceil(windowMs / 1000) + 5);
+  const keys = Array.from({ length: RATE_LIMIT_SHARDS }, (_, shard) =>
+    shardKey(key, windowId, shard)
+  );
 
-  const raw = await kv.get(kvKey);
-  const count = raw ? Number(raw) : 0;
-  if (!Number.isFinite(count)) {
-    await kv.put(kvKey, "1", { expirationTtl: ttlSec });
-    return true;
-  }
-
-  if (count >= limit) {
+  const counts = await readShardCounts(kv, keys);
+  const total = counts.reduce((sum, n) => sum + n, 0);
+  if (total >= limit) {
     return false;
   }
 
-  await kv.put(kvKey, String(count + 1), { expirationTtl: ttlSec });
+  let shard = pickShard();
+  for (let attempt = 0; attempt < SHARD_PUT_RETRIES; attempt++) {
+    const next = counts[shard] + 1;
+    try {
+      await kv.put(keys[shard], String(next), { expirationTtl: ttlSec });
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isHotKey =
+        message.includes("429") || /too many|rate limit/i.test(message);
+      if (!isHotKey || attempt === SHARD_PUT_RETRIES - 1) {
+        throw err;
+      }
+      shard = (shard + 1 + pickShard()) % RATE_LIMIT_SHARDS;
+    }
+  }
+
   return true;
 }
 
