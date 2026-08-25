@@ -88,8 +88,8 @@ export default function HomePage() {
         <header className="topbar">
           <Logo variant="header" />
           <div className="topbar-actions">
-            <SparkBatteryBar />
             <ActivityLeaderboardButton />
+            <SparkBatteryBar />
           </div>
         </header>
 
