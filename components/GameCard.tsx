@@ -108,7 +108,10 @@ export default function GameCard({
 
       <div className="card-info">
         <p className="card-title">{game.name}</p>
-        <p className="card-plays">{formatPlayCount(playCount)} plays</p>
+        <p className="card-plays">
+          {formatPlayCount(playCount)}{" "}
+          {playCount === 1 ? "play" : "plays"}
+        </p>
       </div>
     </>
   );

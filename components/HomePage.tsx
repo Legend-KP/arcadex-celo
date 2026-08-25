@@ -83,41 +83,44 @@ export default function HomePage() {
 
   return (
     <div className="home">
+      <div className="home-ambient" aria-hidden />
       <div className="home-shell">
         <header className="topbar">
           <Logo variant="header" />
           <div className="topbar-actions">
-            <ActivityLeaderboardButton />
             <SparkBatteryBar />
+            <ActivityLeaderboardButton />
           </div>
         </header>
 
-        {error ? (
-          <p className="no-games">{error}</p>
-        ) : loading ? (
-          <div
-            className="games-grid games-grid--loading"
-            aria-busy="true"
-            aria-label="Loading games"
-          >
-            {Array.from({ length: 4 }, (_, i) => (
-              <div key={i} className="game-card-skeleton" aria-hidden />
-            ))}
-          </div>
-        ) : games.length === 0 ? (
-          <p className="no-games">No games yet. Check back soon!</p>
-        ) : (
-          <div className="games-grid">
-            {games.map((game, index) => (
-              <GameCard
-                key={game.id}
-                game={game}
-                playCount={playCounts[game.id] ?? 0}
-                priority={index < 4}
-              />
-            ))}
-          </div>
-        )}
+        <main className="home-main">
+          {error ? (
+            <p className="no-games">{error}</p>
+          ) : loading ? (
+            <div
+              className="games-grid games-grid--loading"
+              aria-busy="true"
+              aria-label="Loading games"
+            >
+              {Array.from({ length: 4 }, (_, i) => (
+                <div key={i} className="game-card-skeleton" aria-hidden />
+              ))}
+            </div>
+          ) : games.length === 0 ? (
+            <p className="no-games">No games yet. Check back soon!</p>
+          ) : (
+            <div className="games-grid">
+              {games.map((game, index) => (
+                <GameCard
+                  key={game.id}
+                  game={game}
+                  playCount={playCounts[game.id] ?? 0}
+                  priority={index < 4}
+                />
+              ))}
+            </div>
+          )}
+        </main>
 
         <AppFooter />
       </div>
