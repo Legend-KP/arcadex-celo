@@ -11,7 +11,7 @@ import {
 import {
   grantStreakInfiniteSparkOnServer,
   StreakRewardError,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import { requireWalletAuth } from "@/lib/wallet-session";
 

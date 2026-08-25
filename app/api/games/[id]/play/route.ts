@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { incrementGamePlayCount } from "@/lib/rtdb-server";
+import { incrementGamePlayCount } from "@/lib/player-backend";
 import {
   isGameVisibleFromFlags,
   resolveGameGating,

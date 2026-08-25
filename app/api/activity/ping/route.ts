@@ -4,7 +4,7 @@ import {
   getClientIp,
   rateLimitResponse,
 } from "@/lib/rate-limit";
-import { recordActivityEvent } from "@/lib/rtdb-server";
+import { recordActivityEvent } from "@/lib/player-backend";
 import { normalizeWalletAddress } from "@/lib/wallet-address";
 import { requireWalletAuth } from "@/lib/wallet-session";
 

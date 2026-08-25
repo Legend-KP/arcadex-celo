@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatChainError } from "@/lib/celo-public-client";
-import { playSuccessSfx } from "@/lib/sfx";
+import { playSuccessSfx, playTouchSfx } from "@/lib/sfx";
 import {
   fetchStreakStatus,
   performDailyCheckIn,
@@ -224,6 +224,7 @@ export default function DailyCheckInModal({
       : `Day ${requiredDays}`;
 
   async function handleCheckIn() {
+    playTouchSfx();
     setLoading(true);
     setError("");
     try {

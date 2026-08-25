@@ -14,8 +14,8 @@ import {
   StreakSyncError,
   grantStreakInfiniteSparkOnServer,
   StreakRewardError,
-  recordActivityEvent,
-} from "@/lib/rtdb-server";
+  recordActivityEventBestEffort,
+} from "@/lib/player-backend";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import { invalidateStreakProgressCache } from "@/lib/streak-progress-cache";
 import { createWalletSessionToken } from "@/lib/wallet-session";
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
 
     await recordCheckInTxOnServer(wallet, txHash, verified.day, campaignId);
     await invalidateStreakProgressCache(wallet, campaignId);
-    await recordActivityEvent(wallet, "tx");
+    recordActivityEventBestEffort(wallet, "tx");
 
     let reward: {
       granted: boolean;

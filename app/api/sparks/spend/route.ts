@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { spendSparkOnServer, SparkSpendError } from "@/lib/rtdb-server";
+import { spendSparkOnServer, SparkSpendError } from "@/lib/player-backend";
 import {
   checkRateLimit,
   getClientIp,

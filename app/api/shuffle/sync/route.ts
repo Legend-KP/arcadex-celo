@@ -21,8 +21,8 @@ import {
   shuffleUsdtReservationKey,
   StreakRewardError,
   StreakSyncError,
-  recordActivityEvent,
-} from "@/lib/rtdb-server";
+  recordActivityEventBestEffort,
+} from "@/lib/player-backend";
 import { usdtToMicro } from "@/lib/shuffle-outcomes";
 import { invalidateStreakProgressCache } from "@/lib/streak-progress-cache";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
@@ -124,7 +124,7 @@ export async function POST(request: Request) {
     }
 
     await recordSpinTxOnServer(wallet, txHash, campaignId, pending.outcomeId);
-    await recordActivityEvent(wallet, "tx");
+    recordActivityEventBestEffort(wallet, "tx");
     await markShufflePendingConsumed(wallet, campaignId, nonce, txHash);
     await invalidateStreakProgressCache(wallet, campaignId);
 

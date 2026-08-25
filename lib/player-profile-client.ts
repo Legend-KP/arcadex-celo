@@ -10,6 +10,7 @@ export async function fetchPlayerProfile(
 ): Promise<PlayerProfile | null> {
   const res = await fetch(`/api/users/${encodeUserId(playerId)}`, {
     cache: "no-store",
+    headers: walletAuthHeaders(),
   });
   const data = (await res.json()) as { user?: PlayerProfile | null; error?: string };
 

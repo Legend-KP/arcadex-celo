@@ -26,15 +26,15 @@ import { verifyScoreSubmitPaymentTx } from "@/lib/score-submit-verify";
 import type { Hash } from "viem";
 import { getDatabaseUrl, getFirebaseAccessToken, scrubSecrets } from "./firebase-admin";
 import { fetchWithTimeout } from "@/lib/firebase-fetch";
+import { scheduleWorkerWork } from "@/lib/worker-context";
 import {
   bumpCachedPlayCount,
   getCachedGameFlags,
   getCachedPlayCounts,
   invalidateGameFlagsCache,
-  invalidateSharedPlayCountsCache,
-  invalidateSharedPlayCountsKv,
   loadPlayCountsWithSharedCache,
   mergeCachedPlayCounts,
+  schedulePlayCountsKvPersist,
   setCachedGameFlags,
 } from "@/lib/rtdb-cache";
 import { coalesceProgressWrite } from "@/lib/progress-write-coalesce";
@@ -494,6 +494,23 @@ export async function readSparkStateFromServer(
   return normalizeSparkState(existing);
 }
 
+/** Parallel user + sparks for home (RTDB has no batch API). */
+export async function fetchHomePlayerFromServer(walletAddress: string): Promise<{
+  user: PlayerProfile | null;
+  state: StoredSparkState;
+}> {
+  const wallet = tryNormalizeWalletAddress(walletAddress);
+  if (!wallet) {
+    return { user: null, state: defaultSparkState() };
+  }
+
+  const [user, state] = await Promise.all([
+    fetchUserFromServer(wallet).catch(() => null),
+    readSparkStateFromServer(wallet),
+  ]);
+  return { user, state };
+}
+
 /** @deprecated Use readSparkStateFromServer — GET must not create rows. */
 export async function fetchSparkStateFromServer(
   walletAddress: string
@@ -649,8 +666,7 @@ export async function spendSparkOnServer(
   );
 
   // Count every successful game-start (including Infinite Spark) toward weekly activity.
-  // Must await: Cloudflare freezes the isolate after the response is sent.
-  await recordActivityEvent(wallet, "play");
+  recordActivityEventBestEffort(wallet, "play");
 
   return {
     state,
@@ -746,7 +762,7 @@ export async function activateInfiniteSparkOnServer(
     throw err;
   }
 
-  await recordActivityEvent(wallet, "spend", { spendUnits: 2 });
+  recordActivityEventBestEffort(wallet, "spend", { spendUnits: 2 });
 
   return {
     state: nextState,
@@ -841,7 +857,7 @@ export async function activateSparkRefillOnServer(
     throw err;
   }
 
-  await recordActivityEvent(wallet, "spend", { spendUnits: 1 });
+  recordActivityEventBestEffort(wallet, "spend", { spendUnits: 1 });
 
   return {
     state: nextState,
@@ -1083,6 +1099,12 @@ export async function deleteGameGatingFlagsFromRtdb(gameId: string): Promise<voi
   invalidateGameFlagsCache(gameId);
 }
 
+/** Child keys under `gameFlags/` — used by admin reconcile. */
+export async function listGameGatingFlagIds(): Promise<string[]> {
+  const keys = (await readPathShallow("gameFlags")) ?? {};
+  return Object.keys(keys);
+}
+
 // ─── Game play counts ──────────────────────────────────────────────────────────
 
 /** One GET of `gamePlays` — avoids N parallel child reads (Worker subrequest cap). */
@@ -1116,10 +1138,6 @@ export async function fetchGamePlayCountsForIds(
     return Object.fromEntries(unique.map((id) => [id, cached[id]]));
   }
 
-  if (cached) {
-    await invalidateSharedPlayCountsCache();
-  }
-
   const all = await loadPlayCountsWithSharedCache(readAllPlayCounts);
   return Object.fromEntries(
     unique.map((id) => [id, typeof all[id] === "number" ? all[id] : 0])
@@ -1150,8 +1168,8 @@ export async function incrementGamePlayCount(gameId: string): Promise<number> {
   await incrementPath(`gamePlays/${gameId}`, 1);
 
   const bumped = bumpCachedPlayCount(gameId, 1);
-  // Stale KV would overwrite a bumped count on another isolate — drop KV only.
-  void invalidateSharedPlayCountsKv().catch(() => {});
+  // Update KV in place (debounced) — do not delete (avoids stampede).
+  schedulePlayCountsKvPersist();
 
   if (typeof bumped === "number") return bumped;
 
@@ -1732,7 +1750,7 @@ export async function activateScoreSubmitOnServer(
     playerName,
   });
 
-  await recordActivityEvent(wallet, "spend", {
+  recordActivityEventBestEffort(wallet, "spend", {
     spendUnits: 1,
     name: playerName,
   });
@@ -2744,13 +2762,14 @@ export async function recordActivityEvent(
   }
 }
 
-/** Fire-and-forget wrapper so callers never await activity I/O on hot paths. */
+/** Fire-and-forget via waitUntil so the Worker isolate stays alive after the response. */
 export function recordActivityEventBestEffort(
   walletAddress: string,
   kind: ActivityEventKind,
   opts?: { spendUnits?: number; name?: string }
 ): void {
-  void recordActivityEvent(walletAddress, kind, opts);
+  // Rate-limit / KV paths prime getWorkerContext() earlier in the same request.
+  scheduleWorkerWork(recordActivityEvent(walletAddress, kind, opts));
 }
 
 export async function fetchActivityLeaderboardFromServer(

@@ -1,7 +1,7 @@
 import {
   fetchGameGatingFlagsFromRtdb,
   syncGameGatingFlagsToRtdb,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import { fetchGameFromServer } from "@/lib/firestore-server";
 import { Game, GameGatingFlags } from "@/types";
 
@@ -19,23 +19,44 @@ function flagsFromGame(game: Game): GameGatingFlags {
 }
 
 /**
- * Hot-path gating: prefer RTDB mirror (zero Firestore). Fall back to cached
- * Firestore game doc and backfill RTDB on miss.
+ * Prefer RTDB mirror for speed, but always overlay catalog fields from
+ * Firestore when available. Missing RTDB hasLeaderboard used to default to
+ * true and write level progress into `s` instead of `l`.
  */
 export async function resolveGameGating(
   gameId: string
 ): Promise<GameGatingFlags | null> {
-  const fromRtdb = await fetchGameGatingFlagsFromRtdb(gameId);
-  if (fromRtdb) return fromRtdb;
+  const [fromRtdb, game] = await Promise.all([
+    fetchGameGatingFlagsFromRtdb(gameId),
+    fetchGameFromServer(gameId).catch(() => null),
+  ]);
 
-  const game = await fetchGameFromServer(gameId);
-  if (!game) return null;
+  if (!fromRtdb && !game) return null;
 
-  const flags = flagsFromGame(game);
-  await syncGameGatingFlagsToRtdb(gameId, flags).catch(() => {
-    // Backfill is best-effort; cached Firestore doc is still valid.
-  });
-  return flags;
+  if (game) {
+    const fromGame = flagsFromGame(game);
+    const flags: GameGatingFlags = {
+      ...(fromRtdb ?? fromGame),
+      active: fromGame.active,
+      live: fromGame.live,
+      hasLeaderboard: fromGame.hasLeaderboard,
+    };
+
+    if (
+      !fromRtdb ||
+      fromRtdb.hasLeaderboard !== flags.hasLeaderboard ||
+      fromRtdb.active !== flags.active ||
+      fromRtdb.live !== flags.live
+    ) {
+      void syncGameGatingFlagsToRtdb(gameId, flags).catch(() => {
+        // Backfill is best-effort.
+      });
+    }
+
+    return flags;
+  }
+
+  return fromRtdb;
 }
 
 export function isGameVisibleFromFlags(flags: GameGatingFlags): boolean {

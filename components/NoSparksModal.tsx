@@ -1,6 +1,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
+import { playTouchSfx } from "@/lib/sfx";
 
 interface NoSparksModalProps {
   open: boolean;
@@ -16,7 +17,14 @@ export default function NoSparksModal({
   if (!open) return null;
 
   const modal = (
-    <div className="no-sparks-backdrop" onClick={onClose} role="presentation">
+    <div
+      className="no-sparks-backdrop"
+      onClick={() => {
+        playTouchSfx();
+        onClose();
+      }}
+      role="presentation"
+    >
       <div
         className="no-sparks-popup"
         role="dialog"
@@ -33,7 +41,10 @@ export default function NoSparksModal({
         <button
           type="button"
           className="no-sparks-popup__btn"
-          onClick={onGetSpark}
+          onClick={() => {
+            playTouchSfx();
+            onGetSpark();
+          }}
         >
           Get Spark
         </button>

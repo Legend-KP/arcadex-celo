@@ -1,7 +1,10 @@
 /** Shared Cloudflare KV access (RATE_LIMIT_KV binding). */
 
-type KvLike = {
+import { getWorkerContext } from "@/lib/worker-context";
+
+export type KvLike = {
   get(key: string): Promise<string | null>;
+  get(keys: string[]): Promise<Map<string, string | null>>;
   put(
     key: string,
     value: string,
@@ -12,10 +15,9 @@ type KvLike = {
 
 export async function getWorkerKv(): Promise<KvLike | null> {
   try {
-    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-    const ctx = await getCloudflareContext({ async: true });
-    const env = ctx.env as { RATE_LIMIT_KV?: KvLike };
-    return env.RATE_LIMIT_KV ?? null;
+    const ctx = await getWorkerContext();
+    const env = ctx?.env as { RATE_LIMIT_KV?: KvLike } | undefined;
+    return env?.RATE_LIMIT_KV ?? null;
   } catch {
     return null;
   }

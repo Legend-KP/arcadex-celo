@@ -14,7 +14,7 @@ import {
   fetchUserActivityFromServer,
   findActivityRank,
   resolveActivityWeekId,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import {
   isWalletAddress,
   normalizeWalletAddress,

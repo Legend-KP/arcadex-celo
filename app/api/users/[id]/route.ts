@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchUserFromServer, upsertUserOnServer } from "@/lib/rtdb-server";
+import { fetchUserFromServer, upsertUserOnServer } from "@/lib/player-backend";
 import {
   checkRateLimit,
   getClientIp,
@@ -31,7 +31,20 @@ export async function GET(
       return NextResponse.json({ error: "User id required." }, { status: 400 });
     }
 
-    const user = await fetchUserFromServer(id);
+    const wallet = tryNormalizeWalletAddress(id);
+    if (!wallet) {
+      return NextResponse.json({ error: "Invalid wallet address." }, { status: 400 });
+    }
+
+    const auth = await requireWalletAuth(request, wallet);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: auth.error },
+        { status: auth.status }
+      );
+    }
+
+    const user = await fetchUserFromServer(wallet);
     return NextResponse.json({ user: user ?? null });
   } catch (err) {
     const message =

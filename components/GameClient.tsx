@@ -451,28 +451,29 @@ export default function GameClient({
           let gameStateFound = false;
           if (wallet) {
             try {
-              const [{ progress }, stateResult] = await Promise.all([
-                getGameProgress(game.id, wallet, {
-                  playerName: bootstrapName || undefined,
-                  force: true,
-                }),
-                getGameState(game.id, wallet).catch(() => null),
-              ]);
+              const [{ progress, hasLeaderboard }, stateResult] =
+                await Promise.all([
+                  getGameProgress(game.id, wallet, {
+                    playerName: bootstrapName || undefined,
+                    force: true,
+                  }),
+                  getGameState(game.id, wallet).catch(() => null),
+                ]);
               highScore = progress.score ?? 0;
               level = progress.level ?? 0;
-                modes = progress.modes ?? null;
-                personalBestRef.current = highScore;
-                if (stateResult) {
-                  gameState = stateResult.state;
-                  gameStateRevision = stateResult.revision;
-                  gameStateFound = stateResult.found;
-                  if (!modes && stateResult.state) {
-                    modes =
-                      extractModeLevels(
-                        stateResult.state as Record<string, unknown>
-                      ) ?? null;
-                  }
+              modes = progress.modes ?? null;
+              personalBestRef.current = highScore;
+              if (stateResult) {
+                gameState = stateResult.state;
+                gameStateRevision = stateResult.revision;
+                gameStateFound = stateResult.found;
+                if (!modes && stateResult.state) {
+                  modes =
+                    extractModeLevels(
+                      stateResult.state as Record<string, unknown>
+                    ) ?? null;
                 }
+              }
             } catch {
               // Progress is optional during bootstrap
             }

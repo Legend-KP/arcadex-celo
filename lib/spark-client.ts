@@ -17,7 +17,7 @@ export async function fetchSparkData(
 ): Promise<SparkApiResponse> {
   const res = await fetch(
     `/api/sparks?walletAddress=${encodeURIComponent(walletAddress)}`,
-    { cache: "no-store" }
+    { cache: "no-store", headers: walletAuthHeaders() }
   );
 
   if (!res.ok) {

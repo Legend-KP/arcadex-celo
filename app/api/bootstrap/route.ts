@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { bootstrapUserOnServer } from "@/lib/rtdb-server";
+import { bootstrapUserOnServer } from "@/lib/player-backend";
 import {
   checkRateLimit,
   getClientIp,

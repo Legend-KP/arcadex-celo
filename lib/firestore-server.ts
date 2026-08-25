@@ -21,10 +21,11 @@ import { invalidateGameFlagsCache } from "@/lib/rtdb-cache";
 import {
   deleteGameGatingFlagsFromRtdb,
   syncGameGatingFlagsToRtdb,
-} from "@/lib/rtdb-server";
+} from "@/lib/player-backend";
 import { Game, GameGatingFlags } from "@/types";
 import { getFirebaseAccessToken, getProjectId, getServiceAccount } from "@/lib/firebase-admin";
 import { fetchWithTimeout } from "@/lib/firebase-fetch";
+import { noteFirestoreReads } from "@/lib/firestore-read-counter";
 import { normalizeImageAssetUrl } from "@/lib/game-assets";
 
 type FirestoreValue = {
@@ -183,7 +184,10 @@ async function listDocuments(path: string): Promise<FirestoreDocument[]> {
   }
 
   const data = (await res.json()) as { documents?: FirestoreDocument[] };
-  return data.documents ?? [];
+  const docs = data.documents ?? [];
+  // Firestore bills one read per document returned by a list.
+  noteFirestoreReads(Math.max(docs.length, 1));
+  return docs;
 }
 
 function encodeFields(
@@ -257,12 +261,16 @@ export async function fetchGamesFromServer(): Promise<Game[]> {
 
 async function fetchGameFromFirestore(id: string): Promise<Game | null> {
   const res = await firestoreFetch(`games/${id}`);
-  if (res.status === 404) return null;
+  if (res.status === 404) {
+    noteFirestoreReads(1);
+    return null;
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Firestore request failed (${res.status}): ${text}`);
   }
 
+  noteFirestoreReads(1);
   return docToGame((await res.json()) as FirestoreDocument);
 }
 

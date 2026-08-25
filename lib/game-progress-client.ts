@@ -35,7 +35,9 @@ export async function getGameProgress(
   if (opts?.playerName?.trim()) {
     params.set("name", opts.playerName.trim());
   }
-  const res = await fetch(`/api/games/${gameId}/progress?${params}`);
+  const res = await fetch(`/api/games/${gameId}/progress?${params}`, {
+    headers: walletAuthHeaders(),
+  });
   const data = (await res.json()) as GameProgressResponse & { error?: string };
 
   if (!res.ok) {
