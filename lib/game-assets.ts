@@ -349,6 +349,9 @@ const GAME_TUTORIAL_BY_FOLDER: Record<string, string> = {
   "coin-sort": "/tutorials/COIN-SORT.webp",
   coinsort: "/tutorials/COIN-SORT.webp",
   "dot-connect": "/tutorials/DOT-CONNECT.webp",
+  "jelly-jumble": "/tutorials/JELLY-JUMBLE.webp",
+  jellyjumble: "/tutorials/JELLY-JUMBLE.webp",
+  jelly: "/tutorials/JELLY-JUMBLE.webp",
   "line-link": "/tutorials/LINE-LINK.webp",
   "math-run": "/tutorials/MATH-RUN.webp",
   "orbit-flow": "/tutorials/ORBIT-FLOW.webp",
@@ -361,6 +364,8 @@ function resolveTutorialKey(game: Game): string {
 /** Tutorial URLs to try, in priority order (hyphenated name, then spaced filename). */
 export function getGameTutorialCandidates(game: Game): string[] {
   const key = resolveTutorialKey(game);
+  const nameSlug = slugifyGameName(game.name);
+  const id = game.id.trim().toLowerCase();
   const seen = new Set<string>();
   const out: string[] = [];
   const push = (url?: string) => {
@@ -370,6 +375,10 @@ export function getGameTutorialCandidates(game: Game): string[] {
   };
 
   push(GAME_TUTORIAL_BY_FOLDER[key]);
+  push(GAME_TUTORIAL_BY_FOLDER[nameSlug]);
+  if (nameSlug.includes("jelly") || (!isFirestoreAutoId(id) && id.includes("jelly"))) {
+    push(GAME_TUTORIAL_BY_FOLDER["jelly-jumble"]);
+  }
   const hyphen = key.toUpperCase();
   const spaced = key.replace(/-/g, " ").toUpperCase();
   push(`/tutorials/${hyphen}.webp`);
