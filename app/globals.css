@@ -107,16 +107,6 @@ a { color: inherit; text-decoration: none; }
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-<<<<<<< Updated upstream
-=======
-}
-
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
->>>>>>> Stashed changes
 }
 
 .topbar .spark-battery-wrap {
@@ -1165,11 +1155,7 @@ a { color: inherit; text-decoration: none; }
   border: none;
   box-shadow: none;
   transition: transform 0.2s ease, opacity 0.15s;
-<<<<<<< Updated upstream
-  animation: game-card-enter 0.45s cubic-bezier(0.22, 1, 0.36, 1) backwards;
-=======
   animation: game-card-enter 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
->>>>>>> Stashed changes
 }
 .game-card:nth-child(1) { animation-delay: 0.04s; }
 .game-card:nth-child(2) { animation-delay: 0.1s; }
@@ -1207,11 +1193,7 @@ a { color: inherit; text-decoration: none; }
     0 2px 6px rgba(15, 23, 42, 0.06),
     0 0 0 1px rgba(214, 168, 75, 0.18),
     0 0 18px rgba(255, 200, 100, 0.18);
-<<<<<<< Updated upstream
-  transition: box-shadow 0.22s ease;
-=======
   transition: box-shadow 0.22s ease, transform 0.22s ease;
->>>>>>> Stashed changes
 }
 
 .game-card:hover .thumb-wrap {
@@ -5270,180 +5252,3 @@ a { color: inherit; text-decoration: none; }
   opacity: 0.65;
   cursor: wait;
 }
-<<<<<<< Updated upstream
-=======
-
-/* Weekly activity leaderboard button — same size language as spark battery */
-.activity-lb-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-height: 36px;
-  padding: 6px 12px;
-  border: 1px solid rgba(214, 168, 75, 0.5);
-  border-radius: 999px;
-  background: linear-gradient(180deg, #ffffff 0%, #fff8eb 55%, #fef3c7 100%);
-  box-shadow:
-    0 2px 8px rgba(180, 120, 20, 0.12),
-    0 1px 2px rgba(0, 0, 0, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-  transition: transform 0.14s ease, box-shadow 0.18s ease, filter 0.15s;
-  font: inherit;
-  color: inherit;
-}
-.activity-lb-btn:hover {
-  filter: brightness(1.03);
-  box-shadow:
-    0 4px 12px rgba(180, 120, 20, 0.16),
-    0 1px 3px rgba(0, 0, 0, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95);
-}
-.activity-lb-btn:active {
-  transform: scale(0.96);
-  box-shadow: 0 1px 4px rgba(180, 120, 20, 0.1);
-}
-.activity-lb-btn__label {
-  font-family: var(--font-body);
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1;
-  color: #78350f;
-  letter-spacing: -0.2px;
-  white-space: nowrap;
-}
-
-.activity-lb-hint {
-  margin: 0 4px 4px;
-  font-size: 13px;
-  line-height: 1.35;
-  color: #64748b;
-  text-align: center;
-  flex-shrink: 0;
-}
-
-.activity-lb-you {
-  margin: 0 0 4px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: rgba(234, 179, 8, 0.1);
-  border: 1px solid rgba(234, 179, 8, 0.35);
-  font-size: 13px;
-  font-weight: 600;
-  color: #92400e;
-  text-align: center;
-  flex-shrink: 0;
-}
-
-.activity-lb-row--you {
-  outline: 1px solid rgba(234, 179, 8, 0.55);
-  background: rgba(234, 179, 8, 0.08);
-}
-
-.activity-lb-week-id {
-  margin: 8px 0 0;
-  text-align: center;
-  font-size: 11px;
-  color: #94a3b8;
-  flex-shrink: 0;
-}
-
-/*
- * Portaled to document.body. Anchored to the TOP so the full sheet is visible
- * under MiniPay chrome (sticky topbar no longer traps position:fixed).
- */
-.activity-lb-backdrop {
-  align-items: flex-start;
-  justify-content: center;
-  padding:
-    max(12px, env(safe-area-inset-top, 0px))
-    14px
-    max(16px, env(safe-area-inset-bottom, 0px));
-  box-sizing: border-box;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  z-index: 400;
-}
-
-.activity-lb-sheet {
-  width: 100%;
-  max-width: 400px;
-  max-height: min(85dvh, 640px);
-  margin: 0 auto;
-  padding: 16px;
-  gap: 8px;
-  flex-shrink: 0;
-  overflow: hidden;
-  border-radius: 24px;
-  background: #ffffff;
-  border: 2px solid #eab308;
-  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.28);
-  animation: activity-lb-sheet-in 0.3s ease-out;
-}
-
-@keyframes activity-lb-sheet-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.activity-lb-sheet .lb-header {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  padding-bottom: 10px;
-  margin-bottom: 0;
-  flex-shrink: 0;
-}
-
-.activity-lb-sheet .lb-title {
-  color: #1a1a2e;
-  font-size: 16px;
-  white-space: normal;
-  line-height: 1.2;
-}
-
-.activity-lb-sheet .lb-live-badge {
-  background: linear-gradient(135deg, #eab308, #ca8a04);
-  box-shadow: 0 2px 8px rgba(202, 138, 4, 0.35);
-}
-
-.activity-lb-sheet .lb-trophy-hex {
-  width: 36px;
-  height: 36px;
-  background: linear-gradient(145deg, #fef3c7, #fde68a);
-  box-shadow: 0 4px 12px rgba(234, 179, 8, 0.28);
-}
-
-.activity-lb-sheet .lb-close {
-  width: 36px;
-  height: 36px;
-  background: rgba(0, 0, 0, 0.04);
-  border-color: rgba(0, 0, 0, 0.1);
-  color: #64748b;
-}
-
-.activity-lb-sheet .lb-timer-panel {
-  flex-shrink: 0;
-  margin: 0;
-}
-
-.activity-lb-sheet .lb-table-head {
-  flex-shrink: 0;
-}
-
-.activity-lb-sheet .lb-list {
-  flex: 1 1 auto;
-  min-height: 120px;
-  max-height: none;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-}
->>>>>>> Stashed changes
