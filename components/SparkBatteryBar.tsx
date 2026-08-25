@@ -210,7 +210,9 @@ export default function SparkBatteryBar() {
 
         <section className="spark-panel__shop">
           <h3 className="spark-panel__shop-title">
-            <span aria-hidden>✦</span> Get More Sparks
+            <span aria-hidden>✦</span>
+            <span>Get More Sparks</span>
+            <span aria-hidden>✦</span>
           </h3>
 
           <div className="spark-shop-card">
