@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Game, gameHasContestLive } from "@/types";
 import AppFooter from "@/components/AppFooter";
 import GameCard from "@/components/GameCard";
-import HomeFilterBar, { type HomeFilter } from "@/components/HomeFilterBar";
+import HomeFilterBar, { type HomeSort } from "@/components/HomeFilterBar";
 import Logo from "@/components/Logo";
 import SparkBatteryBar from "@/components/SparkBatteryBar";
 import ActivityLeaderboardButton from "@/components/ActivityLeaderboardButton";
@@ -16,48 +16,58 @@ import { fetchHomeShell } from "@/lib/home-client";
 import { getCachedWallet } from "@/lib/player-id";
 import { getRecentPlayedMap } from "@/lib/recent-played";
 
-function filterGames(
+function applyHomeBrowse(
   games: Game[],
-  filter: HomeFilter,
+  sort: HomeSort,
+  contestOnly: boolean,
   searchQuery: string,
   recentMap: Record<string, number>
 ): Game[] {
-  if (filter === "contest") {
-    return games.filter((game) => gameHasContestLive(game));
+  let next = games;
+
+  if (contestOnly) {
+    next = next.filter((game) => gameHasContestLive(game));
   }
 
-  if (filter === "recent") {
-    return games
+  const q = searchQuery.trim().toLowerCase();
+  if (q) {
+    next = next.filter((game) => game.name.toLowerCase().includes(q));
+  }
+
+  if (sort === "recent") {
+    next = [...next]
       .filter((game) => recentMap[game.id] !== undefined)
       .sort((a, b) => (recentMap[b.id] ?? 0) - (recentMap[a.id] ?? 0));
+  } else if (sort === "az") {
+    next = [...next].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+    );
+  } else if (sort === "za") {
+    next = [...next].sort((a, b) =>
+      b.name.localeCompare(a.name, undefined, { sensitivity: "base" })
+    );
+  } else if (sort === "latest") {
+    next = [...next].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
   }
 
-  if (filter === "search") {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return games;
-    return games.filter((game) => game.name.toLowerCase().includes(q));
-  }
-
-  return games;
+  return next;
 }
 
 function emptyMessage(
-  filter: HomeFilter,
+  sort: HomeSort,
+  contestOnly: boolean,
   searchQuery: string,
   hasAnyGames: boolean
 ): string {
   if (!hasAnyGames) return "No games yet. Check back soon!";
-  if (filter === "recent") {
-    return "No recently played games yet. Open a game to see it here.";
-  }
-  if (filter === "contest") {
-    return "No live contests right now. Check back soon!";
-  }
-  if (filter === "search" && searchQuery.trim()) {
+  if (searchQuery.trim()) {
     return `No games match “${searchQuery.trim()}”.`;
   }
-  if (filter === "search") {
-    return "Type a game name to search.";
+  if (contestOnly) {
+    return "No live contests right now. Check back soon!";
+  }
+  if (sort === "recent") {
+    return "No recently played games yet. Open a game to see it here.";
   }
   return "No games yet. Check back soon!";
 }
@@ -71,7 +81,9 @@ export default function HomePage() {
   });
   const [loading, setLoading] = useState(() => !readCachedGamesList());
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState<HomeFilter>("all");
+  const [sort, setSort] = useState<HomeSort>("default");
+  const [contestOnly, setContestOnly] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [recentMap, setRecentMap] = useState<Record<string, number>>({});
 
@@ -149,17 +161,21 @@ export default function HomePage() {
   }, []);
 
   const visibleGames = useMemo(
-    () => filterGames(games, filter, searchQuery, recentMap),
-    [games, filter, searchQuery, recentMap]
+    () =>
+      applyHomeBrowse(
+        games,
+        sort,
+        contestOnly,
+        searchOpen ? searchQuery : "",
+        recentMap
+      ),
+    [games, sort, contestOnly, searchOpen, searchQuery, recentMap]
   );
 
-  const handleFilterChange = (next: HomeFilter) => {
-    setFilter(next);
+  const handleSortChange = (next: HomeSort) => {
+    setSort(next);
     if (next === "recent") {
       setRecentMap(getRecentPlayedMap());
-    }
-    if (next !== "search") {
-      setSearchQuery("");
     }
   };
 
@@ -167,22 +183,24 @@ export default function HomePage() {
     <div className="home">
       <div className="home-ambient" aria-hidden />
       <div className="home-shell">
-        <div className="home-sticky">
-          <header className="topbar">
-            <Logo variant="header" />
-            <div className="topbar-actions">
-              <ActivityLeaderboardButton />
-              <SparkBatteryBar />
-            </div>
-          </header>
+        <header className="topbar home-sticky">
+          <Logo variant="header" />
+          <div className="topbar-actions">
+            <ActivityLeaderboardButton />
+            <SparkBatteryBar />
+          </div>
+        </header>
 
-          <HomeFilterBar
-            filter={filter}
-            searchQuery={searchQuery}
-            onFilterChange={handleFilterChange}
-            onSearchQueryChange={setSearchQuery}
-          />
-        </div>
+        <HomeFilterBar
+          sort={sort}
+          contestOnly={contestOnly}
+          searchOpen={searchOpen}
+          searchQuery={searchQuery}
+          onSortChange={handleSortChange}
+          onContestOnlyChange={setContestOnly}
+          onSearchOpenChange={setSearchOpen}
+          onSearchQueryChange={setSearchQuery}
+        />
 
         <main className="home-main">
           {error ? (
@@ -199,7 +217,12 @@ export default function HomePage() {
             </div>
           ) : visibleGames.length === 0 ? (
             <p className="no-games">
-              {emptyMessage(filter, searchQuery, games.length > 0)}
+              {emptyMessage(
+                sort,
+                contestOnly,
+                searchOpen ? searchQuery : "",
+                games.length > 0
+              )}
             </p>
           ) : (
             <div className="games-grid">
