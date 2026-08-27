@@ -22,6 +22,7 @@ import {
   playPurpose,
   signInOnChain,
 } from "@/lib/arcadex-tx-hub";
+import { recordRecentPlayed } from "@/lib/recent-played";
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
@@ -65,6 +66,7 @@ export default function GamePageClient() {
         setGame(nextGame);
 
         if (nextGame && gameIsLive(nextGame)) {
+          recordRecentPlayed(nextGame.id);
           fetch(`/api/games/${id}/play`, { method: "POST" }).catch(() => {
             // Play tracking is best-effort
           });
