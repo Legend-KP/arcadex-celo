@@ -29,7 +29,8 @@ export async function fetchHomeShell(
 ): Promise<HomeShellPayload> {
   const key = homeKey(walletAddress);
   if (last && last.key === key && Date.now() - last.at < HOME_CLIENT_TTL_MS) {
-    return last.data;
+    // Wallet home without sparks was likely pre-session — do not reuse it.
+    if (key === "*" || last.data.state) return last.data;
   }
 
   const existing = inflight.get(key);

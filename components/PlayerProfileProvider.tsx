@@ -234,6 +234,9 @@ export default function PlayerProfileProvider({
       pendingWalletRef.current = wallet;
 
       try {
+        // Catalog, plays, and sparks — do not wait on the Celo streak read.
+        void fetchHomeShell(wallet);
+
         // Sign-in: ArcadeXRewards checkIn/spin → session JWT.
         if (isArcadeXRewardsConfigured()) {
           // Runtime config (Cloudflare vars) — do not rely on build-time NEXT_PUBLIC alone.

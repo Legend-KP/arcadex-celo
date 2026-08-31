@@ -36,32 +36,38 @@ export async function GET(request: Request) {
   }
 
   try {
-    const catalog = await loadCatalogListForRequest(request);
     const { searchParams } = new URL(request.url);
     const walletRaw = searchParams.get("walletAddress")?.trim() ?? "";
+    const wallet =
+      walletRaw && isWalletAddress(walletRaw)
+        ? normalizeWalletAddress(walletRaw)
+        : "";
 
-    // Public: games + playCounts. Private: user / sparks — require session.
-    let user = null;
-    let state = null;
-    let sparks = null;
+    const catalogPromise = loadCatalogListForRequest(request);
+    const playerPromise = wallet
+      ? (async () => {
+          const auth = await requireWalletAuth(request, wallet);
+          if (!auth.ok) {
+            return { user: null, state: null, sparks: null };
+          }
+          try {
+            const homePlayer = await fetchHomePlayerFromServer(wallet);
+            return {
+              user: homePlayer.user,
+              state: homePlayer.state,
+              sparks: computeSparkSnapshot(homePlayer.state),
+            };
+          } catch {
+            return { user: null, state: null, sparks: null };
+          }
+        })()
+      : Promise.resolve({ user: null, state: null, sparks: null });
 
-    if (walletRaw && isWalletAddress(walletRaw)) {
-      const wallet = normalizeWalletAddress(walletRaw);
-      const auth = await requireWalletAuth(request, wallet);
-      if (auth.ok) {
-        try {
-          const homePlayer = await fetchHomePlayerFromServer(wallet);
-          user = homePlayer.user;
-          state = homePlayer.state;
-          sparks = computeSparkSnapshot(homePlayer.state);
-        } catch {
-          user = null;
-          state = null;
-          sparks = null;
-        }
-      }
-      // Unauthenticated or mismatched session: omit private fields (no IDOR leak).
-    }
+    const [catalog, player] = await Promise.all([
+      catalogPromise,
+      playerPromise,
+    ]);
+    const { user, state, sparks } = player;
 
     recordApiMetric({
       endpoint: "/api/home",

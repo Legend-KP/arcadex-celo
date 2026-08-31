@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { fetchHomeShell } from "@/lib/home-client";
@@ -64,6 +65,7 @@ export default function SparkProvider({
     () => localSparkData().state
   );
   const [loading, setLoading] = useState(true);
+  const sparkWalletRef = useRef("");
 
   const sparks = useMemo(
     () => computeSparkSnapshot(state),
@@ -115,36 +117,42 @@ export default function SparkProvider({
   }, [walletAddress]);
 
   useEffect(() => {
-    if (!walletAddress || !isReady) {
-      if (!walletAddress) {
-        setState(localSparkData().state);
-      }
-      setLoading(!isReady && Boolean(walletAddress));
+    if (!walletAddress) {
+      sparkWalletRef.current = "";
+      setState(localSparkData().state);
+      setLoading(false);
       return;
+    }
+
+    if (sparkWalletRef.current !== walletAddress) {
+      sparkWalletRef.current = walletAddress;
+      setLoading(true);
     }
 
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
       try {
         const home = await fetchHomeShell(walletAddress);
-        if (!cancelled) {
-          if (home.state) {
-            setState(coerceSparkState(home.state));
-          } else {
-            const data = await fetchSparkData(walletAddress);
-            if (!cancelled) setState(coerceSparkState(data.state));
-          }
+        if (cancelled) return;
+        if (home.state) {
+          setState(coerceSparkState(home.state));
+          setLoading(false);
+          return;
         }
+        // No session yet — wait for profile/streak to finish, then retry.
+        if (!isReady) return;
+
+        const data = await fetchSparkData(walletAddress);
+        if (!cancelled) setState(coerceSparkState(data.state));
       } catch {
         if (!cancelled) setState(localSparkData().state);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && isReady) setLoading(false);
       }
     }
 
-    load();
+    void load();
     return () => {
       cancelled = true;
     };
