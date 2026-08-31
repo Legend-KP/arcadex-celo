@@ -1,10 +1,9 @@
-/** Shared Cloudflare KV access (RATE_LIMIT_KV binding). */
+/** Shared Cloudflare KV access (RATE_LIMIT_KV binding: catalog, play counts, streak). */
 
 import { getWorkerContext } from "@/lib/worker-context";
 
 export type KvLike = {
   get(key: string): Promise<string | null>;
-  get(keys: string[]): Promise<Map<string, string | null>>;
   put(
     key: string,
     value: string,
