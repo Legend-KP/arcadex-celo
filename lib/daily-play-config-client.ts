@@ -12,7 +12,7 @@ function fallbackConfig(): DailyPlayConfig {
     ? "shuffle"
     : "streak";
   const campaignId = Number(
-    process.env.NEXT_PUBLIC_SHUFFLE_CAMPAIGN_ID?.trim() || "2"
+    process.env.NEXT_PUBLIC_SHUFFLE_CAMPAIGN_ID?.trim() || "3"
   );
   return {
     mode: mode as DailyPlayMode,
@@ -38,7 +38,7 @@ export async function fetchDailyPlayConfig(
       }
       cached = {
         mode: data.mode,
-        campaignId: Number(data.campaignId) || (data.mode === "shuffle" ? 2 : 1),
+        campaignId: Number(data.campaignId) || (data.mode === "shuffle" ? 3 : 1),
         shuffle: data.mode === "shuffle",
       };
       return cached;

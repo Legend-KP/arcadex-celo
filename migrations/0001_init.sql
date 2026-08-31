@@ -1,5 +1,5 @@
 ﻿-- ArcadeX hybrid player store (D1). Firestore keeps the games catalog.
--- Preview DB: arcadex-celo-preview. Production stays on RTDB until migrated.
+-- Preview: arcadex-celo-preview. Production: arcadex-celo-prod (PLAYER_DATA_BACKEND=d1).
 
 CREATE TABLE IF NOT EXISTS users (
   wallet TEXT PRIMARY KEY NOT NULL,

@@ -2,7 +2,7 @@
  * Cloudflare D1 access for the hybrid player store.
  *
  * On when Worker has `DB` + `PLAYER_DATA_BACKEND=d1`.
- * Production MiniPay stays on RTDB until you flip the var after migration.
+ * Production and preview set PLAYER_DATA_BACKEND=d1 in wrangler.jsonc.
  */
 
 import { getWorkerContext } from "@/lib/worker-context";

@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     if (Number(progress.campaign.campaignType) !== 1) {
       return NextResponse.json(
         {
-          error: "Campaign is not a SHUFFLE campaign. Configure campaign 2 on-chain.",
+          error: "Campaign is not a SHUFFLE campaign. Configure the shuffle campaign on-chain.",
           code: "WRONG_TYPE",
         },
         { status: 400 }

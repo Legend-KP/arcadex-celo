@@ -25,7 +25,7 @@ export function isShuffleDailyPlay(): boolean {
 export const DEFAULT_SHUFFLE_CAMPAIGN_ID = Number(
   process.env.SHUFFLE_CAMPAIGN_ID?.trim() ||
     process.env.NEXT_PUBLIC_SHUFFLE_CAMPAIGN_ID?.trim() ||
-    "2"
+    "3"
 );
 
 /** Campaign used for today's daily sign-in ceremony. */
