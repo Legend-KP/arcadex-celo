@@ -9,6 +9,7 @@ import SparkBatteryBar from "@/components/SparkBatteryBar";
 import ActivityLeaderboardButton from "@/components/ActivityLeaderboardButton";
 import {
   readCachedGamesList,
+  shouldBackgroundRefreshGamesList,
   writeCachedGamesList,
 } from "@/lib/games-list-client-cache";
 import { fetchHomeShell } from "@/lib/home-client";
@@ -69,7 +70,10 @@ export default function HomePage() {
     }
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
+      if (
+        document.visibilityState === "visible" &&
+        shouldBackgroundRefreshGamesList()
+      ) {
         void loadGames(true);
       }
     };
