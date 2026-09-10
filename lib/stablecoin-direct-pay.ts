@@ -1,4 +1,12 @@
-import { formatUnits, getAddress, type Abi, type Address, type Hash } from "viem";
+import {
+  encodeFunctionData,
+  formatUnits,
+  getAddress,
+  toHex,
+  type Abi,
+  type Address,
+  type Hash,
+} from "viem";
 import { celo } from "viem/chains";
 import {
   formatChainError,
@@ -8,7 +16,10 @@ import {
   readCeloContractValue,
   waitForCeloTransactionReceipt,
 } from "@/lib/celo-public-client";
-import { createMiniPayWalletClient } from "@/lib/minipay";
+import {
+  createMiniPayWalletClient,
+  getInjectedProvider,
+} from "@/lib/minipay";
 import {
   CELO_USDC_ADDRESS,
   CELO_USDT_ADDRESS,
@@ -24,6 +35,9 @@ const GAS_BUFFER = BigInt(20_000);
 /** Fixed gas limit — skips MiniPay eth_estimateGas (often "unknown RPC error"). */
 const TRANSFER_GAS_LIMIT = BigInt(120_000);
 
+/** TEMP: surface raw errors in MiniPay UI (no easy console on device). Remove after fix. */
+const DEBUG_PAYMENTS = true;
+
 async function readBalance(token: Address, account: Address): Promise<bigint> {
   return readCeloContract({
     address: token,
@@ -33,10 +47,6 @@ async function readBalance(token: Address, account: Address): Promise<bigint> {
   });
 }
 
-/**
- * Prefer a token with fee + gas buffer. If only exact fee is available, allow
- * it when the other stablecoin can cover MiniPay gas.
- */
 async function pickPaymentToken(
   account: Address,
   fee: bigint
@@ -65,9 +75,41 @@ async function pickPaymentToken(
   );
 }
 
-function toFriendlyError(error: unknown, fallback: string): Error {
+function serializeRawError(error: unknown): string {
+  try {
+    if (error instanceof Error) {
+      return JSON.stringify(error, Object.getOwnPropertyNames(error));
+    }
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function summarizeRawError(error: unknown): string {
+  const raw = serializeRawError(error);
+  const formatted = formatChainError(error);
+  const combined = `${formatted} | ${raw}`;
+  return combined.length > 280 ? `${combined.slice(0, 277)}...` : combined;
+}
+
+function logRawError(stage: string, error: unknown): void {
+  console.error(`[pay:${stage}] RAW ERROR:`, error);
+  console.error(`[pay:${stage}] RAW ERROR JSON:`, serializeRawError(error));
+}
+
+function toFriendlyError(
+  error: unknown,
+  fallback: string,
+  stage?: string
+): Error {
   if (isUserRejection(error)) {
     return new Error("Payment cancelled in MiniPay.");
+  }
+
+  if (DEBUG_PAYMENTS) {
+    const label = stage ? `[${stage}] ` : "";
+    return new Error(`${label}${summarizeRawError(error) || fallback}`);
   }
 
   const formatted = formatChainError(error);
@@ -107,11 +149,57 @@ function isUserRejection(error: unknown): boolean {
   );
 }
 
+async function runStage<T>(stage: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    logRawError(stage, error);
+    throw toFriendlyError(error, `Payment failed during ${stage}.`, stage);
+  }
+}
+
+/**
+ * Fully-prepared eth_sendTransaction — MiniPay only signs/sends.
+ * Avoids viem prepareTransactionRequest hitting MiniPay for gas/price/nonce.
+ */
+async function sendViaMiniPayProvider(options: {
+  account: Address;
+  tokenAddr: Address;
+  data: `0x${string}`;
+  feeCurrency: Address;
+  gasPrice: bigint;
+  nonce: number;
+}): Promise<Hash> {
+  const provider = getInjectedProvider();
+  if (!provider) {
+    throw new Error("Open ArcadeX inside MiniPay to continue.");
+  }
+
+  const tx = {
+    from: options.account,
+    to: options.tokenAddr,
+    data: options.data,
+    value: "0x0",
+    gas: toHex(TRANSFER_GAS_LIMIT),
+    gasPrice: toHex(options.gasPrice),
+    nonce: toHex(options.nonce),
+    feeCurrency: options.feeCurrency,
+  };
+
+  const txHash = await provider.request({
+    method: "eth_sendTransaction",
+    params: [tx as never],
+  });
+
+  if (typeof txHash !== "string" || !txHash.startsWith("0x")) {
+    throw new Error("MiniPay did not return a transaction hash.");
+  }
+
+  return txHash as Hash;
+}
+
 /**
  * One MiniPay confirmation: ERC-20 `transfer(fee)` into the payment contract.
- *
- * gas + gasPrice + nonce are filled from public Celo RPCs so MiniPay's
- * provider is only asked to sign/send — not eth_estimateGas / eth_gasPrice.
  */
 export async function purchaseStablecoinFeeOnChain(options: {
   contractAddress: Address;
@@ -132,55 +220,105 @@ export async function purchaseStablecoinFeeOnChain(options: {
   }
   const account = getAddress(rawAccount);
 
-  const paused = await readCeloContractValue<boolean>({
-    address: contractAddress,
-    abi: contractAbi,
-    functionName: "paused",
-  });
+  const paused = await runStage("paused", () =>
+    readCeloContractValue<boolean>({
+      address: contractAddress,
+      abi: contractAbi,
+      functionName: "paused",
+    })
+  );
   if (paused) {
     throw new Error("Payments are paused. Please try again later.");
   }
 
-  const fee = await readCeloContract({
-    address: contractAddress,
-    abi: contractAbi,
-    functionName: "fee",
-  });
+  const fee = await runStage("fee", () =>
+    readCeloContract({
+      address: contractAddress,
+      abi: contractAbi,
+      functionName: "fee",
+    })
+  );
 
-  const token = await pickPaymentToken(account, fee);
+  const token = await runStage("balance", () =>
+    pickPaymentToken(account, fee)
+  );
   const tokenAddr = tokenAddress(token);
   const feeCurrency = getAddress(tokenFeeCurrency(token));
   const recipient = getAddress(contractAddress);
 
-  const [gasPrice, nonce] = await Promise.all([
-    getCeloFeeCurrencyGasPrice(feeCurrency),
-    getCeloTransactionCount(account),
-  ]);
+  const gasPrice = await runStage("gasPrice", () =>
+    getCeloFeeCurrencyGasPrice(feeCurrency)
+  );
+  const nonce = await runStage("nonce", () =>
+    getCeloTransactionCount(account)
+  );
+
+  const data = encodeFunctionData({
+    abi: ERC20_ABI,
+    functionName: "transfer",
+    args: [recipient, fee],
+  });
+
+  if (DEBUG_PAYMENTS) {
+    console.info("[pay:prepare]", {
+      account,
+      token,
+      tokenAddr,
+      recipient,
+      fee: fee.toString(),
+      feeCurrency,
+      gas: TRANSFER_GAS_LIMIT.toString(),
+      gasPrice: gasPrice.toString(),
+      nonce,
+    });
+  }
 
   let payHash: Hash;
+  let providerError: unknown;
+
   try {
-    payHash = await walletClient.writeContract({
+    payHash = await sendViaMiniPayProvider({
       account,
-      chain: celo,
-      address: tokenAddr,
-      abi: ERC20_ABI,
-      functionName: "transfer",
-      args: [recipient, fee],
+      tokenAddr,
+      data,
       feeCurrency,
-      gas: TRANSFER_GAS_LIMIT,
-      // CIP-64: legacy gasPrice in the fee-currency denomination (18 decimals).
-      // Do not use maxFeePerGas — MiniPay rejects EIP-1559 fee fields.
       gasPrice,
       nonce,
     });
   } catch (error) {
-    throw toFriendlyError(
-      error,
-      `${failError} MiniPay could not open the payment sheet.`
-    );
+    providerError = error;
+    logRawError("eth_sendTransaction", error);
+    if (isUserRejection(error)) {
+      throw new Error("Payment cancelled in MiniPay.");
+    }
+
+    // Fallback: viem writeContract with the same pre-filled fields.
+    try {
+      payHash = await walletClient.writeContract({
+        account,
+        chain: celo,
+        address: tokenAddr,
+        abi: ERC20_ABI,
+        functionName: "transfer",
+        args: [recipient, fee],
+        feeCurrency,
+        gas: TRANSFER_GAS_LIMIT,
+        gasPrice,
+        nonce,
+      });
+    } catch (writeError) {
+      logRawError("writeContract", writeError);
+      throw toFriendlyError(
+        writeError ?? providerError,
+        `${failError} MiniPay could not open the payment sheet.`,
+        "writeContract"
+      );
+    }
   }
 
-  const payReceipt = await waitForCeloTransactionReceipt(payHash);
+  const payReceipt = await runStage("receipt", () =>
+    waitForCeloTransactionReceipt(payHash)
+  );
 
   if (payReceipt.status !== "success") {
     throw new Error(
