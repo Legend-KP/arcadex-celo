@@ -59,15 +59,54 @@ export function resetCeloPublicClient(): void {
 }
 
 function collectErrorText(error: unknown): string {
-  if (!(error instanceof Error)) return String(error);
-
-  const parts: string[] = [error.message];
-  let cause: unknown = error.cause;
-  while (cause instanceof Error) {
-    parts.push(cause.message);
-    cause = cause.cause;
+  if (error instanceof Error) {
+    const parts: string[] = [error.message];
+    let cause: unknown = error.cause;
+    while (cause instanceof Error) {
+      parts.push(cause.message);
+      cause = cause.cause;
+    }
+    return parts.join(" ");
   }
-  return parts.join(" ");
+
+  if (typeof error === "string") return error;
+
+  if (typeof error === "object" && error !== null) {
+    const record = error as Record<string, unknown>;
+    const parts: string[] = [];
+
+    if (typeof record.message === "string" && record.message.trim()) {
+      parts.push(record.message.trim());
+    }
+    if (typeof record.reason === "string" && record.reason.trim()) {
+      parts.push(record.reason.trim());
+    }
+    if (typeof record.details === "string" && record.details.trim()) {
+      parts.push(record.details.trim());
+    }
+    if (typeof record.shortMessage === "string" && record.shortMessage.trim()) {
+      parts.push(record.shortMessage.trim());
+    }
+    if (typeof record.code === "number" || typeof record.code === "string") {
+      parts.push(`code ${record.code}`);
+    }
+    if (record.data && typeof record.data === "object") {
+      const data = record.data as Record<string, unknown>;
+      if (typeof data.message === "string" && data.message.trim()) {
+        parts.push(data.message.trim());
+      }
+    }
+
+    if (parts.length > 0) return parts.join(" | ");
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Unknown wallet error";
+    }
+  }
+
+  return String(error);
 }
 
 export function isBlockOutOfRangeError(error: unknown): boolean {
@@ -106,19 +145,20 @@ function isTransactionFailureError(error: unknown): boolean {
 }
 
 function shortChainErrorMessage(error: unknown): string | null {
-  if (!(error instanceof Error)) return null;
-
   const raw = collectErrorText(error);
+  if (!raw || raw === "[object Object]") return null;
+
   const firstLine = raw.split("\n")[0]?.trim() ?? "";
   const withoutViemFooter = firstLine
     .replace(/\s*Version: viem.*$/i, "")
     .replace(/\s*Details:.*$/i, "")
+    .replace(/\s*\|\s*code\s+-?\d+\s*$/i, "")
     .trim();
 
   if (
     withoutViemFooter &&
     withoutViemFooter.length > 0 &&
-    withoutViemFooter.length <= 160 &&
+    withoutViemFooter.length <= 180 &&
     !withoutViemFooter.toLowerCase().includes("rpc request failed")
   ) {
     return withoutViemFooter;
@@ -127,22 +167,30 @@ function shortChainErrorMessage(error: unknown): string | null {
   return null;
 }
 
-/** Map low-level RPC errors to short user-facing messages. */
+/** Map low-level RPC / MiniPay errors to short user-facing messages. */
 export function formatChainError(error: unknown): string {
-  if (error instanceof Error) {
-    if (
-      error.message.includes("Insufficient balance") ||
-      error.message.includes("Connect your wallet") ||
-      error.message.includes("No wallet") ||
-      error.message.includes("approval failed") ||
-      error.message.includes("payment failed") ||
-      error.message.includes("Payments are paused") ||
-      error.message.includes("Almost enough") ||
-      error.message.includes("network fee") ||
-      error.message.includes("Payment cancelled") ||
-      error.message.includes("MiniPay did not return")
-    ) {
-      return error.message;
+  const text = collectErrorText(error);
+
+  if (
+    text.includes("Insufficient balance") ||
+    text.includes("Connect your wallet") ||
+    text.includes("No wallet") ||
+    text.includes("approval failed") ||
+    text.includes("payment failed") ||
+    text.includes("Payments are paused") ||
+    text.includes("Almost enough") ||
+    text.includes("network fee") ||
+    text.includes("Payment cancelled") ||
+    text.includes("MiniPay did not return") ||
+    text.includes("Open ArcadeX inside MiniPay")
+  ) {
+    // Prefer the first recognizable sentence from our own errors.
+    const match = text.match(
+      /((?:Insufficient balance|Connect your wallet|No wallet|Almost enough|Payments are paused|Payment cancelled|MiniPay did not return|Open ArcadeX inside MiniPay|[^|]*)[^.]*\.?)/
+    );
+    const candidate = (match?.[1] ?? text).trim();
+    if (candidate && candidate !== "[object Object]") {
+      return candidate.length > 180 ? `${candidate.slice(0, 177)}...` : candidate;
     }
   }
 
@@ -161,15 +209,16 @@ export function formatChainError(error: unknown): string {
     return "The network is temporarily unavailable. Please wait a moment and try again.";
   }
 
-  if (error instanceof Error) {
-    if (
-      error.message.includes("RPC Request failed") ||
-      error.message.includes("Request body") ||
-      error.message.length > 160
-    ) {
-      return "Could not reach the Celo network. Please try again.";
-    }
-    return error.message;
+  if (text && text !== "[object Object]" && text.length <= 180) {
+    return text;
+  }
+
+  if (
+    text.includes("RPC Request failed") ||
+    text.includes("Request body") ||
+    text.length > 180
+  ) {
+    return "Could not reach the Celo network. Please try again.";
   }
 
   return "Something went wrong. Please try again.";
@@ -181,15 +230,17 @@ function isUserFacingRejection(error: unknown): boolean {
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
-    typeof (error as { code?: unknown }).code === "number"
-      ? (error as { code: number }).code
+    (typeof (error as { code?: unknown }).code === "number" ||
+      typeof (error as { code?: unknown }).code === "string")
+      ? Number((error as { code: number | string }).code)
       : null;
 
   return (
     code === 4001 ||
     message.includes("user rejected") ||
     message.includes("user denied") ||
-    message.includes("rejected the request")
+    message.includes("rejected the request") ||
+    message.includes("request rejected")
   );
 }
 
