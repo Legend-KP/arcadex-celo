@@ -315,7 +315,7 @@ export default function GameClient({
     setPendingSubmitScore(null);
     setSubmitToast({
       phase: "submitting",
-      message: "Submitting score… Approve the payment in MiniPay.",
+      message: "Submitting score… Confirm the payment in MiniPay.",
     });
     setPendingLeaderboardSubmit(game.id, score);
 
@@ -871,8 +871,8 @@ export default function GameClient({
               </p>
               <p className="lb-submit-confirm__hint">
                 {contestLive
-                  ? "Submit this score to appear on the contest leaderboard. Pay $0.05 in USDT or USDC. MiniPay will ask you to approve."
-                  : "Pay $0.05 in USDT or USDC. MiniPay will ask you to approve."}
+                  ? "Submit this score to appear on the contest leaderboard. Pay $0.05 in USDT or USDC. MiniPay will ask you to confirm once."
+                  : "Pay $0.05 in USDT or USDC. MiniPay will ask you to confirm once."}
               </p>
               <button
                 type="button"

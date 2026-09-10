@@ -113,7 +113,8 @@ export function formatChainError(error: unknown): string {
       error.message.includes("Connect your wallet") ||
       error.message.includes("No wallet") ||
       error.message.includes("approval failed") ||
-      error.message.includes("payment failed")
+      error.message.includes("payment failed") ||
+      error.message.includes("Payments are paused")
     ) {
       return error.message;
     }

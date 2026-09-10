@@ -14,6 +14,18 @@ import {
 
 const RECEIPT_RETRY_DELAYS_MS = [0, 500, 1200, 2500];
 
+const ERC20_TRANSFER_EVENT_ABI = [
+  {
+    type: "event",
+    name: "Transfer",
+    inputs: [
+      { name: "from", type: "address", indexed: true },
+      { name: "to", type: "address", indexed: true },
+      { name: "value", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
+
 function collectErrorText(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
   const parts: string[] = [error.message];
@@ -79,9 +91,182 @@ export interface VerifiedStablePayment {
   amount: bigint;
 }
 
+async function readLatestContractValue<T>(
+  contractAddress: Address,
+  abi: Abi,
+  functionName: "fee" | "paused"
+): Promise<T> {
+  try {
+    return (await getCeloPublicClient().readContract({
+      address: contractAddress,
+      abi,
+      functionName,
+      blockTag: "latest",
+    })) as T;
+  } catch (error) {
+    if (isBlockOutOfRangeError(error) || isTransientReceiptError(error)) {
+      resetCeloPublicClient();
+      return (await getCeloPublicClient().readContract({
+        address: contractAddress,
+        abi,
+        functionName,
+        blockTag: "latest",
+      })) as T;
+    }
+    throw error;
+  }
+}
+
+function tokenFromAddress(
+  token: Address,
+  usdtAddress: Address,
+  usdcAddress: Address
+): StablePaymentToken {
+  const tokenLower = token.toLowerCase();
+  if (tokenLower === usdtAddress.toLowerCase()) return "USDT";
+  if (tokenLower === usdcAddress.toLowerCase()) return "USDC";
+  throw new Error("Payment token is not USDT or USDC.");
+}
+
+function verifyDirectTransferPayment(options: {
+  receipt: TransactionReceipt;
+  expectedPlayer: Address;
+  contractAddress: Address;
+  usdtAddress: Address;
+  usdcAddress: Address;
+  fee: bigint;
+}): VerifiedStablePayment | null {
+  const {
+    receipt,
+    expectedPlayer,
+    contractAddress,
+    usdtAddress,
+    usdcAddress,
+    fee,
+  } = options;
+
+  if (getAddress(receipt.from) !== expectedPlayer) {
+    throw new Error("Payment wallet does not match your account.");
+  }
+
+  let matched: VerifiedStablePayment | null = null;
+
+  for (const log of receipt.logs) {
+    const logToken = log.address.toLowerCase();
+    if (
+      logToken !== usdtAddress.toLowerCase() &&
+      logToken !== usdcAddress.toLowerCase()
+    ) {
+      continue;
+    }
+
+    try {
+      const decoded = decodeEventLog({
+        abi: ERC20_TRANSFER_EVENT_ABI,
+        data: log.data,
+        topics: log.topics,
+      });
+      if (decoded.eventName !== "Transfer") continue;
+
+      const { from, to, value } = decoded.args;
+      if (getAddress(from) !== expectedPlayer) continue;
+      if (getAddress(to) !== getAddress(contractAddress)) continue;
+
+      if (value < fee) {
+        throw new Error("Payment amount is below the contract fee.");
+      }
+
+      matched = {
+        player: expectedPlayer,
+        token: tokenFromAddress(log.address, usdtAddress, usdcAddress),
+        amount: value,
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("Payment amount")) {
+        throw error;
+      }
+      if (error instanceof Error && error.message.includes("Payment token")) {
+        throw error;
+      }
+    }
+  }
+
+  return matched;
+}
+
+function verifyEntryPaidEvent(options: {
+  receipt: TransactionReceipt;
+  expectedPlayer: Address;
+  contractAddress: Address;
+  abi: Abi;
+  usdtAddress: Address;
+  usdcAddress: Address;
+  fee: bigint;
+}): VerifiedStablePayment | null {
+  const {
+    receipt,
+    expectedPlayer,
+    contractAddress,
+    abi,
+    usdtAddress,
+    usdcAddress,
+    fee,
+  } = options;
+
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== contractAddress.toLowerCase()) {
+      continue;
+    }
+
+    try {
+      const decoded = decodeEventLog({
+        abi,
+        data: log.data,
+        topics: log.topics,
+      });
+
+      if (decoded.eventName !== "EntryPaid") continue;
+
+      const args = decoded.args as unknown as {
+        player: Address;
+        token: Address;
+        amount: bigint;
+      };
+      const { player, token, amount } = args;
+
+      if (getAddress(player) !== expectedPlayer) {
+        throw new Error("Payment wallet does not match your account.");
+      }
+
+      if (amount < fee) {
+        throw new Error("Payment amount is below the contract fee.");
+      }
+
+      return {
+        player: expectedPlayer,
+        token: tokenFromAddress(token, usdtAddress, usdcAddress),
+        amount,
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("Payment wallet")) {
+        throw error;
+      }
+      if (error instanceof Error && error.message.includes("Payment token")) {
+        throw error;
+      }
+      if (error instanceof Error && error.message.includes("Payment amount")) {
+        throw error;
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
- * Verify an EntryPaid payment tx against a SparkRefill-style contract.
- * Uses latest fee (not historical block) so pruned RPCs cannot fail the credit.
+ * Verify a MiniPay payment to a SparkRefill-style contract.
+ * Accepts a direct ERC-20 transfer into the contract (current flow) or a
+ * legacy payWith* tx that emitted EntryPaid.
  */
 export async function verifyEntryPaidPaymentTx(options: {
   walletAddress: string;
@@ -109,86 +294,41 @@ export async function verifyEntryPaidPaymentTx(options: {
     throw new Error("Transaction did not succeed.");
   }
 
-  if (receipt.to?.toLowerCase() !== contractAddress.toLowerCase()) {
-    throw new Error(`Transaction was not sent to ${contractLabel}.`);
+  const paused = await readLatestContractValue<boolean>(
+    contractAddress,
+    abi,
+    "paused"
+  );
+  if (paused) {
+    throw new Error(`${contractLabel} payments are paused.`);
   }
 
-  // Prefer latest fee — historical block reads are slow / fail on many Celo RPCs.
-  let fee: bigint;
-  try {
-    fee = (await getCeloPublicClient().readContract({
-      address: contractAddress,
-      abi,
-      functionName: "fee",
-      blockTag: "latest",
-    })) as bigint;
-  } catch (error) {
-    if (isBlockOutOfRangeError(error) || isTransientReceiptError(error)) {
-      resetCeloPublicClient();
-      fee = (await getCeloPublicClient().readContract({
-        address: contractAddress,
-        abi,
-        functionName: "fee",
-        blockTag: "latest",
-      })) as bigint;
-    } else {
-      throw error;
-    }
-  }
+  const fee = await readLatestContractValue<bigint>(
+    contractAddress,
+    abi,
+    "fee"
+  );
 
-  for (const log of receipt.logs) {
-    if (log.address.toLowerCase() !== contractAddress.toLowerCase()) {
-      continue;
-    }
+  const direct = verifyDirectTransferPayment({
+    receipt,
+    expectedPlayer,
+    contractAddress,
+    usdtAddress,
+    usdcAddress,
+    fee,
+  });
+  if (direct) return direct;
 
-    try {
-      const decoded = decodeEventLog({
-        abi,
-        data: log.data,
-        topics: log.topics,
-      });
+  const legacy = verifyEntryPaidEvent({
+    receipt,
+    expectedPlayer,
+    contractAddress,
+    abi,
+    usdtAddress,
+    usdcAddress,
+    fee,
+  });
+  if (legacy) return legacy;
 
-      if (decoded.eventName !== "EntryPaid") continue;
-
-      const args = decoded.args as unknown as {
-        player: Address;
-        token: Address;
-        amount: bigint;
-      };
-      const { player, token, amount } = args;
-
-      if (getAddress(player) !== expectedPlayer) {
-        throw new Error("Payment wallet does not match your account.");
-      }
-
-      const tokenLower = token.toLowerCase();
-      let paymentToken: StablePaymentToken | null = null;
-
-      if (tokenLower === usdtAddress.toLowerCase()) {
-        paymentToken = "USDT";
-      } else if (tokenLower === usdcAddress.toLowerCase()) {
-        paymentToken = "USDC";
-      } else {
-        throw new Error("Payment token is not USDT or USDC.");
-      }
-
-      if (amount < fee) {
-        throw new Error("Payment amount is below the contract fee.");
-      }
-
-      return { player: expectedPlayer, token: paymentToken, amount };
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("Payment wallet")) {
-        throw error;
-      }
-      if (error instanceof Error && error.message.includes("Payment token")) {
-        throw error;
-      }
-      if (error instanceof Error && error.message.includes("Payment amount")) {
-        throw error;
-      }
-    }
-  }
-
-  throw new Error("EntryPaid event not found in transaction.");
+  throw new Error(`Payment to ${contractLabel} not found in transaction.`);
 }
