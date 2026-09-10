@@ -95,14 +95,36 @@ function isTransientRpcError(error: unknown): boolean {
 
 function isTransactionFailureError(error: unknown): boolean {
   const message = collectErrorText(error).toLowerCase();
+  // Do NOT match "version: viem" — almost every viem error includes that footer
+  // and was incorrectly shown as a generic "Transaction failed".
   return (
-    message.includes("transaction receipt") ||
-    message.includes("could not be found") ||
-    message.includes("not mined") ||
     message.includes("execution reverted") ||
     message.includes("transaction failed") ||
-    message.includes("version: viem")
+    message.includes("intrinsic gas too low") ||
+    message.includes("insufficient funds for gas")
   );
+}
+
+function shortChainErrorMessage(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+
+  const raw = collectErrorText(error);
+  const firstLine = raw.split("\n")[0]?.trim() ?? "";
+  const withoutViemFooter = firstLine
+    .replace(/\s*Version: viem.*$/i, "")
+    .replace(/\s*Details:.*$/i, "")
+    .trim();
+
+  if (
+    withoutViemFooter &&
+    withoutViemFooter.length > 0 &&
+    withoutViemFooter.length <= 160 &&
+    !withoutViemFooter.toLowerCase().includes("rpc request failed")
+  ) {
+    return withoutViemFooter;
+  }
+
+  return null;
 }
 
 /** Map low-level RPC errors to short user-facing messages. */
@@ -116,11 +138,20 @@ export function formatChainError(error: unknown): string {
       error.message.includes("payment failed") ||
       error.message.includes("Payments are paused") ||
       error.message.includes("Almost enough") ||
-      error.message.includes("network fee")
+      error.message.includes("network fee") ||
+      error.message.includes("Payment cancelled") ||
+      error.message.includes("MiniPay did not return")
     ) {
       return error.message;
     }
   }
+
+  if (isUserFacingRejection(error)) {
+    return "Payment cancelled in MiniPay.";
+  }
+
+  const short = shortChainErrorMessage(error);
+  if (short) return short;
 
   if (isTransactionFailureError(error)) {
     return "Transaction failed. Please try again.";
@@ -142,6 +173,24 @@ export function formatChainError(error: unknown): string {
   }
 
   return "Something went wrong. Please try again.";
+}
+
+function isUserFacingRejection(error: unknown): boolean {
+  const message = collectErrorText(error).toLowerCase();
+  const code =
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "number"
+      ? (error as { code: number }).code
+      : null;
+
+  return (
+    code === 4001 ||
+    message.includes("user rejected") ||
+    message.includes("user denied") ||
+    message.includes("rejected the request")
+  );
 }
 
 type ReadContractParams = Parameters<CeloPublicClient["readContract"]>[0];

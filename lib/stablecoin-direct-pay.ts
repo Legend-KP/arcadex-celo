@@ -4,14 +4,17 @@ import {
   type Abi,
   type Address,
   type Hash,
+  type Hex,
 } from "viem";
-import { celo } from "viem/chains";
 import {
   getCeloPublicClient,
   readCeloContract,
   waitForCeloTransactionReceipt,
 } from "@/lib/celo-public-client";
-import { createMiniPayWalletClient } from "@/lib/minipay";
+import {
+  createMiniPayWalletClient,
+  getInjectedProvider,
+} from "@/lib/minipay";
 import {
   CELO_USDC_ADDRESS,
   CELO_USDC_FEE_CURRENCY,
@@ -64,13 +67,11 @@ async function pickPaymentAndGas(
     );
   }
 
-  // Prefer the token that can cover fee + gas alone when the other is empty.
   const usdtCanPayWithGas = usdtBalance >= fee + GAS_BUFFER;
   const usdcCanPayWithGas = usdcBalance >= fee + GAS_BUFFER;
 
   let token: SparkRefillPaymentToken;
   if (usdtCanPay && usdcBalance >= FEE_CURRENCY_DUST) {
-    // Pay with USDT, gas with USDC (or USDT if we choose below).
     token = "USDT";
   } else if (usdcCanPay && usdtBalance >= FEE_CURRENCY_DUST) {
     token = "USDC";
@@ -105,8 +106,67 @@ async function pickPaymentAndGas(
 }
 
 /**
+ * Send via MiniPay's injected provider directly.
+ * Avoids viem prepareTransactionRequest / gas estimation, which often fails
+ * inside MiniPay before the pay sheet opens.
+ */
+async function sendMiniPayTokenTransfer(options: {
+  account: Address;
+  tokenAddress: Address;
+  data: Hex;
+  feeCurrency: Address;
+}): Promise<Hash> {
+  const provider = getInjectedProvider();
+  if (!provider) {
+    throw new Error("Open ArcadeX inside MiniPay to continue.");
+  }
+
+  const txHash = await provider.request({
+    method: "eth_sendTransaction",
+    params: [
+      {
+        from: options.account,
+        to: options.tokenAddress,
+        data: options.data,
+        value: "0x0",
+        feeCurrency: options.feeCurrency,
+      },
+    ],
+  });
+
+  if (typeof txHash !== "string" || !txHash.startsWith("0x")) {
+    throw new Error("MiniPay did not return a transaction hash.");
+  }
+
+  return txHash as Hash;
+}
+
+function isUserRejection(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message.toLowerCase()
+      : String(error).toLowerCase();
+  const code =
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "number"
+      ? (error as { code: number }).code
+      : null;
+
+  return (
+    code === 4001 ||
+    message.includes("user rejected") ||
+    message.includes("user denied") ||
+    message.includes("rejected the request") ||
+    message.includes("cancelled") ||
+    message.includes("canceled")
+  );
+}
+
+/**
  * One MiniPay confirmation: ERC-20 transfer of `fee()` into the payment contract.
- * Uses sendTransaction + encoded transfer (MiniPay-recommended), not approve/payWith*.
+ * Uses eth_sendTransaction + encoded transfer (MiniPay-recommended), not approve/payWith*.
  */
 export async function purchaseStablecoinFeeOnChain(options: {
   contractAddress: Address;
@@ -150,13 +210,20 @@ export async function purchaseStablecoinFeeOnChain(options: {
     args: [contractAddress, fee],
   });
 
-  const payHash = await walletClient.sendTransaction({
-    account,
-    chain: celo,
-    to: tokenAddr,
-    data,
-    feeCurrency,
-  });
+  let payHash: Hash;
+  try {
+    payHash = await sendMiniPayTokenTransfer({
+      account,
+      tokenAddress: tokenAddr,
+      data,
+      feeCurrency,
+    });
+  } catch (error) {
+    if (isUserRejection(error)) {
+      throw new Error("Payment cancelled in MiniPay.");
+    }
+    throw error;
+  }
 
   const payReceipt = await waitForCeloTransactionReceipt(payHash);
 
