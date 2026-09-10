@@ -24,9 +24,9 @@ import {
 } from "@/lib/spark-refill";
 
 /** ~$0.02 buffer so CIP-64 gas does not compete with the exact fee transfer. */
-const GAS_BUFFER = 20_000n;
+const GAS_BUFFER = BigInt(20_000);
 /** MiniPay treats below this as dust and may ignore a requested feeCurrency. */
-const FEE_CURRENCY_DUST = 1_000n;
+const FEE_CURRENCY_DUST = BigInt(1_000);
 
 async function readBalance(token: Address, account: Address): Promise<bigint> {
   return readCeloContract({
