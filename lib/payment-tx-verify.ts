@@ -145,11 +145,8 @@ function verifyDirectTransferPayment(options: {
     fee,
   } = options;
 
-  if (getAddress(receipt.from) !== expectedPlayer) {
-    throw new Error("Payment wallet does not match your account.");
-  }
-
   let matched: VerifiedStablePayment | null = null;
+  let bestBelowFee: bigint | null = null;
 
   for (const log of receipt.logs) {
     const logToken = log.address.toLowerCase();
@@ -173,25 +170,38 @@ function verifyDirectTransferPayment(options: {
       if (getAddress(to) !== getAddress(contractAddress)) continue;
 
       if (value < fee) {
-        throw new Error("Payment amount is below the contract fee.");
+        if (bestBelowFee === null || value > bestBelowFee) {
+          bestBelowFee = value;
+        }
+        continue;
       }
 
-      matched = {
-        player: expectedPlayer,
-        token: tokenFromAddress(log.address, usdtAddress, usdcAddress),
-        amount: value,
-      };
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("Payment amount")) {
-        throw error;
+      if (!matched || value > matched.amount) {
+        matched = {
+          player: expectedPlayer,
+          token: tokenFromAddress(log.address, usdtAddress, usdcAddress),
+          amount: value,
+        };
       }
+    } catch (error) {
       if (error instanceof Error && error.message.includes("Payment token")) {
         throw error;
       }
     }
   }
 
-  return matched;
+  if (matched) return matched;
+
+  if (bestBelowFee !== null) {
+    throw new Error("Payment amount is below the contract fee.");
+  }
+
+  // Prefer Transfer(from=player) over receipt.from — CIP-64 fee txs can look odd on some RPCs.
+  if (getAddress(receipt.from) !== expectedPlayer) {
+    throw new Error("Payment wallet does not match your account.");
+  }
+
+  return null;
 }
 
 function verifyEntryPaidEvent(options: {
