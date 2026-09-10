@@ -205,6 +205,10 @@ export function formatChainError(error: unknown): string {
     return "Transaction failed. Please try again.";
   }
 
+  if (text.toLowerCase().includes("unknown rpc error")) {
+    return "MiniPay could not prepare the payment. Please close and try again.";
+  }
+
   if (isTransientRpcError(error)) {
     return "The network is temporarily unavailable. Please wait a moment and try again.";
   }

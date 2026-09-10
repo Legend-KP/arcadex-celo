@@ -1,11 +1,4 @@
-import {
-  encodeFunctionData,
-  formatUnits,
-  type Abi,
-  type Address,
-  type Hash,
-  type Hex,
-} from "viem";
+import { formatUnits, getAddress, type Abi, type Address, type Hash } from "viem";
 import { celo } from "viem/chains";
 import {
   formatChainError,
@@ -13,10 +6,7 @@ import {
   readCeloContract,
   waitForCeloTransactionReceipt,
 } from "@/lib/celo-public-client";
-import {
-  createMiniPayWalletClient,
-  getInjectedProvider,
-} from "@/lib/minipay";
+import { createMiniPayWalletClient } from "@/lib/minipay";
 import {
   CELO_USDC_ADDRESS,
   CELO_USDT_ADDRESS,
@@ -40,8 +30,8 @@ async function readBalance(token: Address, account: Address): Promise<bigint> {
 }
 
 /**
- * Prefer a token with fee + gas buffer. MiniPay may still pay gas from either
- * stablecoin it holds; the buffer avoids exact-fee reverts.
+ * Prefer a token with fee + gas buffer. If only exact fee is available, allow
+ * it when the other stablecoin can cover MiniPay gas.
  */
 async function pickPaymentToken(
   account: Address,
@@ -52,19 +42,13 @@ async function pickPaymentToken(
     readBalance(CELO_USDC_ADDRESS, account),
   ]);
 
-  const usdtOk = usdtBalance >= fee + GAS_BUFFER;
-  const usdcOk = usdcBalance >= fee + GAS_BUFFER;
-  const usdtExact = usdtBalance >= fee;
-  const usdcExact = usdcBalance >= fee;
+  if (usdtBalance >= fee + GAS_BUFFER) return "USDT";
+  if (usdcBalance >= fee + GAS_BUFFER) return "USDC";
 
-  if (usdtOk) return "USDT";
-  if (usdcOk) return "USDC";
+  if (usdtBalance >= fee && usdcBalance > BigInt(0)) return "USDT";
+  if (usdcBalance >= fee && usdtBalance > BigInt(0)) return "USDC";
 
-  // Exact fee only — allow if the *other* token can cover gas.
-  if (usdtExact && usdcBalance > BigInt(0)) return "USDT";
-  if (usdcExact && usdtBalance > BigInt(0)) return "USDC";
-
-  if (usdtExact || usdcExact) {
+  if (usdtBalance >= fee || usdcBalance >= fee) {
     const needed = formatUnits(fee + GAS_BUFFER, STABLECOIN_DECIMALS);
     throw new Error(
       `Almost enough — keep about $${needed} in USDT/USDC so network fees are covered.`
@@ -78,22 +62,27 @@ async function pickPaymentToken(
 }
 
 function toFriendlyError(error: unknown, fallback: string): Error {
-  if (error instanceof Error) {
-    const formatted = formatChainError(error);
-    if (
-      formatted &&
-      formatted !== "Something went wrong. Please try again." &&
-      formatted !== "Transaction failed. Please try again."
-    ) {
-      return new Error(formatted);
-    }
-    return error;
+  if (isUserRejection(error)) {
+    return new Error("Payment cancelled in MiniPay.");
   }
 
-  const message = formatChainError(error);
-  if (message && message !== "Something went wrong. Please try again.") {
-    return new Error(message);
+  const formatted = formatChainError(error);
+  if (
+    formatted &&
+    formatted !== "Something went wrong. Please try again." &&
+    !formatted.toLowerCase().includes("unknown rpc error")
+  ) {
+    return new Error(formatted);
   }
+
+  if (error instanceof Error && error.message.trim()) {
+    const cleaned = error.message
+      .split("\n")[0]
+      ?.replace(/\s*Version: viem.*$/i, "")
+      .trim();
+    if (cleaned && cleaned.length <= 160) return new Error(cleaned);
+  }
+
   return new Error(fallback);
 }
 
@@ -114,86 +103,9 @@ function isUserRejection(error: unknown): boolean {
   );
 }
 
-function asTxHash(value: unknown): Hash | null {
-  return typeof value === "string" && value.startsWith("0x") && value.length >= 66
-    ? (value as Hash)
-    : null;
-}
-
 /**
- * MiniPay-native send: eth_sendTransaction with encoded ERC-20 transfer.
- * Tries with feeCurrency, then without (MiniPay often picks gas token itself).
- */
-async function sendMiniPayTokenTransfer(options: {
-  account: Address;
-  tokenAddr: Address;
-  data: Hex;
-  feeCurrency: Address;
-}): Promise<Hash> {
-  const provider = getInjectedProvider();
-  if (!provider) {
-    throw new Error("Open ArcadeX inside MiniPay to continue.");
-  }
-
-  const baseTx = {
-    from: options.account,
-    to: options.tokenAddr,
-    data: options.data,
-    value: "0x0" as const,
-  };
-
-  const attempts: Array<Record<string, string>> = [
-    { ...baseTx, feeCurrency: options.feeCurrency },
-    { ...baseTx },
-  ];
-
-  let lastError: unknown;
-
-  for (const tx of attempts) {
-    try {
-      const txHash = await provider.request({
-        method: "eth_sendTransaction",
-        // MiniPay accepts feeCurrency on the tx object; EIP-1193 typings omit it.
-        params: [tx as never],
-      });
-      const hash = asTxHash(txHash);
-      if (hash) return hash;
-      lastError = new Error("MiniPay did not return a transaction hash.");
-    } catch (error) {
-      lastError = error;
-      if (isUserRejection(error)) {
-        throw new Error("Payment cancelled in MiniPay.");
-      }
-    }
-  }
-
-  // Last resort: viem wallet client (MiniPay / wagmi docs pattern).
-  const walletClient = createMiniPayWalletClient();
-  if (!walletClient) {
-    throw toFriendlyError(
-      lastError,
-      "MiniPay could not send the payment transaction."
-    );
-  }
-
-  try {
-    return await walletClient.sendTransaction({
-      account: options.account,
-      chain: celo,
-      to: options.tokenAddr,
-      data: options.data,
-      feeCurrency: options.feeCurrency,
-    });
-  } catch (error) {
-    throw toFriendlyError(
-      error ?? lastError,
-      "MiniPay could not send the payment transaction."
-    );
-  }
-}
-
-/**
- * One MiniPay confirmation: ERC-20 transfer of `fee()` into the payment contract.
+ * One MiniPay confirmation: ERC-20 `transfer(fee)` into the payment contract.
+ * Uses the same writeContract + feeCurrency path that already worked for approve.
  */
 export async function purchaseStablecoinFeeOnChain(options: {
   contractAddress: Address;
@@ -208,10 +120,11 @@ export async function purchaseStablecoinFeeOnChain(options: {
     throw new Error(connectError);
   }
 
-  const [account] = await walletClient.getAddresses();
-  if (!account) {
+  const [rawAccount] = await walletClient.getAddresses();
+  if (!rawAccount) {
     throw new Error("No wallet account available.");
   }
+  const account = getAddress(rawAccount);
 
   const paused = (await getCeloPublicClient().readContract({
     address: contractAddress,
@@ -230,34 +143,35 @@ export async function purchaseStablecoinFeeOnChain(options: {
 
   const token = await pickPaymentToken(account, fee);
   const tokenAddr = tokenAddress(token);
-  const feeCurrency = tokenFeeCurrency(token);
-
-  const data = encodeFunctionData({
-    abi: ERC20_ABI,
-    functionName: "transfer",
-    args: [contractAddress, fee],
-  });
+  const feeCurrency = getAddress(tokenFeeCurrency(token));
+  const recipient = getAddress(contractAddress);
 
   let payHash: Hash;
   try {
-    payHash = await sendMiniPayTokenTransfer({
+    // Pass an explicit gas limit so MiniPay does not have to eth_estimateGas
+    // (that call often returns "An unknown RPC error" in the MiniPay webview).
+    payHash = await walletClient.writeContract({
       account,
-      tokenAddr,
-      data,
+      chain: celo,
+      address: tokenAddr,
+      abi: ERC20_ABI,
+      functionName: "transfer",
+      args: [recipient, fee],
       feeCurrency,
+      gas: BigInt(120_000),
     });
   } catch (error) {
-    if (isUserRejection(error)) {
-      throw new Error("Payment cancelled in MiniPay.");
-    }
-    throw toFriendlyError(error, failError);
+    throw toFriendlyError(
+      error,
+      `${failError} MiniPay could not open the payment sheet.`
+    );
   }
 
   const payReceipt = await waitForCeloTransactionReceipt(payHash);
 
   if (payReceipt.status !== "success") {
     throw new Error(
-      `${failError} The transfer was rejected on-chain. Check you have a little extra stablecoin for network fees.`
+      `${failError} The transfer was rejected on-chain. Keep a little extra USDT/USDC for network fees.`
     );
   }
 
