@@ -75,6 +75,49 @@ async function pickPaymentToken(
   );
 }
 
+type ViemLikeError = {
+  message?: string;
+  shortMessage?: string;
+  details?: string;
+  metaMessages?: string[];
+  cause?: unknown;
+  code?: string | number;
+  name?: string;
+  walk?: (fn?: (err: unknown) => boolean) => unknown;
+};
+
+function asViemError(error: unknown): ViemLikeError | null {
+  if (typeof error === "object" && error !== null) {
+    return error as ViemLikeError;
+  }
+  return null;
+}
+
+function getRootCause(error: unknown): unknown {
+  const viemErr = asViemError(error);
+  if (typeof viemErr?.walk === "function") {
+    try {
+      return viemErr.walk();
+    } catch {
+      /* fall through */
+    }
+  }
+
+  let cause: unknown = error;
+  let depth = 0;
+  while (
+    cause &&
+    typeof cause === "object" &&
+    "cause" in cause &&
+    (cause as ViemLikeError).cause &&
+    depth < 10
+  ) {
+    cause = (cause as ViemLikeError).cause;
+    depth += 1;
+  }
+  return cause;
+}
+
 function serializeRawError(error: unknown): string {
   try {
     if (error instanceof Error) {
@@ -86,16 +129,50 @@ function serializeRawError(error: unknown): string {
   }
 }
 
+/** Compact debug line focused on viem shortMessage / details / root cause. */
 function summarizeRawError(error: unknown): string {
-  const raw = serializeRawError(error);
-  const formatted = formatChainError(error);
-  const combined = `${formatted} | ${raw}`;
-  return combined.length > 280 ? `${combined.slice(0, 277)}...` : combined;
+  const top = asViemError(error);
+  const root = getRootCause(error);
+  const rootObj = asViemError(root);
+
+  const parts = [
+    top?.shortMessage && `short:${top.shortMessage}`,
+    top?.details && `details:${top.details}`,
+    top?.metaMessages?.length && `meta:${top.metaMessages.join(";")}`,
+    top?.code != null && `code:${top.code}`,
+    rootObj?.message && `root:${rootObj.message}`,
+    rootObj?.shortMessage && `rootShort:${rootObj.shortMessage}`,
+    rootObj?.details && `rootDetails:${rootObj.details}`,
+    rootObj?.code != null && `rootCode:${rootObj.code}`,
+    rootObj?.name && `rootName:${rootObj.name}`,
+  ].filter(Boolean) as string[];
+
+  if (parts.length === 0) {
+    const fallback = formatChainError(error) || serializeRawError(error);
+    return fallback.length > 320 ? `${fallback.slice(0, 317)}...` : fallback;
+  }
+
+  const combined = parts.join(" | ");
+  return combined.length > 360 ? `${combined.slice(0, 357)}...` : combined;
 }
 
 function logRawError(stage: string, error: unknown): void {
-  console.error(`[pay:${stage}] RAW ERROR:`, error);
+  const top = asViemError(error);
+  const root = getRootCause(error);
+  const rootObj = asViemError(root);
+
+  console.error(`[pay:${stage}] message:`, top?.message ?? String(error));
+  console.error(`[pay:${stage}] shortMessage:`, top?.shortMessage);
+  console.error(`[pay:${stage}] details:`, top?.details);
+  console.error(`[pay:${stage}] metaMessages:`, top?.metaMessages);
+  console.error(`[pay:${stage}] code:`, top?.code);
+  console.error(`[pay:${stage}] walked:`, typeof top?.walk === "function" ? top.walk() : null);
+  console.error(`[pay:${stage}] root cause:`, root);
+  console.error(`[pay:${stage}] root cause message:`, rootObj?.message);
+  console.error(`[pay:${stage}] root shortMessage:`, rootObj?.shortMessage);
+  console.error(`[pay:${stage}] root details:`, rootObj?.details);
   console.error(`[pay:${stage}] RAW ERROR JSON:`, serializeRawError(error));
+  console.error(`[pay:${stage}] ROOT JSON:`, serializeRawError(root));
 }
 
 function toFriendlyError(
@@ -269,7 +346,9 @@ export async function purchaseStablecoinFeeOnChain(options: {
       feeCurrency,
       gas: TRANSFER_GAS_LIMIT.toString(),
       gasPrice: gasPrice.toString(),
+      gasPriceHex: toHex(gasPrice),
       nonce,
+      note: "gas+gasPrice+nonce prefilled from public RPC (not MiniPay)",
     });
   }
 
