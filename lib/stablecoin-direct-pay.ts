@@ -2,8 +2,10 @@ import { formatUnits, getAddress, type Abi, type Address, type Hash } from "viem
 import { celo } from "viem/chains";
 import {
   formatChainError,
-  getCeloPublicClient,
+  getCeloFeeCurrencyGasPrice,
+  getCeloTransactionCount,
   readCeloContract,
+  readCeloContractValue,
   waitForCeloTransactionReceipt,
 } from "@/lib/celo-public-client";
 import { createMiniPayWalletClient } from "@/lib/minipay";
@@ -19,6 +21,8 @@ import {
 
 /** ~$0.02 buffer so CIP-64 gas does not compete with the exact fee transfer. */
 const GAS_BUFFER = BigInt(20_000);
+/** Fixed gas limit — skips MiniPay eth_estimateGas (often "unknown RPC error"). */
+const TRANSFER_GAS_LIMIT = BigInt(120_000);
 
 async function readBalance(token: Address, account: Address): Promise<bigint> {
   return readCeloContract({
@@ -105,7 +109,9 @@ function isUserRejection(error: unknown): boolean {
 
 /**
  * One MiniPay confirmation: ERC-20 `transfer(fee)` into the payment contract.
- * Uses the same writeContract + feeCurrency path that already worked for approve.
+ *
+ * gas + gasPrice + nonce are filled from public Celo RPCs so MiniPay's
+ * provider is only asked to sign/send — not eth_estimateGas / eth_gasPrice.
  */
 export async function purchaseStablecoinFeeOnChain(options: {
   contractAddress: Address;
@@ -126,11 +132,11 @@ export async function purchaseStablecoinFeeOnChain(options: {
   }
   const account = getAddress(rawAccount);
 
-  const paused = (await getCeloPublicClient().readContract({
+  const paused = await readCeloContractValue<boolean>({
     address: contractAddress,
     abi: contractAbi,
     functionName: "paused",
-  })) as boolean;
+  });
   if (paused) {
     throw new Error("Payments are paused. Please try again later.");
   }
@@ -146,10 +152,13 @@ export async function purchaseStablecoinFeeOnChain(options: {
   const feeCurrency = getAddress(tokenFeeCurrency(token));
   const recipient = getAddress(contractAddress);
 
+  const [gasPrice, nonce] = await Promise.all([
+    getCeloFeeCurrencyGasPrice(feeCurrency),
+    getCeloTransactionCount(account),
+  ]);
+
   let payHash: Hash;
   try {
-    // Pass an explicit gas limit so MiniPay does not have to eth_estimateGas
-    // (that call often returns "An unknown RPC error" in the MiniPay webview).
     payHash = await walletClient.writeContract({
       account,
       chain: celo,
@@ -158,7 +167,11 @@ export async function purchaseStablecoinFeeOnChain(options: {
       functionName: "transfer",
       args: [recipient, fee],
       feeCurrency,
-      gas: BigInt(120_000),
+      gas: TRANSFER_GAS_LIMIT,
+      // CIP-64: legacy gasPrice in the fee-currency denomination (18 decimals).
+      // Do not use maxFeePerGas — MiniPay rejects EIP-1559 fee fields.
+      gasPrice,
+      nonce,
     });
   } catch (error) {
     throw toFriendlyError(

@@ -1,4 +1,11 @@
-import { createPublicClient, http, type Hash, type TransactionReceipt } from "viem";
+import {
+  createPublicClient,
+  hexToBigInt,
+  http,
+  type Address,
+  type Hash,
+  type TransactionReceipt,
+} from "viem";
 import { celo } from "viem/chains";
 
 const DEFAULT_RPC_URLS = [
@@ -252,9 +259,7 @@ type ReadContractParams = Parameters<CeloPublicClient["readContract"]>[0];
 
 const RETRY_DELAYS_MS = [0, 400, 900];
 
-export async function readCeloContract(
-  params: ReadContractParams
-): Promise<bigint> {
+async function withCeloRpcRetry<T>(fn: (client: CeloPublicClient) => Promise<T>): Promise<T> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
@@ -264,10 +269,7 @@ export async function readCeloContract(
     }
 
     try {
-      return (await getCeloPublicClient().readContract({
-        ...params,
-        blockTag: "latest",
-      })) as bigint;
+      return await fn(getCeloPublicClient());
     } catch (error) {
       lastError = error;
       if (!isTransientRpcError(error)) throw error;
@@ -276,17 +278,65 @@ export async function readCeloContract(
 
   for (const rpcUrl of getRpcUrls()) {
     try {
-      return (await createHttpClient(rpcUrl).readContract({
-        ...params,
-        blockTag: "latest",
-      })) as bigint;
+      return await fn(createHttpClient(rpcUrl));
     } catch (error) {
       lastError = error;
       if (!isTransientRpcError(error)) throw error;
     }
   }
 
-  throw lastError;
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Could not reach the Celo network. Please try again.");
+}
+
+export async function readCeloContract(
+  params: ReadContractParams
+): Promise<bigint> {
+  return withCeloRpcRetry(async (client) => {
+    return (await client.readContract({
+      ...params,
+      blockTag: "latest",
+    })) as bigint;
+  });
+}
+
+/** Retry-safe contract read for non-bigint returns (e.g. paused()). */
+export async function readCeloContractValue<T>(
+  params: ReadContractParams
+): Promise<T> {
+  return withCeloRpcRetry(async (client) => {
+    return (await client.readContract({
+      ...params,
+      blockTag: "latest",
+    })) as T;
+  });
+}
+
+/**
+ * Gas price denominated in a CIP-64 fee currency (adapter for USDC/USDT).
+ * Uses public RPCs — never MiniPay's provider (eth_gasPrice + feeCurrency
+ * often returns "An unknown RPC error" in the MiniPay webview).
+ */
+export async function getCeloFeeCurrencyGasPrice(
+  feeCurrency: Address
+): Promise<bigint> {
+  return withCeloRpcRetry(async (client) => {
+    // Celo CIP-64 extends eth_gasPrice with params: [feeCurrencyAddress].
+    // Standard EIP-1193 typings omit that param, so cast the request.
+    const priceHex = (await client.request({
+      method: "eth_gasPrice",
+      params: [feeCurrency],
+    } as never)) as `0x${string}`;
+    return hexToBigInt(priceHex);
+  });
+}
+
+/** Retry-safe nonce from public RPC so MiniPay is not asked for eth_getTransactionCount. */
+export async function getCeloTransactionCount(address: Address): Promise<number> {
+  return withCeloRpcRetry(async (client) => {
+    return client.getTransactionCount({ address, blockTag: "pending" });
+  });
 }
 
 const RECEIPT_RETRY_DELAYS_MS = [0, 500, 1200, 2500, 4000];
