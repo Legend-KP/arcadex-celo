@@ -35,8 +35,8 @@ const GAS_BUFFER = BigInt(20_000);
 /** Fixed gas limit — skips MiniPay eth_estimateGas (often "unknown RPC error"). */
 const TRANSFER_GAS_LIMIT = BigInt(120_000);
 
-/** TEMP: surface raw errors in MiniPay UI (no easy console on device). Remove after fix. */
-const DEBUG_PAYMENTS = true;
+/** Set true only while diagnosing MiniPay payment failures. */
+const DEBUG_PAYMENTS = false;
 
 async function readBalance(token: Address, account: Address): Promise<bigint> {
   return readCeloContract({
@@ -157,6 +157,8 @@ function summarizeRawError(error: unknown): string {
 }
 
 function logRawError(stage: string, error: unknown): void {
+  if (!DEBUG_PAYMENTS) return;
+
   const top = asViemError(error);
   const root = getRootCause(error);
   const rootObj = asViemError(root);

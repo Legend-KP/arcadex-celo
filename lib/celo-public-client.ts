@@ -178,7 +178,7 @@ function shortChainErrorMessage(error: unknown): string | null {
 export function formatChainError(error: unknown): string {
   const text = collectErrorText(error);
 
-  // TEMP debug payloads from purchaseStablecoinFeeOnChain — show as-is in MiniPay UI.
+  // Debug stage payloads from purchaseStablecoinFeeOnChain (DEBUG_PAYMENTS).
   if (/^\[[a-zA-Z0-9_:-]+\]\s/.test(text)) {
     return text.length > 420 ? `${text.slice(0, 417)}...` : text;
   }
