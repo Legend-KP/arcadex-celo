@@ -103,7 +103,7 @@ export default function SparkBatteryBar() {
       role="presentation"
     >
       <div
-        className="spark-panel"
+        className="spark-panel-shell"
         role="dialog"
         aria-modal="true"
         aria-labelledby="spark-panel-title"
@@ -121,6 +121,7 @@ export default function SparkBatteryBar() {
           ×
         </button>
 
+        <div className="spark-panel">
         <span className="spark-panel__title-icon" aria-hidden>
           ⚡
         </span>
@@ -286,6 +287,7 @@ export default function SparkBatteryBar() {
             only.
           </p>
         </section>
+        </div>
         </div>
       </div>
     </div>
