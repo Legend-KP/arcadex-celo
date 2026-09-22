@@ -895,7 +895,7 @@ export default function GameClient({
                 {contestLive
                   ? "Submit this score to appear on the contest leaderboard. Pay $0.05 in USDT or USDC. MiniPay will ask you to confirm once."
                   : isArcadeXTxHubConfigured()
-                    ? "Publish your best score on the all-time leaderboard. MiniPay will ask you to confirm once — gas only, no $0.05 fee. Contest entry opens when a contest is live."
+                    ? "Publish your best score on the all-time leaderboard. MiniPay will ask you to confirm once — gas only."
                     : "Contest is not live. Score submit with payment opens when a contest starts."}
               </p>
               {contestLive || isArcadeXTxHubConfigured() ? (
