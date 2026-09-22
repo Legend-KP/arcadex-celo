@@ -77,15 +77,19 @@ export async function submitScore(
 
 export async function submitScoreToLeaderboard(
   gameId: string,
-  opts: { walletAddress: string; txHash: string; score: number }
+  opts: { walletAddress: string; txHash: string; score?: number }
 ): Promise<{
   highScore: number;
   leaderboardScore: number;
 }> {
+  // `score` is optional and ignored by the server (uses saved personal best).
   const res = await fetch(`/api/games/${gameId}/leaderboard/submit`, {
     method: "POST",
     headers: walletAuthHeaders(),
-    body: JSON.stringify(opts),
+    body: JSON.stringify({
+      walletAddress: opts.walletAddress,
+      txHash: opts.txHash,
+    }),
   });
 
   const data = (await res.json()) as {

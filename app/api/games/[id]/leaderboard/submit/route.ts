@@ -60,12 +60,12 @@ export async function POST(
     const body = (await request.json()) as {
       walletAddress?: string;
       txHash?: string;
+      /** Ignored — server uses D1/RTDB personal best only. */
       score?: number;
     };
 
     const rawWallet = body.walletAddress?.trim() ?? "";
     const txHash = body.txHash?.trim() ?? "";
-    const score = body.score;
 
     if (!rawWallet || !isWalletAddress(rawWallet)) {
       return corsJsonResponse(
@@ -79,14 +79,6 @@ export async function POST(
       return corsJsonResponse(
         request,
         { error: "txHash is required.", code: "INVALID_TX" },
-        { status: 400 }
-      );
-    }
-
-    if (typeof score !== "number" || !Number.isFinite(score) || score <= 0) {
-      return corsJsonResponse(
-        request,
-        { error: "score is required.", code: "NO_SCORE" },
         { status: 400 }
       );
     }
@@ -105,13 +97,10 @@ export async function POST(
       isContestActive(game) && typeof game.contestStartedAt === "number"
         ? game.contestStartedAt
         : undefined;
-    const result = await activateScoreSubmitOnServer(
-      wallet,
-      id,
-      txHash,
-      score,
-      { contestStartedAt }
-    );
+    // Client `score` is intentionally ignored — see activateScoreSubmitOnServer.
+    const result = await activateScoreSubmitOnServer(wallet, id, txHash, {
+      contestStartedAt,
+    });
 
     recordApiMetric({
       endpoint: "/api/games/[id]/leaderboard/submit",

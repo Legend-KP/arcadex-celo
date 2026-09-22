@@ -1622,11 +1622,14 @@ export async function resolveGameProgressFromServer(
   return storedProgressToGameProgress(stored, hasLeaderboard);
 }
 
+/**
+ * Activate a paid score submit. The client score body field is ignored —
+ * only the wallet's saved personal best in D1/RTDB can be posted.
+ */
 export async function activateScoreSubmitOnServer(
   walletAddress: string,
   gameId: string,
   txHash: string,
-  score: number,
   opts?: { contestStartedAt?: number }
 ): Promise<{
   highScore: number;
@@ -1637,13 +1640,6 @@ export async function activateScoreSubmitOnServer(
     throw new ScoreSubmitActivationError(
       "A valid wallet address is required.",
       "NO_WALLET"
-    );
-  }
-
-  if (typeof score !== "number" || !Number.isFinite(score) || score <= 0) {
-    throw new ScoreSubmitActivationError(
-      "A valid score greater than zero is required.",
-      "NO_SCORE"
     );
   }
 
@@ -1666,7 +1662,16 @@ export async function activateScoreSubmitOnServer(
     );
   }
 
+  // Never trust a client-supplied score — only D1/RTDB personal best.
   const highScore = await fetchPersonalBestFromServer(wallet, gameId);
+  if (!Number.isFinite(highScore) || highScore <= 0) {
+    throw new ScoreSubmitActivationError(
+      "No saved score found for this game. Play and save progress before submitting.",
+      "NO_SCORE"
+    );
+  }
+  const score = highScore;
+
   const guardPath = scorePaymentPath(normalizedTxHash);
 
   const existingPayment = await readPath<{
