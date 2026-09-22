@@ -28,7 +28,6 @@ import { getDatabaseUrl, getFirebaseAccessToken, scrubSecrets } from "./firebase
 import { fetchWithTimeout } from "@/lib/firebase-fetch";
 import { scheduleWorkerWork } from "@/lib/worker-context";
 import {
-  bumpCachedPlayCount,
   getCachedGameFlags,
   getCachedPlayCounts,
   invalidateGameFlagsCache,
@@ -1157,6 +1156,8 @@ export async function fetchGamePlayCount(gameId: string): Promise<number> {
     return cached[gameId];
   }
 
+  await loadPlayCountsWithSharedCache(readAllPlayCounts);
+
   const count = await readPath<number>(`gamePlays/${gameId}`);
   const value = typeof count === "number" ? count : 0;
   mergeCachedPlayCounts({ [gameId]: value });
@@ -1167,13 +1168,13 @@ export async function fetchGamePlayCount(gameId: string): Promise<number> {
 export async function incrementGamePlayCount(gameId: string): Promise<number> {
   await incrementPath(`gamePlays/${gameId}`, 1);
 
-  const bumped = bumpCachedPlayCount(gameId, 1);
-  // Update KV in place (debounced) — do not delete (avoids stampede).
+  await loadPlayCountsWithSharedCache(readAllPlayCounts);
+
+  const count = await readPath<number>(`gamePlays/${gameId}`);
+  const value = typeof count === "number" ? count : 1;
+  mergeCachedPlayCounts({ [gameId]: value });
   schedulePlayCountsKvPersist();
-
-  if (typeof bumped === "number") return bumped;
-
-  return fetchGamePlayCount(gameId);
+  return value;
 }
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────

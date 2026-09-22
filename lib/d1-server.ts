@@ -33,7 +33,6 @@ import {
 } from "@/lib/d1-client";
 import { scheduleWorkerWork } from "@/lib/worker-context";
 import {
-  bumpCachedPlayCount,
   getCachedGameFlags,
   getCachedPlayCounts,
   invalidateGameFlagsCache,
@@ -1164,6 +1163,9 @@ export async function fetchGamePlayCount(gameId: string): Promise<number> {
     return cached[gameId];
   }
 
+  // Ensure a complete map before merging a single key (avoids home-page zeros).
+  await loadPlayCountsWithSharedCache(readAllPlayCounts);
+
   const db = await requireD1();
   const row = await db
     .prepare(`SELECT plays FROM game_plays WHERE game_id = ?`)
@@ -1184,11 +1186,21 @@ export async function incrementGamePlayCount(gameId: string): Promise<number> {
     .bind(gameId)
     .run();
 
-  const bumped = bumpCachedPlayCount(gameId, 1);
-  schedulePlayCountsKvPersist();
+  // Full map first — never bump/persist a one-game cache to KV.
+  await loadPlayCountsWithSharedCache(readAllPlayCounts);
 
-  if (typeof bumped === "number") return bumped;
-  return fetchGamePlayCount(gameId);
+  const row = await db
+    .prepare(`SELECT plays FROM game_plays WHERE game_id = ?`)
+    .bind(gameId)
+    .first<{ plays: number }>();
+  const value =
+    typeof row?.plays === "number" && Number.isFinite(row.plays)
+      ? row.plays
+      : 1;
+
+  mergeCachedPlayCounts({ [gameId]: value });
+  schedulePlayCountsKvPersist();
+  return value;
 }
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { verifyAdminRequest } from "@/lib/admin-auth";
 import { fetchGamesFromServer, isGameVisible } from "@/lib/firestore-server";
 import { withFirestoreReadCounter } from "@/lib/firestore-read-counter";
-import { fetchAllGamePlayCounts } from "@/lib/player-backend";
+import { fetchGamePlayCountsForIds } from "@/lib/player-backend";
 import { Game } from "@/types";
 
 export type CatalogListPayload = {
@@ -14,17 +14,23 @@ export type CatalogListPayload = {
 export async function loadCatalogListForRequest(
   request: Request
 ): Promise<CatalogListPayload> {
-  const [{ result: games, firestoreReads }, allCounts] = await Promise.all([
-    withFirestoreReadCounter(() => fetchGamesFromServer()),
-    fetchAllGamePlayCounts().catch(() => ({}) as Record<string, number>),
-  ]);
+  const { result: games, firestoreReads } = await withFirestoreReadCounter(() =>
+    fetchGamesFromServer()
+  );
 
   const isAdmin = await verifyAdminRequest(request);
   const visible = isAdmin ? games : games.filter(isGameVisible);
+  const visibleIds = visible.map((g) => g.id);
+
+  // Prefer id-scoped fetch so an incomplete play-count cache cannot zero the grid.
+  const allCounts = await fetchGamePlayCountsForIds(visibleIds).catch(
+    () => ({}) as Record<string, number>
+  );
+
   const playCounts = Object.fromEntries(
-    visible.map((g) => [
-      g.id,
-      typeof allCounts[g.id] === "number" ? allCounts[g.id] : 0,
+    visibleIds.map((id) => [
+      id,
+      typeof allCounts[id] === "number" ? allCounts[id] : 0,
     ])
   );
 
