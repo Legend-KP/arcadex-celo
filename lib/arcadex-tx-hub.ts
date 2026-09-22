@@ -21,6 +21,11 @@ export function playPurpose(gameId: string): Hex {
   return keccak256(toBytes(`PLAY:${gameId}`));
 }
 
+/** Gas-only score publish when contest is not live (still signIn). */
+export function scoreSubmitPurpose(gameId: string): Hex {
+  return keccak256(toBytes(`SCORE_SUBMIT:${gameId}`));
+}
+
 export function isArcadeXTxHubConfigured(): boolean {
   return (
     Boolean(ARCADEX_TX_HUB_CONTRACT_ADDRESS) &&

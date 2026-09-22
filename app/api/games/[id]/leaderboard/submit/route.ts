@@ -117,7 +117,12 @@ export async function POST(
     });
   } catch (err) {
     if (err instanceof ScoreSubmitActivationError) {
-      const status = err.code === "TX_ALREADY_USED" ? 409 : 400;
+      const status =
+        err.code === "TX_ALREADY_USED"
+          ? 409
+          : err.code === "NOT_CONFIGURED"
+            ? 503
+            : 400;
       return corsJsonResponse(
         request,
         { error: err.message, code: err.code },

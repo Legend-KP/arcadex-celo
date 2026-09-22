@@ -27,6 +27,11 @@ import { resolveWalletOnAppOpen } from "@/lib/walletAuth";
 import { formatChainError } from "@/lib/celo-public-client";
 import { purchaseScoreSubmitOnChain } from "@/lib/score-submit-purchase";
 import {
+  isArcadeXTxHubConfigured,
+  scoreSubmitPurpose,
+  signInOnChain,
+} from "@/lib/arcadex-tx-hub";
+import {
   clearPendingLeaderboardSubmit,
   getLeaderboardSubmitResult,
   setPendingLeaderboardSubmit,
@@ -284,10 +289,10 @@ export default function GameClient({
       deliverLeaderboardSubmitResult({
         success: false,
         highScore: personalBestRef.current,
-        error: "Payment cancelled.",
+        error: contestLive ? "Payment cancelled." : "Submit cancelled.",
       });
     }
-  }, [payingSubmit, pendingSubmitScore, game.id, deliverLeaderboardSubmitResult]);
+  }, [payingSubmit, pendingSubmitScore, game.id, contestLive, deliverLeaderboardSubmitResult]);
 
   const confirmPendingSubmit = useCallback(async () => {
     if (pendingSubmitScore == null || payingSubmit) return;
@@ -304,6 +309,16 @@ export default function GameClient({
       return;
     }
 
+    if (!contestLive && !isArcadeXTxHubConfigured()) {
+      setPendingSubmitScore(null);
+      deliverLeaderboardSubmitResult({
+        success: false,
+        highScore: personalBestRef.current,
+        error: "Score submit opens when a contest is live.",
+      });
+      return;
+    }
+
     // Release Unity pointer lock so MiniPay can show the wallet sheet.
     try {
       document.exitPointerLock?.();
@@ -315,12 +330,16 @@ export default function GameClient({
     setPendingSubmitScore(null);
     setSubmitToast({
       phase: "submitting",
-      message: "Submitting score… Confirm the payment in MiniPay.",
+      message: contestLive
+        ? "Submitting score… Confirm the $0.05 payment in MiniPay."
+        : "Submitting score… Confirm once in MiniPay (gas only).",
     });
     setPendingLeaderboardSubmit(game.id, score);
 
     try {
-      const { txHash } = await purchaseScoreSubmitOnChain();
+      const { txHash } = contestLive
+        ? await purchaseScoreSubmitOnChain()
+        : await signInOnChain(scoreSubmitPurpose(game.id));
       const result = await submitScoreToLeaderboard(game.id, {
         walletAddress: wallet,
         txHash,
@@ -348,6 +367,7 @@ export default function GameClient({
     walletAddress,
     profile?.walletAddress,
     game.id,
+    contestLive,
     deliverLeaderboardSubmitResult,
   ]);
 
@@ -864,7 +884,9 @@ export default function GameClient({
                 ✕
               </button>
               <h3 className="lb-submit-confirm__title">
-                Submit score to enter Contest
+                {contestLive
+                  ? "Submit score to enter Contest"
+                  : "Submit score to leaderboard"}
               </h3>
               <p className="lb-submit-confirm__score">
                 {pendingSubmitScore.toLocaleString()}
@@ -872,20 +894,28 @@ export default function GameClient({
               <p className="lb-submit-confirm__hint">
                 {contestLive
                   ? "Submit this score to appear on the contest leaderboard. Pay $0.05 in USDT or USDC. MiniPay will ask you to confirm once."
-                  : "Pay $0.05 in USDT or USDC. MiniPay will ask you to confirm once."}
+                  : isArcadeXTxHubConfigured()
+                    ? "Publish your best score on the all-time leaderboard. MiniPay will ask you to confirm once — gas only, no $0.05 fee. Contest entry opens when a contest is live."
+                    : "Contest is not live. Score submit with payment opens when a contest starts."}
               </p>
-              <button
-                type="button"
-                className={`lb-submit-confirm__pay${
-                  contestLive
-                    ? " lb-submit-confirm__pay--live"
-                    : " lb-submit-confirm__pay--offline"
-                }`}
-                onClick={() => void confirmPendingSubmit()}
-                disabled={payingSubmit}
-              >
-                {payingSubmit ? "Opening wallet…" : "Pay & Submit"}
-              </button>
+              {contestLive || isArcadeXTxHubConfigured() ? (
+                <button
+                  type="button"
+                  className={`lb-submit-confirm__pay${
+                    contestLive
+                      ? " lb-submit-confirm__pay--live"
+                      : " lb-submit-confirm__pay--offline"
+                  }`}
+                  onClick={() => void confirmPendingSubmit()}
+                  disabled={payingSubmit}
+                >
+                  {payingSubmit
+                    ? "Opening wallet…"
+                    : contestLive
+                      ? "Pay & Submit"
+                      : "Submit"}
+                </button>
+              ) : null}
               <p
                 className={`lb-submit-confirm__contest-status${
                   contestLive
@@ -894,7 +924,9 @@ export default function GameClient({
                 }`}
                 role="status"
               >
-                {contestLive ? "Contest is live" : "Contest is not live"}
+                {contestLive
+                  ? "Contest is live"
+                  : "Contest is not live — all-time board only"}
               </p>
             </div>
           </div>

@@ -23,6 +23,11 @@ import {
 } from "@/lib/infinite-spark-verify";
 import { verifySparkRefillPaymentTx } from "@/lib/spark-refill-verify";
 import { verifyScoreSubmitPaymentTx } from "@/lib/score-submit-verify";
+import { verifyTxHubSignInTx } from "@/lib/arcadex-tx-hub-verify";
+import {
+  isArcadeXTxHubConfigured,
+  scoreSubmitPurpose,
+} from "@/lib/arcadex-tx-hub";
 import type { Hash } from "viem";
 import { getDatabaseUrl, getFirebaseAccessToken, scrubSecrets } from "./firebase-admin";
 import { fetchWithTimeout } from "@/lib/firebase-fetch";
@@ -598,6 +603,7 @@ export class ScoreSubmitActivationError extends Error {
       | "INVALID_TX"
       | "TX_ALREADY_USED"
       | "NO_SCORE"
+      | "NOT_CONFIGURED"
   ) {
     super(message);
     this.name = "ScoreSubmitActivationError";
@@ -1624,8 +1630,10 @@ export async function resolveGameProgressFromServer(
 }
 
 /**
- * Activate a paid score submit. The client score body field is ignored —
- * only the wallet's saved personal best in D1/RTDB can be posted.
+ * Publish a score after on-chain proof.
+ * - Contest live (`contestStartedAt`): $0.05 ScoreSubmit payment → all-time + contest.
+ * - Contest off: ArcadeX Tx Hub gas-only signIn → all-time leaderboard only.
+ * Client score body is ignored — only RTDB personal best is posted.
  */
 export async function activateScoreSubmitOnServer(
   walletAddress: string,
@@ -1646,11 +1654,21 @@ export async function activateScoreSubmitOnServer(
 
   const wallet = normalizeWalletAddress(walletAddress);
   const normalizedTxHash = txHash.trim().toLowerCase();
+  const contestLive =
+    typeof opts?.contestStartedAt === "number" &&
+    Number.isFinite(opts.contestStartedAt);
 
   if (!/^0x[a-f0-9]{64}$/.test(normalizedTxHash)) {
     throw new ScoreSubmitActivationError(
       "A valid transaction hash is required.",
       "INVALID_TX"
+    );
+  }
+
+  if (!contestLive && !isArcadeXTxHubConfigured()) {
+    throw new ScoreSubmitActivationError(
+      "Score submit is unavailable until a contest is live.",
+      "NOT_CONFIGURED"
     );
   }
 
@@ -1685,7 +1703,7 @@ export async function activateScoreSubmitOnServer(
     const recordedWallet = normalizeWalletAddress(existingPayment.wallet);
     if (recordedWallet !== wallet) {
       throw new ScoreSubmitActivationError(
-        "This payment was already used by another wallet.",
+        "This transaction was already used by another wallet.",
         "TX_ALREADY_USED"
       );
     }
@@ -1702,19 +1720,34 @@ export async function activateScoreSubmitOnServer(
     };
   }
 
-  await verifyScoreSubmitPaymentTx(wallet, normalizedTxHash as Hash);
+  try {
+    if (contestLive) {
+      await verifyScoreSubmitPaymentTx(wallet, normalizedTxHash as Hash);
+    } else {
+      await verifyTxHubSignInTx(
+        wallet,
+        normalizedTxHash as Hash,
+        scoreSubmitPurpose(gameId)
+      );
+    }
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Invalid score submit transaction.";
+    throw new ScoreSubmitActivationError(message, "INVALID_TX");
+  }
 
   const now = Date.now();
   const claim = await claimGuardRecord(guardPath, wallet, () => ({
     wallet,
     gameId,
     score,
+    mode: contestLive ? "contest" : "leaderboard",
     activatedAt: now,
   }));
 
   if (claim.status === "conflict_other_wallet") {
     throw new ScoreSubmitActivationError(
-      "This payment was already used by another wallet.",
+      "This transaction was already used by another wallet.",
       "TX_ALREADY_USED"
     );
   }
@@ -1738,7 +1771,7 @@ export async function activateScoreSubmitOnServer(
       walletAddress: wallet,
     });
 
-    if (typeof opts?.contestStartedAt === "number") {
+    if (contestLive && typeof opts?.contestStartedAt === "number") {
       await submitContestLeaderboardEntryOnServer(gameId, opts.contestStartedAt, {
         name: playerName,
         score,
@@ -1756,10 +1789,14 @@ export async function activateScoreSubmitOnServer(
     playerName,
   });
 
-  recordActivityEventBestEffort(wallet, "spend", {
-    spendUnits: 1,
-    name: playerName,
-  });
+  if (contestLive) {
+    recordActivityEventBestEffort(wallet, "spend", {
+      spendUnits: 1,
+      name: playerName,
+    });
+  } else {
+    recordActivityEventBestEffort(wallet, "tx");
+  }
 
   return {
     highScore,

@@ -39,6 +39,7 @@ export class ScoreSubmitActivationError extends Error {
       | "INVALID_TX"
       | "TX_ALREADY_USED"
       | "NO_SCORE"
+      | "NOT_CONFIGURED"
   ) {
     super(message);
     this.name = "ScoreSubmitActivationError";
