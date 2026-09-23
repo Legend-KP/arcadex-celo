@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Game, gameHasContestLive, gameIsLive } from "@/types";
 import AchievementsView from "@/components/AchievementsView";
-import ActivityLeaderboardButton from "@/components/ActivityLeaderboardButton";
 import ActivityLeaderboardView from "@/components/ActivityLeaderboardView";
 import AppDrawer, { type AppView } from "@/components/AppDrawer";
 import GameCard from "@/components/GameCard";
@@ -199,7 +198,8 @@ function HorizontalGameRow({
 }
 
 export default function HomePage() {
-  const { playerName, walletAddress, openOnboarding } = usePlayerProfile();
+  const { playerName, walletAddress, openOnboarding, openEditName } =
+    usePlayerProfile();
   const [games, setGames] = useState<Game[]>(() => {
     return readCachedGamesList()?.games ?? [];
   });
@@ -215,6 +215,13 @@ export default function HomePage() {
   const [recentMap, setRecentMap] = useState<Record<string, number>>({});
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [view, setView] = useState<AppView>("home");
+
+  useEffect(() => {
+    if (!walletAddress) return;
+    void import("@/lib/activity-client").then(({ pingActivityVisit }) => {
+      void pingActivityVisit(walletAddress);
+    });
+  }, [walletAddress]);
 
   useEffect(() => {
     setRecentMap(getRecentPlayedMap());
@@ -361,23 +368,25 @@ export default function HomePage() {
         onNavigate={setView}
         onOpenSparks={openSparkPanel}
         onOpenTutorial={openOnboarding}
+        onEditName={openEditName}
         playerName={playerName}
         walletAddress={walletAddress}
       />
 
       <div className="home-shell">
         <header className="topbar home-sticky">
-          <button
-            type="button"
-            className="home-menu-btn"
-            aria-label="Open menu"
-            onClick={() => setDrawerOpen(true)}
-          >
-            <span className="home-menu-btn__bars" aria-hidden />
-          </button>
-          <Logo variant="header" />
+          <div className="topbar-left">
+            <button
+              type="button"
+              className="home-menu-btn"
+              aria-label="Open menu"
+              onClick={() => setDrawerOpen(true)}
+            >
+              <span className="home-menu-btn__bars" aria-hidden />
+            </button>
+            <Logo variant="header" />
+          </div>
           <div className="topbar-actions">
-            <ActivityLeaderboardButton />
             <SparkBatteryBar />
           </div>
         </header>

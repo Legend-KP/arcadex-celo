@@ -1,5 +1,6 @@
 "use client";
 
+import Logo from "@/components/Logo";
 import {
   FAQ_URL,
   PRIVACY_POLICY_URL,
@@ -30,6 +31,7 @@ interface AppDrawerProps {
   onNavigate: (view: AppView) => void;
   onOpenSparks: () => void;
   onOpenTutorial: () => void;
+  onEditName: () => void;
   playerName: string;
   walletAddress: string;
 }
@@ -46,6 +48,7 @@ export default function AppDrawer({
   onNavigate,
   onOpenSparks,
   onOpenTutorial,
+  onEditName,
   playerName,
   walletAddress,
 }: AppDrawerProps) {
@@ -61,16 +64,30 @@ export default function AppDrawer({
         aria-hidden={!open}
         aria-label="ArcadeX menu"
       >
-        <div className="app-drawer__brand">ArcadeX</div>
+        <div className="app-drawer__brand">
+          <Logo variant="header" />
+        </div>
 
         <div className="app-drawer__profile">
           <div className="app-drawer__avatar" aria-hidden>
             {(playerName.trim() || "?").slice(0, 1).toUpperCase()}
           </div>
           <div className="app-drawer__profile-text">
-            <p className="app-drawer__name">
-              {playerName.trim() || "Player"}
-            </p>
+            <div className="app-drawer__name-row">
+              <p className="app-drawer__name">
+                {playerName.trim() || "Player"}
+              </p>
+              <button
+                type="button"
+                className="app-drawer__edit-name"
+                onClick={() => {
+                  onEditName();
+                  onClose();
+                }}
+              >
+                Edit
+              </button>
+            </div>
             <p className="app-drawer__wallet">
               {truncateWallet(walletAddress)}
             </p>

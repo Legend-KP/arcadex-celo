@@ -76,6 +76,8 @@ interface PlayerProfileContextValue {
   updateWalletAddress: (walletAddress: string) => Promise<void>;
   refreshStreakStatus: () => Promise<void>;
   openOnboarding: () => void;
+  /** Re-open name modal so the player can change their display name. */
+  openEditName: () => void;
 }
 
 const PlayerProfileContext = createContext<PlayerProfileContextValue | null>(
@@ -137,6 +139,11 @@ export default function PlayerProfileProvider({
 
   const openOnboarding = useCallback(() => {
     setShowOnboarding(true);
+  }, []);
+
+  const openEditName = useCallback(() => {
+    setError("");
+    setShowModal(true);
   }, []);
 
   const handleOnboardingComplete = useCallback(() => {
@@ -473,6 +480,7 @@ export default function PlayerProfileProvider({
       updateWalletAddress,
       refreshStreakStatus,
       openOnboarding,
+      openEditName,
     }),
     [
       playerId,
@@ -483,6 +491,7 @@ export default function PlayerProfileProvider({
       updateWalletAddress,
       refreshStreakStatus,
       openOnboarding,
+      openEditName,
     ]
   );
 
@@ -548,6 +557,7 @@ export default function PlayerProfileProvider({
         saving={saving}
         error={error}
         defaultName={defaultName}
+        editing={Boolean(defaultName)}
         onSubmit={handleSubmit}
       />
     </PlayerProfileContext.Provider>

@@ -103,14 +103,11 @@ function pushLocalGameAssets(
   folder: string,
   kind: "logo" | "thumbnail"
 ) {
-  if (kind === "thumbnail") {
-    push(`/thumbnails/${folder}.webp`);
-  }
-
-  // Prefer webp; only fall through to png when webp is absent (e.g. block-blast).
+  // Prefer bundled 1:1 logos (new) over legacy portrait `/thumbnails/*.webp`.
   push(`/games/${folder}/logo.webp`);
   push(`/games/${folder}/logo.png`);
   if (kind === "thumbnail") {
+    push(`/thumbnails/${folder}.webp`);
     push(`/games/${folder}/thumbnail.webp`);
     push(`/games/${folder}/thumbnail.png`);
   }

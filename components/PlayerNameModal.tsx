@@ -9,6 +9,8 @@ interface PlayerNameModalProps {
   saving: boolean;
   error?: string;
   defaultName?: string;
+  /** True when the player already has a name and is editing it. */
+  editing?: boolean;
   onSubmit: (name: string) => void;
 }
 
@@ -17,6 +19,7 @@ export default function PlayerNameModal({
   saving,
   error,
   defaultName = "",
+  editing = false,
   onSubmit,
 }: PlayerNameModalProps) {
   const [name, setName] = useState(defaultName);
@@ -43,11 +46,18 @@ export default function PlayerNameModal({
 
   const modal = (
     <div className="player-modal-backdrop">
-      <div className="player-modal" role="dialog" aria-modal="true" aria-labelledby="player-modal-title">
+      <div
+        className="player-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="player-modal-title"
+      >
         <Logo variant="login" />
-        <p className="player-modal-subtitle">Welcome to ArcadeX</p>
+        <p className="player-modal-subtitle">
+          {editing ? "ArcadeX" : "Welcome to ArcadeX"}
+        </p>
         <h2 id="player-modal-title" className="player-modal-title">
-          Choose your player name
+          {editing ? "Change your player name" : "Choose your player name"}
         </h2>
         <p className="player-modal-hint">
           This name appears on leaderboards across all games.
@@ -76,7 +86,7 @@ export default function PlayerNameModal({
             className="player-modal-submit"
             disabled={saving || !isValid}
           >
-            {saving ? "Saving..." : "Continue"}
+            {saving ? "Saving..." : editing ? "Save name" : "Continue"}
           </button>
         </form>
       </div>

@@ -5601,11 +5601,16 @@ a { color: inherit; text-decoration: none; }
 .app-drawer.is-open { transform: translateX(0); }
 
 .app-drawer__brand {
-  font-family: var(--font-head);
-  font-size: 22px;
-  font-weight: 800;
-  color: #1a1a2e;
   margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+}
+.app-drawer__brand .logo-wrap--header {
+  height: 52px;
+}
+.app-drawer__brand .logo-wrap--header .logo-img {
+  height: 52px;
+  width: auto;
 }
 .app-drawer__profile {
   display: flex;
@@ -5629,11 +5634,28 @@ a { color: inherit; text-decoration: none; }
   font-size: 18px;
   flex-shrink: 0;
 }
+.app-drawer__name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .app-drawer__name {
   margin: 0;
   font-weight: 800;
   font-size: 15px;
   color: #1a1a2e;
+}
+.app-drawer__edit-name {
+  appearance: none;
+  border: none;
+  background: rgba(124, 58, 237, 0.12);
+  color: #5b21b6;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 .app-drawer__wallet {
   margin: 2px 0 0;
@@ -5856,10 +5878,23 @@ a { color: inherit; text-decoration: none; }
 
 .topbar {
   gap: 8px;
+  justify-content: space-between;
 }
-.topbar .logo-wrap--header {
-  flex: 1;
-  min-width: 0;
+.topbar-left {
   display: flex;
-  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.topbar-left .logo-wrap--header {
+  flex-shrink: 1;
+  min-width: 0;
+  height: 40px;
+}
+.topbar-left .logo-wrap--header .logo-img {
+  height: 40px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
 }

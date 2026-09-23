@@ -88,22 +88,13 @@ export default function GameCard({
     if (isLive) preloadGameMenuAssets(game, { includeTutorial: true });
   };
 
-  // Square cards prefer 1:1 logos; catalog keeps thumbnail-first.
-  const primarySrc = isSquare
-    ? logoSrc || thumbSrc || fallbackSrc
-    : thumbSrc || logoSrc || fallbackSrc;
+  // Prefer 1:1 logo assets (new) for both square rails and catalog frames.
+  // Portrait `/thumbnails/*.webp` are legacy fallbacks only.
+  const primarySrc = logoSrc || thumbSrc || fallbackSrc;
   const onPrimaryError = () => {
-    if (isSquare) {
-      if (logoSrc) setLogoIdx((i) => i + 1);
-      else if (thumbSrc) setThumbIdx((i) => i + 1);
-      else setFallbackIdx((i) => i + 1);
-    } else if (thumbSrc) {
-      setThumbIdx((i) => i + 1);
-    } else if (logoSrc) {
-      setLogoIdx((i) => i + 1);
-    } else {
-      setFallbackIdx((i) => i + 1);
-    }
+    if (logoSrc) setLogoIdx((i) => i + 1);
+    else if (thumbSrc) setThumbIdx((i) => i + 1);
+    else setFallbackIdx((i) => i + 1);
   };
 
   const thumbContent = primarySrc ? (
