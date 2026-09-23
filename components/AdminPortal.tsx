@@ -23,6 +23,7 @@ import {
   gameIsLive,
 } from "@/types";
 import AdminContestModal from "@/components/AdminContestModal";
+import AdminMissionsPanel from "@/components/AdminMissionsPanel";
 import Logo from "@/components/Logo";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "/";
@@ -683,6 +684,8 @@ export default function AdminPortal() {
             )}
           </div>
         )}
+
+        <AdminMissionsPanel games={games} showToast={showToast} />
       </div>
 
       <AdminContestModal

@@ -25,8 +25,38 @@ export interface PlayerProfile {
   id: string;
   name: string;
   walletAddress?: string;
+  /** Claimed achievement XP (D1). Omitted / 0 when unavailable. */
+  xp?: number;
   createdAt: number;
   updatedAt: number;
+}
+
+export type MissionType = "score" | "level";
+
+/** Admin-defined game mission (D1 `missions`). */
+export interface Mission {
+  id: string;
+  gameId: string;
+  title: string;
+  type: MissionType;
+  threshold: number;
+  /** Optional mode key for level missions (e.g. Line Link "easy"). */
+  mode?: string | null;
+  xpReward: number;
+  active: boolean;
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type AchievementStatus = "in_progress" | "claimable" | "claimed";
+
+export interface AchievementProgressItem {
+  mission: Mission;
+  status: AchievementStatus;
+  current: number;
+  threshold: number;
+  gameName?: string;
 }
 
 /** Gating fields mirrored for hot-path reads (`gameFlags/{id}` on RTDB, `game_flags` on D1). */

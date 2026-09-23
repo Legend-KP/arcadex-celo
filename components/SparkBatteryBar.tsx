@@ -26,6 +26,20 @@ export default function SparkBatteryBar() {
       sessionStorage.removeItem("openSparkPanel");
       setOpen(true);
     }
+
+    function onOpenSpark() {
+      try {
+        sessionStorage.removeItem("openSparkPanel");
+      } catch {
+        // ignore
+      }
+      setOpen(true);
+    }
+
+    window.addEventListener("arcadex:open-spark-panel", onOpenSpark);
+    return () => {
+      window.removeEventListener("arcadex:open-spark-panel", onOpenSpark);
+    };
   }, []);
 
   useEffect(() => {

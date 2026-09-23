@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Game, gameHasContestLive } from "@/types";
-import AppFooter from "@/components/AppFooter";
+import { Game, gameHasContestLive, gameIsLive } from "@/types";
+import AchievementsView from "@/components/AchievementsView";
+import ActivityLeaderboardButton from "@/components/ActivityLeaderboardButton";
+import ActivityLeaderboardView from "@/components/ActivityLeaderboardView";
+import AppDrawer, { type AppView } from "@/components/AppDrawer";
 import GameCard from "@/components/GameCard";
 import HomeFilterBar, { type HomeSort } from "@/components/HomeFilterBar";
 import Logo from "@/components/Logo";
 import SparkBatteryBar from "@/components/SparkBatteryBar";
-import ActivityLeaderboardButton from "@/components/ActivityLeaderboardButton";
+import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import {
   readCachedGamesList,
   writeCachedGamesList,
@@ -72,7 +75,131 @@ function emptyMessage(
   return "No games yet. Check back soon!";
 }
 
+function formatRelativePlayed(playedAt: number): string {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const startToday = new Date();
+  startToday.setHours(0, 0, 0, 0);
+  const start = startToday.getTime();
+  if (playedAt >= start) return "Last played today";
+  if (playedAt >= start - dayMs) return "Last played yesterday";
+  return "Recently played";
+}
+
+function openSparkPanel() {
+  try {
+    sessionStorage.setItem("openSparkPanel", "1");
+  } catch {
+    // ignore
+  }
+  window.dispatchEvent(new Event("arcadex:open-spark-panel"));
+}
+
+function GamesCatalog({
+  games,
+  playCounts,
+  loading,
+  error,
+  empty,
+  priorityCount = 4,
+}: {
+  games: Game[];
+  playCounts: Record<string, number>;
+  loading: boolean;
+  error: string;
+  empty: string;
+  priorityCount?: number;
+}) {
+  if (error) return <p className="no-games">{error}</p>;
+  if (loading) {
+    return (
+      <div
+        className="games-grid games-grid--loading"
+        aria-busy="true"
+        aria-label="Loading games"
+      >
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="game-card-skeleton" aria-hidden />
+        ))}
+      </div>
+    );
+  }
+  if (games.length === 0) return <p className="no-games">{empty}</p>;
+  return (
+    <div className="games-grid">
+      {games.map((game, index) => (
+        <GameCard
+          key={game.id}
+          game={game}
+          playCount={playCounts[game.id] ?? 0}
+          priority={index < priorityCount}
+        />
+      ))}
+    </div>
+  );
+}
+
+function HorizontalGameRow({
+  title,
+  badge,
+  games,
+  playCounts,
+  recentMap,
+  showContestTimer,
+  empty,
+}: {
+  title: string;
+  badge?: string | number;
+  games: Game[];
+  playCounts: Record<string, number>;
+  recentMap?: Record<string, number>;
+  showContestTimer?: boolean;
+  empty?: string;
+}) {
+  if (games.length === 0) {
+    return empty ? (
+      <section className="home-section">
+        <div className="home-section__head">
+          <h2 className="home-section__title">{title}</h2>
+        </div>
+        <p className="home-section__empty">{empty}</p>
+      </section>
+    ) : null;
+  }
+
+  return (
+    <section className="home-section">
+      <div className="home-section__head">
+        <h2 className="home-section__title">
+          {title}
+          {badge !== undefined && (
+            <span className="home-section__badge">{badge}</span>
+          )}
+        </h2>
+      </div>
+      <div className="home-rail" role="list">
+        {games.map((game, index) => (
+          <div key={game.id} className="home-rail__item" role="listitem">
+            <GameCard
+              game={game}
+              variant="square"
+              playCount={playCounts[game.id] ?? 0}
+              priority={index < 3}
+              showContestTimer={showContestTimer}
+              subtitle={
+                recentMap?.[game.id]
+                  ? formatRelativePlayed(recentMap[game.id])
+                  : undefined
+              }
+            />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function HomePage() {
+  const { playerName, walletAddress, openOnboarding } = usePlayerProfile();
   const [games, setGames] = useState<Game[]>(() => {
     return readCachedGamesList()?.games ?? [];
   });
@@ -86,6 +213,8 @@ export default function HomePage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [recentMap, setRecentMap] = useState<Record<string, number>>({});
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [view, setView] = useState<AppView>("home");
 
   useEffect(() => {
     setRecentMap(getRecentPlayedMap());
@@ -103,7 +232,6 @@ export default function HomePage() {
     };
   }, []);
 
-  // Fetch games immediately — do not wait for wallet / streak / profile.
   useEffect(() => {
     let cancelled = false;
     const hadCache = Boolean(readCachedGamesList());
@@ -160,17 +288,59 @@ export default function HomePage() {
     };
   }, []);
 
-  const visibleGames = useMemo(
-    () =>
-      applyHomeBrowse(
-        games,
-        sort,
-        contestOnly,
-        searchOpen ? searchQuery : "",
-        recentMap
-      ),
-    [games, sort, contestOnly, searchOpen, searchQuery, recentMap]
+  const liveGames = useMemo(
+    () => games.filter((g) => gameIsLive(g)),
+    [games]
   );
+  const contestGames = useMemo(
+    () => games.filter((g) => gameHasContestLive(g)),
+    [games]
+  );
+  const comingSoonGames = useMemo(
+    () => games.filter((g) => !gameIsLive(g)),
+    [games]
+  );
+  const continueGames = useMemo(() => {
+    const ids = Object.keys(recentMap).sort(
+      (a, b) => (recentMap[b] ?? 0) - (recentMap[a] ?? 0)
+    );
+    const byId = new Map(liveGames.map((g) => [g.id, g]));
+    return ids
+      .map((id) => byId.get(id))
+      .filter((g): g is Game => Boolean(g))
+      .slice(0, 12);
+  }, [liveGames, recentMap]);
+
+  const catalogGames = useMemo(() => {
+    const source =
+      view === "contests"
+        ? contestGames
+        : view === "games"
+          ? liveGames
+          : liveGames;
+    return applyHomeBrowse(
+      source,
+      sort,
+      view === "home" ? contestOnly : view === "contests",
+      searchOpen ? searchQuery : "",
+      recentMap
+    );
+  }, [
+    view,
+    contestGames,
+    liveGames,
+    sort,
+    contestOnly,
+    searchOpen,
+    searchQuery,
+    recentMap,
+  ]);
+
+  const gameNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const g of games) map[g.id] = g.name;
+    return map;
+  }, [games]);
 
   const handleSortChange = (next: HomeSort) => {
     setSort(next);
@@ -179,11 +349,32 @@ export default function HomePage() {
     }
   };
 
+  const showCatalogFilters = view === "home" || view === "games" || view === "contests";
+
   return (
     <div className="home">
       <div className="home-ambient" aria-hidden />
+      <AppDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        view={view}
+        onNavigate={setView}
+        onOpenSparks={openSparkPanel}
+        onOpenTutorial={openOnboarding}
+        playerName={playerName}
+        walletAddress={walletAddress}
+      />
+
       <div className="home-shell">
         <header className="topbar home-sticky">
+          <button
+            type="button"
+            className="home-menu-btn"
+            aria-label="Open menu"
+            onClick={() => setDrawerOpen(true)}
+          >
+            <span className="home-menu-btn__bars" aria-hidden />
+          </button>
           <Logo variant="header" />
           <div className="topbar-actions">
             <ActivityLeaderboardButton />
@@ -191,54 +382,100 @@ export default function HomePage() {
           </div>
         </header>
 
-        <HomeFilterBar
-          sort={sort}
-          contestOnly={contestOnly}
-          searchOpen={searchOpen}
-          searchQuery={searchQuery}
-          onSortChange={handleSortChange}
-          onContestOnlyChange={setContestOnly}
-          onSearchOpenChange={setSearchOpen}
-          onSearchQueryChange={setSearchQuery}
-        />
+        {showCatalogFilters && view !== "home" && (
+          <HomeFilterBar
+            sort={sort}
+            contestOnly={view === "contests" ? true : contestOnly}
+            searchOpen={searchOpen}
+            searchQuery={searchQuery}
+            onSortChange={handleSortChange}
+            onContestOnlyChange={
+              view === "contests" ? () => undefined : setContestOnly
+            }
+            onSearchOpenChange={setSearchOpen}
+            onSearchQueryChange={setSearchQuery}
+          />
+        )}
 
         <main className="home-main">
-          {error ? (
-            <p className="no-games">{error}</p>
-          ) : loading ? (
-            <div
-              className="games-grid games-grid--loading"
-              aria-busy="true"
-              aria-label="Loading games"
-            >
-              {Array.from({ length: 4 }, (_, i) => (
-                <div key={i} className="game-card-skeleton" aria-hidden />
-              ))}
-            </div>
-          ) : visibleGames.length === 0 ? (
-            <p className="no-games">
-              {emptyMessage(
-                sort,
-                contestOnly,
-                searchOpen ? searchQuery : "",
-                games.length > 0
-              )}
-            </p>
-          ) : (
-            <div className="games-grid">
-              {visibleGames.map((game, index) => (
-                <GameCard
-                  key={game.id}
-                  game={game}
-                  playCount={playCounts[game.id] ?? 0}
-                  priority={index < 4}
+          {view === "home" && (
+            <>
+              <HorizontalGameRow
+                title="Live contests"
+                badge={contestGames.length || undefined}
+                games={contestGames}
+                playCounts={playCounts}
+                showContestTimer
+              />
+              <HorizontalGameRow
+                title="Continue playing"
+                games={continueGames}
+                playCounts={playCounts}
+                recentMap={recentMap}
+              />
+
+              <section className="home-section home-section--catalog">
+                <div className="home-section__head">
+                  <h2 className="home-section__title">All games</h2>
+                </div>
+                <HomeFilterBar
+                  sort={sort}
+                  contestOnly={contestOnly}
+                  searchOpen={searchOpen}
+                  searchQuery={searchQuery}
+                  onSortChange={handleSortChange}
+                  onContestOnlyChange={setContestOnly}
+                  onSearchOpenChange={setSearchOpen}
+                  onSearchQueryChange={setSearchQuery}
                 />
-              ))}
-            </div>
+                <GamesCatalog
+                  games={applyHomeBrowse(
+                    liveGames,
+                    sort,
+                    contestOnly,
+                    searchOpen ? searchQuery : "",
+                    recentMap
+                  )}
+                  playCounts={playCounts}
+                  loading={loading}
+                  error={error}
+                  empty={emptyMessage(
+                    sort,
+                    contestOnly,
+                    searchOpen ? searchQuery : "",
+                    liveGames.length > 0
+                  )}
+                />
+              </section>
+
+              <HorizontalGameRow
+                title="Coming soon"
+                games={comingSoonGames}
+                playCounts={playCounts}
+              />
+            </>
+          )}
+
+          {(view === "games" || view === "contests") && (
+            <GamesCatalog
+              games={catalogGames}
+              playCounts={playCounts}
+              loading={loading}
+              error={error}
+              empty={emptyMessage(
+                sort,
+                view === "contests" || contestOnly,
+                searchOpen ? searchQuery : "",
+                (view === "contests" ? contestGames : liveGames).length > 0
+              )}
+            />
+          )}
+
+          {view === "leaderboard" && <ActivityLeaderboardView />}
+          {view === "achievements" && (
+            <AchievementsView gameNames={gameNames} />
           )}
         </main>
-
-        <AppFooter />
       </div>
     </div>
   );
