@@ -155,9 +155,12 @@ export default function ActivityLeaderboardButton() {
                   </span>
                   <div className="lb-title-stack">
                     <span className="lb-title">Weekly Activity Leaderboard</span>
-                    <span className="lb-live-badge">
-                      <span className="lb-live-dot" aria-hidden="true" />
-                      THIS WEEK
+                    <span className="activity-lb-reset" role="status">
+                      <span className="activity-lb-reset__dot" aria-hidden="true" />
+                      <span className="activity-lb-reset__label">Resets in</span>
+                      <span className="activity-lb-reset__value">
+                        {countdown || "…"}
+                      </span>
                     </span>
                   </div>
                 </div>
@@ -175,11 +178,14 @@ export default function ActivityLeaderboardButton() {
                 Come daily and play games to climb the board.
               </p>
 
-              <div className="lb-timer-panel" role="status">
+              <div className="lb-timer-panel activity-lb-prize" role="status">
                 <div className="lb-timer-panel__glow" aria-hidden="true" />
                 <div className="lb-timer-panel__content">
-                  <p className="lb-timer-panel__label">Resets in</p>
-                  <p className="lb-timer-panel__value">{countdown || "…"}</p>
+                  <p className="lb-timer-panel__label">Weekly prize</p>
+                  <p className="activity-lb-prize__amount">$10</p>
+                  <p className="activity-lb-prize__copy">
+                    for the Top 10 winners
+                  </p>
                 </div>
                 <div className="lb-timer-panel__trophy" aria-hidden="true">
                   🏆

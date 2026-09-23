@@ -893,7 +893,7 @@ export default function GameClient({
               </p>
               <p className="lb-submit-confirm__hint">
                 {contestLive
-                  ? "Submit this score to appear on the contest leaderboard. Pay $0.05 in USDT or USDC. MiniPay will ask you to confirm once."
+                  ? "100% of the Fees generated goes into the Rewards. Pay $0.05 in USDT or USDC. MiniPay will ask you to confirm once."
                   : isArcadeXTxHubConfigured()
                     ? "Publish your best score on the all-time leaderboard. MiniPay will ask you to confirm once — gas only."
                     : "Contest is not live. Score submit with payment opens when a contest starts."}
