@@ -103,14 +103,15 @@ function pushLocalGameAssets(
   folder: string,
   kind: "logo" | "thumbnail"
 ) {
-  // Prefer bundled 1:1 logos (new) over legacy portrait `/thumbnails/*.webp`.
-  push(`/games/${folder}/logo.webp`);
-  push(`/games/${folder}/logo.png`);
   if (kind === "thumbnail") {
+    // Portrait catalog frames — prefer dedicated thumbnails first.
     push(`/thumbnails/${folder}.webp`);
     push(`/games/${folder}/thumbnail.webp`);
     push(`/games/${folder}/thumbnail.png`);
   }
+  // Prefer webp; only fall through to png when webp is absent (e.g. block-blast).
+  push(`/games/${folder}/logo.webp`);
+  push(`/games/${folder}/logo.png`);
 }
 
 /** Local / remote asset URLs to try, in priority order. */

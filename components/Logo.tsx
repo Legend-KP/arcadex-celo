@@ -1,8 +1,10 @@
 const LOGO_BY_VARIANT = {
-  /** New ArcadeX mark (square). */
-  header: "/thumbnails/arcadeX.webp",
-  loading: "/thumbnails/arcadeX.webp",
-  login: "/thumbnails/arcadeX.webp",
+  /** Home top bar + loading — wordmark. */
+  header: "/logo.png",
+  loading: "/logo.png",
+  login: "/logo.png",
+  /** Drawer left panel — square mark (unchanged). */
+  drawer: "/thumbnails/arcadeX.webp",
 } as const;
 
 interface LogoProps {

@@ -65,7 +65,7 @@ export default function AppDrawer({
         aria-label="ArcadeX menu"
       >
         <div className="app-drawer__brand">
-          <Logo variant="header" />
+          <Logo variant="drawer" />
         </div>
 
         <div className="app-drawer__profile">

@@ -1,4 +1,4 @@
-"use client";
+image.png"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { Game, gameHasContestLive, gameIsLive } from "@/types";

@@ -88,13 +88,23 @@ export default function GameCard({
     if (isLive) preloadGameMenuAssets(game, { includeTutorial: true });
   };
 
-  // Prefer 1:1 logo assets (new) for both square rails and catalog frames.
-  // Portrait `/thumbnails/*.webp` are legacy fallbacks only.
-  const primarySrc = logoSrc || thumbSrc || fallbackSrc;
+  // Catalog (2:3): portrait thumbnails so art fills the frame.
+  // Square rails (1:1): logo assets.
+  const primarySrc = isSquare
+    ? logoSrc || thumbSrc || fallbackSrc
+    : thumbSrc || logoSrc || fallbackSrc;
   const onPrimaryError = () => {
-    if (logoSrc) setLogoIdx((i) => i + 1);
-    else if (thumbSrc) setThumbIdx((i) => i + 1);
-    else setFallbackIdx((i) => i + 1);
+    if (isSquare) {
+      if (logoSrc) setLogoIdx((i) => i + 1);
+      else if (thumbSrc) setThumbIdx((i) => i + 1);
+      else setFallbackIdx((i) => i + 1);
+    } else if (thumbSrc) {
+      setThumbIdx((i) => i + 1);
+    } else if (logoSrc) {
+      setLogoIdx((i) => i + 1);
+    } else {
+      setFallbackIdx((i) => i + 1);
+    }
   };
 
   const thumbContent = primarySrc ? (
