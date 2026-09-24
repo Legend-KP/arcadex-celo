@@ -84,6 +84,7 @@ function docToGame(doc: FirestoreDocument): Game {
       parseField(fields.fallbackImage)
     ),
     active: parseBooleanFlag(parseField(fields.active), true),
+    isTest: parseField(fields.isTest) === true,
     live: parseBooleanFlag(parseField(fields.live), true),
     hasLeaderboard: parseBooleanFlag(parseField(fields.hasLeaderboard), true),
     contestLive: parseField(fields.contestLive) === true,
@@ -205,7 +206,14 @@ function encodeFields(
 }
 
 export function isGameVisible(game: Game): boolean {
+  // Test games stay reachable by id (password gated in the UI).
+  if (game.isTest === true) return true;
   return game.active !== false;
+}
+
+/** Public home/arcade grid — excludes hidden and test-only games. */
+export function isGameInPublicCatalog(game: Game): boolean {
+  return game.active !== false && game.isTest !== true;
 }
 
 async function fetchGamesFromFirestore(): Promise<Game[]> {
@@ -300,10 +308,16 @@ export async function createGameOnServer(
   const existing = await fetchGamesFromServer();
   const sortOrder = data.sortOrder ?? nextGameSortOrder(existing);
 
+  let payload: Omit<Game, "id" | "createdAt"> = { ...data, sortOrder };
+  if (payload.isTest === true) {
+    payload = { ...payload, active: true, live: true };
+    await clearTestFlagOnOtherGames(existing, null);
+  }
+
   const res = await firestoreFetch("games", {
     method: "POST",
     body: JSON.stringify({
-      fields: encodeFields({ ...data, sortOrder, createdAt: Date.now() }),
+      fields: encodeFields({ ...payload, createdAt: Date.now() }),
     }),
   });
 
@@ -323,11 +337,33 @@ export async function createGameOnServer(
   return id;
 }
 
+async function clearTestFlagOnOtherGames(
+  games: Game[],
+  keepId: string | null
+): Promise<void> {
+  const others = games.filter(
+    (g) => g.isTest === true && (keepId === null || g.id !== keepId)
+  );
+  for (const other of others) {
+    await patchGameOnFirestore(other.id, { isTest: false });
+    invalidateGameCache(other.id);
+    const refreshed = await fetchGameFromFirestore(other.id);
+    if (refreshed) upsertCachedGame(refreshed);
+  }
+}
+
 export async function updateGameOnServer(
   id: string,
   data: Partial<Omit<Game, "id">>
 ): Promise<void> {
-  await patchGameOnFirestore(id, data);
+  let patch = { ...data };
+  if (patch.isTest === true) {
+    const games = await fetchGamesFromServer();
+    await clearTestFlagOnOtherGames(games, id);
+    patch = { ...patch, active: true, live: true };
+  }
+
+  await patchGameOnFirestore(id, patch);
   invalidateGameCache(id);
   await bumpCatalogGeneration();
   const refreshed = await fetchGameFromFirestore(id);

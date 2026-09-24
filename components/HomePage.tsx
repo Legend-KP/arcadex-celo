@@ -22,6 +22,9 @@ export default function HomePage() {
   const [playCounts, setPlayCounts] = useState<Record<string, number>>(() => {
     return readCachedGamesList()?.playCounts ?? {};
   });
+  const [testGameId, setTestGameId] = useState<string | null>(() => {
+    return readCachedGamesList()?.testGameId ?? null;
+  });
   const [loading, setLoading] = useState(() => !readCachedGamesList());
   const [error, setError] = useState("");
 
@@ -42,11 +45,14 @@ export default function HomePage() {
 
         const nextGames = data.games ?? [];
         const nextPlayCounts = data.playCounts ?? {};
+        const nextTestGameId = data.testGameId ?? null;
         setGames(nextGames);
         setPlayCounts(nextPlayCounts);
+        setTestGameId(nextTestGameId);
         writeCachedGamesList({
           games: nextGames,
           playCounts: nextPlayCounts,
+          testGameId: nextTestGameId,
           fetchedAt: Date.now(),
         });
       } catch (err) {
@@ -126,7 +132,7 @@ export default function HomePage() {
           )}
         </main>
 
-        <AppFooter />
+        <AppFooter testGameId={testGameId} />
       </div>
     </div>
   );

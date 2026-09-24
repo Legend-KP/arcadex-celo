@@ -1453,6 +1453,130 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.02em;
 }
 
+/* ?? Test game password gate ???????????????????????????? */
+.test-access-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: spark-panel-fade-in 0.18s ease-out;
+}
+
+.test-access-popup {
+  width: 100%;
+  max-width: 340px;
+  padding: 24px 20px 20px;
+  border-radius: 22px;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(#ffffff, #ffffff) padding-box,
+    var(--gold-border-gradient) border-box;
+  box-shadow:
+    0 18px 48px rgba(15, 23, 42, 0.2),
+    var(--gold-border-glow);
+  text-align: center;
+  animation: spark-panel-rise 0.22s ease-out;
+}
+
+.test-access-popup__title {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 800;
+  color: #1a1a2e;
+}
+
+.test-access-popup__subtitle {
+  margin: 0 0 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.test-access-popup__actions {
+  display: flex;
+  gap: 10px;
+  justify-content: stretch;
+}
+
+.test-access-popup__btn {
+  flex: 1;
+  appearance: none;
+  border: none;
+  border-radius: 14px;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.test-access-popup__btn:hover {
+  filter: brightness(1.06);
+}
+
+.test-access-popup__btn--ghost {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.test-access-screen {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--bg, #f8fafc);
+}
+
+.test-access-card {
+  width: 100%;
+  max-width: 360px;
+  padding: 28px 22px 22px;
+  border-radius: 22px;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(#ffffff, #ffffff) padding-box,
+    var(--gold-border-gradient) border-box;
+  box-shadow: var(--shadow, 0 8px 28px rgba(15, 23, 42, 0.08));
+}
+
+.test-access-card__title {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #1a1a2e;
+  text-align: center;
+}
+
+.test-access-card__subtitle {
+  margin: 0 0 18px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.test-access-card__actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.test-access-card__actions .test-access-popup__btn {
+  flex: 1;
+}
+
 /* ?? Game menu (pre-play screen) ???????????????????????? */
 .game-menu {
   position: fixed;

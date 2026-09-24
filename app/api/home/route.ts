@@ -83,6 +83,7 @@ export async function GET(request: Request) {
       {
         games: catalog.games,
         playCounts: catalog.playCounts,
+        testGameId: catalog.testGameId,
         user,
         state,
         sparks,

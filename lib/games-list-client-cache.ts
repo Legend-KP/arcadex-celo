@@ -9,6 +9,7 @@ export const GAMES_LIST_CLIENT_REFRESH_MS = 120_000;
 export type CachedGamesPayload = {
   games: Game[];
   playCounts: Record<string, number>;
+  testGameId?: string | null;
   fetchedAt: number;
 };
 

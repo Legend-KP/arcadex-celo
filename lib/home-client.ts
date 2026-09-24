@@ -8,6 +8,7 @@ import { walletAuthHeaders } from "@/lib/wallet-session-client";
 export type HomeShellPayload = {
   games: Game[];
   playCounts: Record<string, number>;
+  testGameId: string | null;
   user: PlayerProfile | null;
   state: StoredSparkState | null;
   sparks: SparkSnapshot | null;
@@ -53,6 +54,7 @@ export async function fetchHomeShell(
     const payload: HomeShellPayload = {
       games: data.games ?? [],
       playCounts: data.playCounts ?? {},
+      testGameId: data.testGameId ?? null,
       user: data.user ?? null,
       state: data.state ?? null,
       sparks: data.sparks ?? null,

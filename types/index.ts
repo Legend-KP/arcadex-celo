@@ -50,6 +50,11 @@ export interface Game {
   plays: string;       // display string e.g. "1.2m"
   fallbackImage: string; // image URL when thumbnail/logo are missing
   active: boolean;
+  /**
+   * When true, the game is hidden from the public arcade and only reachable
+   * via the footer Test button (password gated). Only one game may be test at a time.
+   */
+  isTest?: boolean;
   /** When false, the game is visible but shows "Coming Soon" and cannot be played. Defaults to true. */
   live?: boolean;
   /** When false, this is a level game: no leaderboard UI; progress is stored as `l`. Defaults to true (score game, stores `s`). */
@@ -75,6 +80,10 @@ export function gameHasLeaderboard(game: Pick<Game, "hasLeaderboard">): boolean 
 
 export function gameIsLive(game: Pick<Game, "live">): boolean {
   return game.live !== false;
+}
+
+export function gameIsTest(game: Pick<Game, "isTest">): boolean {
+  return game.isTest === true;
 }
 
 export function gameHasContestLive(

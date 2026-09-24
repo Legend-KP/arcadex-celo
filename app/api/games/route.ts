@@ -50,7 +50,7 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(
-      { games: catalog.games, playCounts: catalog.playCounts },
+      { games: catalog.games, playCounts: catalog.playCounts, testGameId: catalog.testGameId },
       {
         headers: {
           "Cache-Control": GAMES_API_CACHE_CONTROL,
@@ -99,6 +99,7 @@ export async function POST(request: Request) {
       fallbackImage: normalizeImageAssetUrl(body.fallbackImage),
       active: body.active ?? true,
       live: body.live !== false,
+      isTest: body.isTest === true,
       hasLeaderboard: body.hasLeaderboard !== false,
       contestLive: body.contestLive === true,
     });

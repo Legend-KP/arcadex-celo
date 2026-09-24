@@ -1,5 +1,8 @@
 import { verifyAdminRequest } from "@/lib/admin-auth";
-import { fetchGamesFromServer, isGameVisible } from "@/lib/firestore-server";
+import {
+  fetchGamesFromServer,
+  isGameInPublicCatalog,
+} from "@/lib/firestore-server";
 import { withFirestoreReadCounter } from "@/lib/firestore-read-counter";
 import { fetchGamePlayCountsForIds } from "@/lib/player-backend";
 import { Game } from "@/types";
@@ -7,6 +10,8 @@ import { Game } from "@/types";
 export type CatalogListPayload = {
   games: Game[];
   playCounts: Record<string, number>;
+  /** Id of the single test game, if any — not included in public `games`. */
+  testGameId: string | null;
   firestoreReads: number;
   cacheHit: boolean;
 };
@@ -19,7 +24,8 @@ export async function loadCatalogListForRequest(
   );
 
   const isAdmin = await verifyAdminRequest(request);
-  const visible = isAdmin ? games : games.filter(isGameVisible);
+  const testGameId = games.find((g) => g.isTest === true)?.id ?? null;
+  const visible = isAdmin ? games : games.filter(isGameInPublicCatalog);
   const visibleIds = visible.map((g) => g.id);
 
   // Prefer id-scoped fetch so an incomplete play-count cache cannot zero the grid.
@@ -37,6 +43,7 @@ export async function loadCatalogListForRequest(
   return {
     games: visible,
     playCounts,
+    testGameId,
     firestoreReads,
     cacheHit: firestoreReads === 0,
   };

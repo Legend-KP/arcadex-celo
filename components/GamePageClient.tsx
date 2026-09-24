@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Game, gameHasLeaderboard, gameHasContestLive, gameIsLive } from "@/types";
+import {
+  Game,
+  gameHasLeaderboard,
+  gameHasContestLive,
+  gameIsLive,
+  gameIsTest,
+} from "@/types";
 import GameClient from "@/components/GameClient";
 import GameMenu from "@/components/GameMenu";
 import Leaderboard, { type LeaderboardMode } from "@/components/Leaderboard";
@@ -22,6 +28,11 @@ import {
   playPurpose,
   signInOnChain,
 } from "@/lib/arcadex-tx-hub";
+import {
+  isTestGameUnlocked,
+  unlockTestGame,
+  verifyTestGamePassword,
+} from "@/lib/test-game-access";
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
@@ -40,6 +51,10 @@ export default function GamePageClient() {
   const [error, setError] = useState("");
   const [sparkError, setSparkError] = useState("");
   const [noSparksOpen, setNoSparksOpen] = useState(false);
+  const [testUnlocked, setTestUnlocked] = useState(false);
+  const [testPassword, setTestPassword] = useState("");
+  const [testPwError, setTestPwError] = useState("");
+  const [showTestPw, setShowTestPw] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,6 +65,9 @@ export default function GamePageClient() {
       setMenuImageSrc(null);
       setTutorialImageSrc(null);
       setError("");
+      setTestUnlocked(false);
+      setTestPassword("");
+      setTestPwError("");
 
       try {
         const res = await fetch(`/api/games/${id}`, { cache: "no-store" });
@@ -63,6 +81,17 @@ export default function GamePageClient() {
         if (cancelled) return;
 
         setGame(nextGame);
+
+        if (nextGame && gameIsTest(nextGame)) {
+          const unlocked = isTestGameUnlocked(nextGame.id);
+          setTestUnlocked(unlocked);
+          if (!unlocked) {
+            setMenuReady(true);
+            return;
+          }
+        } else {
+          setTestUnlocked(true);
+        }
 
         if (nextGame && gameIsLive(nextGame)) {
           fetch(`/api/games/${id}/play`, { method: "POST" }).catch(() => {
@@ -116,6 +145,59 @@ export default function GamePageClient() {
     };
   }, [id]);
 
+  const finishTestUnlock = useCallback(async (unlockedGame: Game) => {
+    setTestUnlocked(true);
+    unlockTestGame(unlockedGame.id);
+    setMenuReady(false);
+
+    if (!gameIsLive(unlockedGame)) {
+      setMenuReady(true);
+      return;
+    }
+
+    fetch(`/api/games/${unlockedGame.id}/play`, { method: "POST" }).catch(
+      () => {
+        // Play tracking is best-effort
+      }
+    );
+
+    const tutorialUnseen =
+      typeof window !== "undefined" &&
+      window.localStorage.getItem(getGameTutorialSeenKey(unlockedGame)) !==
+        "1";
+
+    const primaryPromise = loadPrimaryGameMenuImage(unlockedGame);
+    const tutorialPromise = loadGameTutorialImage(unlockedGame);
+
+    if (tutorialUnseen) {
+      const [primary, tutorial] = await Promise.all([
+        primaryPromise,
+        tutorialPromise,
+      ]);
+      setMenuImageSrc(primary);
+      setTutorialImageSrc(tutorial);
+    } else {
+      const primary = await primaryPromise;
+      setMenuImageSrc(primary);
+      void tutorialPromise.then((tutorial) => {
+        setTutorialImageSrc(tutorial);
+      });
+    }
+
+    preloadGameMenuAssets(unlockedGame, { includeTutorial: true });
+    setMenuReady(true);
+  }, []);
+
+  function handleTestPasswordSubmit() {
+    if (!game) return;
+    if (!verifyTestGamePassword(testPassword)) {
+      setTestPwError("Wrong password.");
+      setTestPassword("");
+      return;
+    }
+    void finishTestUnlock(game);
+  }
+
   const handleStart = useCallback(async () => {
     setSparkError("");
 
@@ -152,7 +234,10 @@ export default function GamePageClient() {
     game?.id,
   ]);
 
-  if (loading || (game && gameIsLive(game) && !menuReady && !started)) {
+  if (
+    loading ||
+    (game && gameIsLive(game) && testUnlocked && !menuReady && !started)
+  ) {
     return <LoadingScreen message="Loading game" />;
   }
 
@@ -160,6 +245,66 @@ export default function GamePageClient() {
     return (
       <div className="loading-screen">
         <p className="loading-screen__text">{error || "Game not found."}</p>
+      </div>
+    );
+  }
+
+  if (gameIsTest(game) && !testUnlocked) {
+    return (
+      <div className="test-access-screen">
+        <div className="test-access-card">
+          <h1 className="test-access-card__title">Test access</h1>
+          <p className="test-access-card__subtitle">
+            Enter the password to open {game.name}.
+          </p>
+          <div className="form-group">
+            <label className="form-label" htmlFor="game-test-password">
+              Password
+            </label>
+            <div className="pw-wrap">
+              <input
+                id="game-test-password"
+                className={`form-input ${testPwError ? "input-error" : ""}`}
+                type={showTestPw ? "text" : "password"}
+                placeholder="Enter password"
+                value={testPassword}
+                autoFocus
+                onChange={(e) => {
+                  setTestPassword(e.target.value);
+                  setTestPwError("");
+                }}
+                onKeyDown={(e) =>
+                  e.key === "Enter" && handleTestPasswordSubmit()
+                }
+              />
+              <button
+                className="pw-toggle"
+                onClick={() => setShowTestPw((v) => !v)}
+                type="button"
+                tabIndex={-1}
+              >
+                {showTestPw ? "🙈" : "👁"}
+              </button>
+            </div>
+            {testPwError ? <p className="error-msg">{testPwError}</p> : null}
+          </div>
+          <div className="test-access-card__actions">
+            <button
+              type="button"
+              className="game-menu-btn game-menu-btn--back"
+              onClick={() => router.push("/")}
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              className="test-access-popup__btn"
+              onClick={handleTestPasswordSubmit}
+            >
+              Continue
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

@@ -21,6 +21,7 @@ import {
   gameHasLeaderboard,
   gameHasContestLive,
   gameIsLive,
+  gameIsTest,
 } from "@/types";
 import AdminContestModal from "@/components/AdminContestModal";
 import Logo from "@/components/Logo";
@@ -46,6 +47,7 @@ export default function AdminPortal() {
   const [fallbackImage, setFallbackImage] = useState("");
   const [hasLeaderboard, setHasLeaderboard] = useState(true);
   const [live, setLive] = useState(true);
+  const [isTest, setIsTest] = useState(false);
 
   const [contestModalGame, setContestModalGame] = useState<Game | null>(null);
 
@@ -57,6 +59,7 @@ export default function AdminPortal() {
   const [editFallbackImage, setEditFallbackImage] = useState("");
   const [editHasLeaderboard, setEditHasLeaderboard] = useState(true);
   const [editLive, setEditLive] = useState(true);
+  const [editIsTest, setEditIsTest] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
 
   const [dragId, setDragId] = useState<string | null>(null);
@@ -126,6 +129,7 @@ export default function AdminPortal() {
         fallbackImage: normalizeImageAssetUrl(fallbackImage),
         active: true,
         live,
+        isTest,
         hasLeaderboard,
       });
       setName("");
@@ -135,6 +139,7 @@ export default function AdminPortal() {
       setFallbackImage("");
       setHasLeaderboard(true);
       setLive(true);
+      setIsTest(false);
       await refresh();
       showToast("Game added! 🎮");
     } catch (err) {
@@ -206,6 +211,7 @@ export default function AdminPortal() {
     setEditFallbackImage(normalizeImageAssetUrl(game.fallbackImage));
     setEditHasLeaderboard(gameHasLeaderboard(game));
     setEditLive(gameIsLive(game));
+    setEditIsTest(gameIsTest(game));
   }
 
   function cancelEdit() {
@@ -230,6 +236,7 @@ export default function AdminPortal() {
         fallbackImage: normalizeImageAssetUrl(editFallbackImage),
         hasLeaderboard: editHasLeaderboard,
         live: editLive,
+        isTest: editIsTest,
       });
       cancelEdit();
       await refresh();
@@ -455,6 +462,19 @@ export default function AdminPortal() {
           <label className="form-checkbox">
             <input
               type="checkbox"
+              checked={isTest}
+              onChange={(e) => setIsTest(e.target.checked)}
+            />
+            <span>Live for testing</span>
+            <span className="form-checkbox-hint">
+              Checked: hidden from the arcade; reachable only via the footer Test
+              button (password protected). Only one game can be in test mode —
+              enabling this clears it on any other game.
+            </span>
+          </label>
+          <label className="form-checkbox">
+            <input
+              type="checkbox"
               checked={hasLeaderboard}
               onChange={(e) => setHasLeaderboard(e.target.checked)}
             />
@@ -570,6 +590,19 @@ export default function AdminPortal() {
                   <label className="form-checkbox">
                     <input
                       type="checkbox"
+                      checked={editIsTest}
+                      onChange={(e) => setEditIsTest(e.target.checked)}
+                    />
+                    <span>Live for testing</span>
+                    <span className="form-checkbox-hint">
+                      Checked: hidden from the arcade; reachable only via the footer Test
+                      button (password protected). Only one game can be in test mode —
+                      enabling this clears it on any other game.
+                    </span>
+                  </label>
+                  <label className="form-checkbox">
+                    <input
+                      type="checkbox"
                       checked={editHasLeaderboard}
                       onChange={(e) => setEditHasLeaderboard(e.target.checked)}
                     />
@@ -626,7 +659,7 @@ export default function AdminPortal() {
                     <p className="admin-game-url">{g.url}</p>
                     <p className="admin-game-plays">
                       {g.plays} plays · {g.active ? "🟢 Visible" : "⚫ Hidden"} ·{" "}
-                      {gameIsLive(g) ? "✅ Live" : "🔜 Coming Soon"} ·{" "}
+                      {gameIsTest(g) ? "🧪 Test" : gameIsLive(g) ? "✅ Live" : "🔜 Coming Soon"} ·{" "}
                       {gameHasLeaderboard(g) ? "🏆 Leaderboard" : "📊 Level-based"} ·{" "}
                       {gameHasContestLive(g)
                         ? "🔥 Contest Live"
