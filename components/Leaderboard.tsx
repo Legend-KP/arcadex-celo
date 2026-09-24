@@ -74,6 +74,7 @@ export default function Leaderboard({
   const [countdown, setCountdown] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const touchStartY = useRef<number | null>(null);
+  const allowSwipeClose = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -117,6 +118,10 @@ export default function Leaderboard({
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
+    const list = (e.currentTarget as HTMLElement).querySelector(".lb-list");
+    const scrollTop = list instanceof HTMLElement ? list.scrollTop : 0;
+    // Only allow swipe-down dismiss when the list can't scroll further up.
+    allowSwipeClose.current = scrollTop <= 0;
   };
 
   const isLiveContest = contest?.status === "live" || (!contest && contestLive);
@@ -129,7 +134,8 @@ export default function Leaderboard({
     if (touchStartY.current === null) return;
     const delta = e.changedTouches[0].clientY - touchStartY.current;
     touchStartY.current = null;
-    if (delta > SWIPE_THRESHOLD) onClose();
+    if (allowSwipeClose.current && delta > SWIPE_THRESHOLD) onClose();
+    allowSwipeClose.current = false;
   };
 
   if (!open) return null;

@@ -59,6 +59,7 @@ export default function ActivityLeaderboardButton() {
     activeDays: number;
   } | null>(null);
   const touchStartY = useRef<number | null>(null);
+  const allowSwipeClose = useRef(false);
   const pingedRef = useRef(false);
 
   useEffect(() => {
@@ -120,13 +121,17 @@ export default function ActivityLeaderboardButton() {
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
+    const list = (e.currentTarget as HTMLElement).querySelector(".lb-list");
+    const scrollTop = list instanceof HTMLElement ? list.scrollTop : 0;
+    allowSwipeClose.current = scrollTop <= 0;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartY.current === null) return;
     const delta = e.changedTouches[0].clientY - touchStartY.current;
     touchStartY.current = null;
-    if (delta > SWIPE_THRESHOLD) setOpen(false);
+    if (allowSwipeClose.current && delta > SWIPE_THRESHOLD) setOpen(false);
+    allowSwipeClose.current = false;
   };
 
   const myWallet = walletAddress?.toLowerCase() ?? "";
