@@ -1,5 +1,5 @@
 /** Password required to open the admin-designated test game. */
-export const TEST_GAME_PASSWORD = "AAKPRP";
+export const TEST_GAME_PASSWORD = "AAKPRS";
 
 const UNLOCK_KEY = "arcadex_test_game_unlock";
 
