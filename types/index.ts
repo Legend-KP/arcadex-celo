@@ -71,6 +71,11 @@ export interface Game {
   contestEndsAt?: number;
   /** Display order on the home page (lower = earlier). Set via admin drag-and-drop. */
   sortOrder?: number;
+  /**
+   * Unix ms when the game was added live or toggled Coming Soon → live.
+   * Drives the New Arrival promo popup; absent on older games.
+   */
+  newArrivalAt?: number;
   createdAt: number;
 }
 

@@ -7,6 +7,7 @@ import GameCard from "@/components/GameCard";
 import Logo from "@/components/Logo";
 import SparkBatteryBar from "@/components/SparkBatteryBar";
 import ActivityLeaderboardButton from "@/components/ActivityLeaderboardButton";
+import PromoPopupHost from "@/components/PromoPopupHost";
 import {
   readCachedGamesList,
   shouldBackgroundRefreshGamesList,
@@ -27,6 +28,7 @@ export default function HomePage() {
   });
   const [loading, setLoading] = useState(() => !readCachedGamesList());
   const [error, setError] = useState("");
+  const [activityBoardOpen, setActivityBoardOpen] = useState(false);
 
   // Fetch games immediately — do not wait for wallet / streak / profile.
   useEffect(() => {
@@ -98,7 +100,10 @@ export default function HomePage() {
         <header className="topbar">
           <Logo variant="header" />
           <div className="topbar-actions">
-            <ActivityLeaderboardButton />
+            <ActivityLeaderboardButton
+              open={activityBoardOpen}
+              onOpenChange={setActivityBoardOpen}
+            />
             <SparkBatteryBar />
           </div>
         </header>
@@ -134,6 +139,11 @@ export default function HomePage() {
 
         <AppFooter testGameId={testGameId} />
       </div>
+
+      <PromoPopupHost
+        games={games}
+        onOpenActivityBoard={() => setActivityBoardOpen(true)}
+      />
     </div>
   );
 }

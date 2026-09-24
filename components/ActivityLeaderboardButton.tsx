@@ -45,9 +45,21 @@ function TrophyIcon() {
   );
 }
 
-export default function ActivityLeaderboardButton() {
+export default function ActivityLeaderboardButton({
+  open: openControlled,
+  onOpenChange,
+}: {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+} = {}) {
   const { walletAddress } = usePlayerProfile();
-  const [open, setOpen] = useState(false);
+  const [openUncontrolled, setOpenUncontrolled] = useState(false);
+  const controlled = typeof openControlled === "boolean";
+  const open = controlled ? openControlled : openUncontrolled;
+  const setOpen = (next: boolean) => {
+    if (!controlled) setOpenUncontrolled(next);
+    onOpenChange?.(next);
+  };
   const [mounted, setMounted] = useState(false);
   const [entries, setEntries] = useState<ActivityLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(false);

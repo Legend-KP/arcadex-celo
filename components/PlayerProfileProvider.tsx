@@ -73,6 +73,8 @@ interface PlayerProfileContextValue {
   walletAddress: string;
   isReady: boolean;
   streakStatus: StreakStatus | null;
+  /** True while onboarding / streak / check-in / name (or onboarding resolving). */
+  criticalModalsBlocking: boolean;
   updateWalletAddress: (walletAddress: string) => Promise<void>;
   refreshStreakStatus: () => Promise<void>;
   openOnboarding: () => void;
@@ -465,30 +467,6 @@ export default function PlayerProfileProvider({
   const defaultName =
     profile?.name?.trim() || getCachedPlayerName()?.trim() || "";
 
-  const value = useMemo(
-    () => ({
-      playerId,
-      profile,
-      playerName: profile?.name ?? "",
-      walletAddress,
-      isReady,
-      streakStatus,
-      updateWalletAddress,
-      refreshStreakStatus,
-      openOnboarding,
-    }),
-    [
-      playerId,
-      profile,
-      walletAddress,
-      isReady,
-      streakStatus,
-      updateWalletAddress,
-      refreshStreakStatus,
-      openOnboarding,
-    ]
-  );
-
   // New-user order: onboarding → streak broken (if needed) → daily streak → name modal
   const onboardingVisible = showOnboarding === true;
   const onboardingResolved = showOnboarding !== null;
@@ -520,6 +498,38 @@ export default function PlayerProfileProvider({
     !onboardingVisible &&
     !showCheckIn &&
     showModal;
+
+  const criticalModalsBlocking =
+    !onboardingResolved ||
+    onboardingVisible ||
+    checkInVisible ||
+    nameModalVisible;
+
+  const value = useMemo(
+    () => ({
+      playerId,
+      profile,
+      playerName: profile?.name ?? "",
+      walletAddress,
+      isReady,
+      streakStatus,
+      criticalModalsBlocking,
+      updateWalletAddress,
+      refreshStreakStatus,
+      openOnboarding,
+    }),
+    [
+      playerId,
+      profile,
+      walletAddress,
+      isReady,
+      streakStatus,
+      criticalModalsBlocking,
+      updateWalletAddress,
+      refreshStreakStatus,
+      openOnboarding,
+    ]
+  );
 
   return (
     <PlayerProfileContext.Provider value={value}>

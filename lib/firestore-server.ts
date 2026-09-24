@@ -95,6 +95,7 @@ function docToGame(doc: FirestoreDocument): Game {
     contestStartedAt: parseField(fields.contestStartedAt) as number | undefined,
     contestEndsAt: parseField(fields.contestEndsAt) as number | undefined,
     sortOrder: parseField(fields.sortOrder) as number | undefined,
+    newArrivalAt: parseField(fields.newArrivalAt) as number | undefined,
     createdAt: Number(parseField(fields.createdAt) ?? 0),
   };
 }
@@ -307,17 +308,22 @@ export async function createGameOnServer(
 ): Promise<string> {
   const existing = await fetchGamesFromServer();
   const sortOrder = data.sortOrder ?? nextGameSortOrder(existing);
+  const now = Date.now();
 
   let payload: Omit<Game, "id" | "createdAt"> = { ...data, sortOrder };
   if (payload.isTest === true) {
     payload = { ...payload, active: true, live: true };
     await clearTestFlagOnOtherGames(existing, null);
   }
+  // Stamp New Arrival when created already live (Coming Soon waits until go-live).
+  if (payload.live !== false && typeof payload.newArrivalAt !== "number") {
+    payload = { ...payload, newArrivalAt: now };
+  }
 
   const res = await firestoreFetch("games", {
     method: "POST",
     body: JSON.stringify({
-      fields: encodeFields({ ...payload, createdAt: Date.now() }),
+      fields: encodeFields({ ...payload, createdAt: now }),
     }),
   });
 
@@ -357,10 +363,31 @@ export async function updateGameOnServer(
   data: Partial<Omit<Game, "id">>
 ): Promise<void> {
   let patch = { ...data };
+  const existing =
+    patch.live !== undefined || patch.isTest === true
+      ? await fetchGameFromFirestore(id)
+      : null;
+
   if (patch.isTest === true) {
     const games = await fetchGamesFromServer();
     await clearTestFlagOnOtherGames(games, id);
     patch = { ...patch, active: true, live: true };
+  }
+
+  // New Arrival: Coming Soon → live (or first live via isTest force).
+  const becomingLive =
+    patch.live === true &&
+    existing != null &&
+    existing.live === false;
+  const forcedLiveFromTest =
+    patch.isTest === true &&
+    existing != null &&
+    existing.live === false;
+  if (
+    (becomingLive || forcedLiveFromTest) &&
+    typeof patch.newArrivalAt !== "number"
+  ) {
+    patch = { ...patch, newArrivalAt: Date.now() };
   }
 
   await patchGameOnFirestore(id, patch);
