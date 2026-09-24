@@ -72,8 +72,8 @@ export interface Game {
   /** Display order on the home page (lower = earlier). Set via admin drag-and-drop. */
   sortOrder?: number;
   /**
-   * Unix ms when the game was added live or toggled Coming Soon → live.
-   * Drives the New Arrival promo popup; absent on older games.
+   * Unix ms when the game went live as a new arrival (create live, or Coming Soon → live).
+   * Drives the New Arrival card tag (4 days) and promo popup.
    */
   newArrivalAt?: number;
   createdAt: number;
@@ -89,6 +89,25 @@ export function gameIsLive(game: Pick<Game, "live">): boolean {
 
 export function gameIsTest(game: Pick<Game, "isTest">): boolean {
   return game.isTest === true;
+}
+
+/** How long the New Arrival tag stays on a game after it goes live. */
+export const NEW_ARRIVAL_DURATION_MS = 4 * 24 * 60 * 60 * 1000;
+
+/** True while within 4 days of `newArrivalAt` (live, non-test, visible games only). */
+export function gameIsNewArrival(
+  game: Pick<Game, "newArrivalAt" | "live" | "isTest" | "active">,
+  now = Date.now()
+): boolean {
+  if (game.active === false || game.isTest === true || game.live === false) {
+    return false;
+  }
+  const started = game.newArrivalAt;
+  if (typeof started !== "number" || !Number.isFinite(started) || started <= 0) {
+    return false;
+  }
+  const age = now - started;
+  return age >= 0 && age < NEW_ARRIVAL_DURATION_MS;
 }
 
 export function gameHasContestLive(

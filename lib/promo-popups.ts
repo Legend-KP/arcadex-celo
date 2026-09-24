@@ -8,6 +8,7 @@ import {
 import {
   Game,
   gameIsLive,
+  gameIsNewArrival,
   gameIsTest,
 } from "@/types";
 
@@ -98,7 +99,8 @@ function buildGameCandidates(games: Game[], now: number): PromoPopupCandidate[] 
     if (
       typeof game.newArrivalAt === "number" &&
       Number.isFinite(game.newArrivalAt) &&
-      game.newArrivalAt > 0
+      game.newArrivalAt > 0 &&
+      gameIsNewArrival(game, now)
     ) {
       out.push({
         id: `newGame:${game.id}:${game.newArrivalAt}`,

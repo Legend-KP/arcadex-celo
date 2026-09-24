@@ -8,7 +8,12 @@ import {
   preloadGameMenuAssets,
 } from "@/lib/game-assets";
 import { formatPlayCount } from "@/lib/format-play-count";
-import { Game, gameHasContestLive, gameIsLive } from "@/types";
+import {
+  Game,
+  gameHasContestLive,
+  gameIsLive,
+  gameIsNewArrival,
+} from "@/types";
 
 interface GameCardProps {
   game: Game;
@@ -24,6 +29,7 @@ export default function GameCard({
 }: GameCardProps) {
   const isLive = gameIsLive(game);
   const contestLive = gameHasContestLive(game);
+  const isNewArrival = gameIsNewArrival(game);
 
   const thumbCandidates = useMemo(
     () => gameAssetCandidates(game, "thumbnail"),
@@ -94,6 +100,11 @@ export default function GameCard({
     <>
       <div className="thumb-wrap">
         {thumbContent}
+        {isNewArrival && (
+          <span className="game-card-new-badge" aria-label="New arrival">
+            NEW ARRIVAL
+          </span>
+        )}
         {contestLive && (
           <span className="game-card-contest-badge" aria-label="Contest live">
             CONTEST LIVE
@@ -120,6 +131,7 @@ export default function GameCard({
     "game-card",
     !isLive && "game-card--coming-soon",
     contestLive && "game-card--contest-live",
+    isNewArrival && "game-card--new-arrival",
   ]
     .filter(Boolean)
     .join(" ");

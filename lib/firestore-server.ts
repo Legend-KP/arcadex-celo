@@ -1,4 +1,4 @@
-import { nextGameSortOrder, sortGames } from "@/lib/game-sort";
+import { prependGameSortOrder, sortGames } from "@/lib/game-sort";
 import {
   getCachedGameDoc,
   getCachedGameList,
@@ -307,7 +307,8 @@ export async function createGameOnServer(
   data: Omit<Game, "id" | "createdAt">
 ): Promise<string> {
   const existing = await fetchGamesFromServer();
-  const sortOrder = data.sortOrder ?? nextGameSortOrder(existing);
+  // New games go to the top of the arcade order.
+  const sortOrder = data.sortOrder ?? prependGameSortOrder(existing);
   const now = Date.now();
 
   let payload: Omit<Game, "id" | "createdAt"> = { ...data, sortOrder };
@@ -387,7 +388,12 @@ export async function updateGameOnServer(
     (becomingLive || forcedLiveFromTest) &&
     typeof patch.newArrivalAt !== "number"
   ) {
-    patch = { ...patch, newArrivalAt: Date.now() };
+    const games = await fetchGamesFromServer();
+    patch = {
+      ...patch,
+      newArrivalAt: Date.now(),
+      sortOrder: prependGameSortOrder(games.filter((g) => g.id !== id)),
+    };
   }
 
   await patchGameOnFirestore(id, patch);
