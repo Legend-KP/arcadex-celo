@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import PromoPopupModal from "@/components/PromoPopupModal";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { getPrimaryGameMenuImage, gameAssetCandidates } from "@/lib/game-assets";
+import { getGameTheme } from "@/lib/game-themes";
 import {
   buildPromoQueue,
+  isCommunityPromo,
   type PromoPopupCandidate,
 } from "@/lib/promo-popups";
 import {
@@ -30,7 +32,6 @@ export default function PromoPopupHost({
   const [tick, setTick] = useState(0);
   const presentedIdsRef = useRef<Set<string>>(new Set());
 
-  // While idle, periodically re-evaluate milestones (contest/week clocks).
   useEffect(() => {
     if (criticalModalsBlocking || active) return;
     const id = window.setInterval(() => setTick((n) => n + 1), 60_000);
@@ -42,7 +43,6 @@ export default function PromoPopupHost({
       setActive(null);
       return;
     }
-    // Do not interrupt an open popup; after dismiss `active` is null and we pick next.
     if (active) return;
     if (games.length === 0) return;
 
@@ -57,19 +57,33 @@ export default function PromoPopupHost({
     recordPromoPresented(active.id);
   }, [active]);
 
-  const imageUrl = useMemo(() => {
+  const activeGame = useMemo(() => {
     if (!active?.gameId) return null;
-    const game = games.find((g) => g.id === active.gameId);
-    if (!game) return null;
-    return gameAssetCandidates(game, "logo")[0] ?? getPrimaryGameMenuImage(game);
+    return games.find((g) => g.id === active.gameId) ?? null;
   }, [active, games]);
 
-  const finish = useCallback((item: PromoPopupCandidate, markPersistent: boolean) => {
-    if (markPersistent && item.persistent) {
-      markPromoEventRead(item.id);
-    }
-    setActive(null);
-  }, []);
+  const imageUrl = useMemo(() => {
+    if (!activeGame) return null;
+    return (
+      gameAssetCandidates(activeGame, "logo")[0] ??
+      getPrimaryGameMenuImage(activeGame)
+    );
+  }, [activeGame]);
+
+  const accentColor = useMemo(() => {
+    if (!activeGame) return null;
+    return getGameTheme(activeGame).topbar;
+  }, [activeGame]);
+
+  const finish = useCallback(
+    (item: PromoPopupCandidate, markPersistent: boolean) => {
+      if (markPersistent && item.persistent) {
+        markPromoEventRead(item.id);
+      }
+      setActive(null);
+    },
+    []
+  );
 
   const handleDismiss = useCallback(() => {
     if (!active) return;
@@ -79,7 +93,8 @@ export default function PromoPopupHost({
   const handlePrimary = useCallback(() => {
     if (!active) return;
     const item = active;
-    finish(item, true);
+    const community = isCommunityPromo(item.kind);
+    finish(item, !community);
 
     if (
       (item.kind === "newGame" ||
@@ -95,11 +110,6 @@ export default function PromoPopupHost({
     }
   }, [active, finish, onOpenActivityBoard, router]);
 
-  const handleCommunityCta = useCallback(() => {
-    if (!active) return;
-    finish(active, false);
-  }, [active, finish]);
-
   if (criticalModalsBlocking || !active) return null;
 
   return (
@@ -107,10 +117,9 @@ export default function PromoPopupHost({
       open
       item={active}
       imageUrl={imageUrl}
+      accentColor={accentColor}
       onDismiss={handleDismiss}
       onPrimary={handlePrimary}
-      onOpenTelegram={handleCommunityCta}
-      onOpenTwitter={handleCommunityCta}
     />
   );
 }

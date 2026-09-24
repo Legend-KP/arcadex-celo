@@ -2,7 +2,12 @@
 
 import type { Address, Hash, Hex } from "viem";
 import { celo } from "viem/chains";
-import { waitForCeloTransactionReceipt } from "@/lib/celo-public-client";
+import { getAttributionSuffix } from "@/lib/attribution";
+import {
+  formatChainError,
+  getCeloPublicClient,
+  waitForCeloTransactionReceipt,
+} from "@/lib/celo-public-client";
 import {
   ARCADEX_REWARDS_ABI,
   ARCADEX_REWARDS_CONTRACT_ADDRESS,
@@ -35,6 +40,27 @@ export async function spinOnChain(opts: {
   }
 
   const campaignId = opts.campaignId ?? DEFAULT_SHUFFLE_CAMPAIGN_ID;
+  const args = [
+    BigInt(campaignId),
+    opts.rewardMode,
+    opts.rewardTarget,
+    opts.rewardAmount,
+    opts.nonce,
+    opts.deadline,
+    opts.signature,
+  ] as const;
+
+  try {
+    await getCeloPublicClient().simulateContract({
+      account,
+      address: ARCADEX_REWARDS_CONTRACT_ADDRESS,
+      abi: ARCADEX_REWARDS_ABI,
+      functionName: "spin",
+      args,
+    });
+  } catch (err) {
+    throw new Error(formatChainError(err));
+  }
 
   const hash = await walletClient.writeContract({
     account,
@@ -42,15 +68,8 @@ export async function spinOnChain(opts: {
     address: ARCADEX_REWARDS_CONTRACT_ADDRESS,
     abi: ARCADEX_REWARDS_ABI,
     functionName: "spin",
-    args: [
-      BigInt(campaignId),
-      opts.rewardMode,
-      opts.rewardTarget,
-      opts.rewardAmount,
-      opts.nonce,
-      opts.deadline,
-      opts.signature,
-    ],
+    args,
+    dataSuffix: getAttributionSuffix(),
   });
 
   try {
@@ -95,6 +114,7 @@ export async function claimShuffleRewardOnChain(
     abi: ARCADEX_REWARDS_ABI,
     functionName: "claim",
     args: [BigInt(campaignId)],
+    dataSuffix: getAttributionSuffix(),
   });
 
   const receipt = await waitForCeloTransactionReceipt(hash);

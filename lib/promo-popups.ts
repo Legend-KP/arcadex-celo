@@ -23,7 +23,8 @@ export type PromoPopupKind =
   | "weekEnd"
   | "weekStart"
   | "newGame"
-  | "community";
+  | "communityTelegram"
+  | "communityX";
 
 export interface PromoPopupCandidate {
   id: string;
@@ -76,6 +77,18 @@ function weekEndPriority(hours: PromoMilestoneHours): number {
   }
 }
 
+/** Drop the fees/rewards boilerplate from admin contest task for promo copy. */
+export function sanitizeContestTaskForPromo(task?: string): string | undefined {
+  if (!task?.trim()) return undefined;
+  const cleaned = task
+    .replace(/\s*100%\s*of\s*the\s*Fees[^.!?\n]*/gi, "")
+    .replace(/\s*generated\s+goes\s+into\s+the\s+Rewards!?/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.!?])/g, "$1")
+    .trim();
+  return cleaned || undefined;
+}
+
 function buildGameCandidates(games: Game[], now: number): PromoPopupCandidate[] {
   const out: PromoPopupCandidate[] = [];
 
@@ -101,6 +114,7 @@ function buildGameCandidates(games: Game[], now: number): PromoPopupCandidate[] 
 
     const startedAt = game.contestStartedAt!;
     const endsAt = game.contestEndsAt!;
+    const contestTask = sanitizeContestTaskForPromo(game.contestTask);
 
     out.push({
       id: `contestStart:${game.id}:${startedAt}`,
@@ -108,7 +122,7 @@ function buildGameCandidates(games: Game[], now: number): PromoPopupCandidate[] 
       priority: 100,
       gameId: game.id,
       gameName: game.name,
-      contestTask: game.contestTask?.trim() || undefined,
+      contestTask,
       endsAt,
       persistent: true,
     });
@@ -121,7 +135,7 @@ function buildGameCandidates(games: Game[], now: number): PromoPopupCandidate[] 
         priority: contestEndPriority(milestone),
         gameId: game.id,
         gameName: game.name,
-        contestTask: game.contestTask?.trim() || undefined,
+        contestTask,
         endsAt,
         milestoneHours: milestone,
         persistent: true,
@@ -163,13 +177,21 @@ function buildWeekCandidates(now: number): PromoPopupCandidate[] {
   return out;
 }
 
-function buildCommunityCandidate(): PromoPopupCandidate {
-  return {
-    id: "community",
-    kind: "community",
-    priority: 300,
-    persistent: false,
-  };
+function buildCommunityCandidates(): PromoPopupCandidate[] {
+  return [
+    {
+      id: "communityTelegram",
+      kind: "communityTelegram",
+      priority: 300,
+      persistent: false,
+    },
+    {
+      id: "communityX",
+      kind: "communityX",
+      priority: 310,
+      persistent: false,
+    },
+  ];
 }
 
 /**
@@ -186,13 +208,12 @@ export function buildPromoQueue(
   const raw: PromoPopupCandidate[] = [
     ...buildGameCandidates(games, now),
     ...buildWeekCandidates(now),
-    buildCommunityCandidate(),
+    ...buildCommunityCandidates(),
   ];
 
   const eligible = raw.filter((item) => {
     if (wasPromoShownToday(item.id, now)) return false;
     if (item.persistent && isPromoEventRead(item.id)) return false;
-    // Community: at most once per UTC day (enforced via shownIds).
     return true;
   });
 
@@ -216,8 +237,10 @@ export function getPromoTitle(item: PromoPopupCandidate): string {
       return "New Week on the Board";
     case "weekEnd":
       return "Leaderboard Ending Soon";
-    case "community":
-      return "Join the Community";
+    case "communityTelegram":
+      return "Join Telegram";
+    case "communityX":
+      return "Follow on X";
   }
 }
 
@@ -248,8 +271,10 @@ export function getPromoBody(item: PromoPopupCandidate): string {
       return "A new weekly leaderboard just started. Play on ArcadeX and climb the board.";
     case "weekEnd":
       return "This week's leaderboard is almost over. Act fast and climb the board on ArcadeX.";
-    case "community":
-      return "Stay up to date on the latest ArcadeX news on Telegram and X.";
+    case "communityTelegram":
+      return "Join the Telegram community to stay up to date on the latest ArcadeX news.";
+    case "communityX":
+      return "Follow ArcadeX on X for the latest updates and drops.";
   }
 }
 
@@ -263,7 +288,17 @@ export function getPromoCtaLabel(item: PromoPopupCandidate): string {
     case "weekStart":
     case "weekEnd":
       return "Climb the Board";
-    case "community":
+    case "communityTelegram":
       return "Join now";
+    case "communityX":
+      return "Follow now";
   }
+}
+
+export function isCommunityPromo(kind: PromoPopupKind): boolean {
+  return kind === "communityTelegram" || kind === "communityX";
+}
+
+export function isContestPromo(kind: PromoPopupKind): boolean {
+  return kind === "contestStart" || kind === "contestEnd";
 }

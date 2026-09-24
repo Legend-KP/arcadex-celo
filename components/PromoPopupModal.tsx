@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { formatContestCountdown } from "@/lib/contest";
 import { SUPPORT_URL, TWITTER_URL } from "@/lib/app-footer-links";
@@ -8,6 +8,8 @@ import {
   getPromoBody,
   getPromoCtaLabel,
   getPromoTitle,
+  isCommunityPromo,
+  isContestPromo,
   type PromoPopupCandidate,
 } from "@/lib/promo-popups";
 import { playTouchSfx } from "@/lib/sfx";
@@ -16,20 +18,34 @@ interface PromoPopupModalProps {
   open: boolean;
   item: PromoPopupCandidate | null;
   imageUrl: string | null;
+  /** Game accent hex for glassy timer / CTA (contest popups). */
+  accentColor?: string | null;
   onDismiss: () => void;
   onPrimary: () => void;
-  onOpenTelegram?: () => void;
-  onOpenTwitter?: () => void;
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const raw = hex.replace("#", "").trim();
+  if (raw.length !== 3 && raw.length !== 6) return null;
+  const full =
+    raw.length === 3
+      ? raw
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : raw;
+  const n = Number.parseInt(full, 16);
+  if (!Number.isFinite(n)) return null;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
 export default function PromoPopupModal({
   open,
   item,
   imageUrl,
+  accentColor,
   onDismiss,
   onPrimary,
-  onOpenTelegram,
-  onOpenTwitter,
 }: PromoPopupModalProps) {
   const [mounted, setMounted] = useState(false);
   const [countdown, setCountdown] = useState("");
@@ -70,20 +86,46 @@ export default function PromoPopupModal({
   const title = getPromoTitle(item);
   const body = getPromoBody(item);
   const cta = getPromoCtaLabel(item);
+  const contest = isContestPromo(item.kind);
+  const community = isCommunityPromo(item.kind);
   const showTimer =
     (item.kind === "contestEnd" ||
       item.kind === "contestStart" ||
       item.kind === "weekEnd") &&
     Boolean(item.endsAt);
-  const isCommunity = item.kind === "community";
+
+  const rgb = accentColor ? hexToRgb(accentColor) : null;
+  const themedStyle: CSSProperties | undefined =
+    contest && rgb
+      ? ({
+          ["--promo-accent" as string]: accentColor,
+          ["--promo-accent-rgb" as string]: `${rgb.r}, ${rgb.g}, ${rgb.b}`,
+        } as CSSProperties)
+      : undefined;
+
+  const socialHref =
+    item.kind === "communityTelegram"
+      ? SUPPORT_URL
+      : item.kind === "communityX"
+        ? TWITTER_URL
+        : null;
+  const socialLogo =
+    item.kind === "communityTelegram"
+      ? "/telegram-logo.png"
+      : item.kind === "communityX"
+        ? "/x-logo.svg"
+        : null;
 
   const modal = (
     <div className="promo-popup-backdrop" role="presentation">
       <div
-        className="promo-popup"
+        className={`promo-popup${contest ? " promo-popup--contest" : ""}${
+          community ? " promo-popup--community" : ""
+        }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="promo-popup-title"
+        style={themedStyle}
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -98,87 +140,107 @@ export default function PromoPopupModal({
           ✕
         </button>
 
-        {isCommunity ? (
-          <div className="promo-popup__social-row" aria-hidden={false}>
+        {contest ? (
+          <>
+            <h2
+              id="promo-popup-title"
+              className="promo-popup__title promo-popup__title--contest"
+            >
+              {title}
+            </h2>
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                alt=""
+                className="promo-popup__art"
+                width={160}
+                height={160}
+              />
+            ) : (
+              <div
+                className="promo-popup__art promo-popup__art--placeholder"
+                aria-hidden
+              />
+            )}
+            {item.gameName ? (
+              <p className="promo-popup__game">{item.gameName}</p>
+            ) : null}
+          </>
+        ) : community && socialLogo ? (
+          <>
             <img
-              src="/telegram-logo.svg"
+              src={socialLogo}
               alt=""
-              className="promo-popup__social-logo"
-              width={72}
-              height={72}
+              className="promo-popup__social-logo promo-popup__social-logo--single"
+              width={96}
+              height={96}
             />
-            <img
-              src="/x-logo.svg"
-              alt=""
-              className="promo-popup__social-logo"
-              width={72}
-              height={72}
-            />
-          </div>
-        ) : imageUrl ? (
-          <img
-            src={imageUrl}
-            alt=""
-            className="promo-popup__art"
-            width={160}
-            height={160}
-          />
+            <h2 id="promo-popup-title" className="promo-popup__title">
+              {title}
+            </h2>
+          </>
         ) : (
-          <div className="promo-popup__art promo-popup__art--placeholder" aria-hidden />
+          <>
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                alt=""
+                className="promo-popup__art"
+                width={160}
+                height={160}
+              />
+            ) : (
+              <div
+                className="promo-popup__art promo-popup__art--placeholder"
+                aria-hidden
+              />
+            )}
+            <h2 id="promo-popup-title" className="promo-popup__title">
+              {title}
+            </h2>
+            {item.kind === "newGame" && item.gameName ? (
+              <p className="promo-popup__game">{item.gameName}</p>
+            ) : null}
+          </>
         )}
-
-        <h2 id="promo-popup-title" className="promo-popup__title">
-          {title}
-        </h2>
-
-        {!isCommunity && item.gameName && item.kind !== "newGame" ? (
-          <p className="promo-popup__game">{item.gameName}</p>
-        ) : null}
-
-        {item.kind === "newGame" && item.gameName ? (
-          <p className="promo-popup__game">{item.gameName}</p>
-        ) : null}
 
         <p className="promo-popup__body">{body}</p>
 
         {showTimer && countdown ? (
-          <p className="promo-popup__timer" role="status">
+          <p
+            className={`promo-popup__timer${
+              contest ? " promo-popup__timer--glass" : ""
+            }`}
+            role="status"
+          >
             <span className="promo-popup__timer-label">Time left</span>
             <span className="promo-popup__timer-value">{countdown}</span>
           </p>
         ) : null}
 
-        {isCommunity ? (
-          <div className="promo-popup__actions promo-popup__actions--split">
-            <a
-              className="promo-popup__btn promo-popup__btn--telegram"
-              href={SUPPORT_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => {
-                playTouchSfx();
-                onOpenTelegram?.();
-              }}
-            >
-              Telegram
-            </a>
-            <a
-              className="promo-popup__btn promo-popup__btn--x"
-              href={TWITTER_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => {
-                playTouchSfx();
-                onOpenTwitter?.();
-              }}
-            >
-              Follow on X
-            </a>
-          </div>
+        {community && socialHref ? (
+          <a
+            className={`promo-popup__btn${
+              item.kind === "communityTelegram"
+                ? " promo-popup__btn--telegram"
+                : " promo-popup__btn--x"
+            }`}
+            href={socialHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => {
+              playTouchSfx();
+              onPrimary();
+            }}
+          >
+            {cta}
+          </a>
         ) : (
           <button
             type="button"
-            className="promo-popup__btn"
+            className={`promo-popup__btn${
+              contest ? " promo-popup__btn--glass" : ""
+            }`}
             onClick={() => {
               playTouchSfx();
               onPrimary();

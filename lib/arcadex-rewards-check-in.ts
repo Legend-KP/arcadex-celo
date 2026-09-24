@@ -2,6 +2,7 @@
 
 import type { Hash, Hex } from "viem";
 import { celo } from "viem/chains";
+import { getAttributionSuffix } from "@/lib/attribution";
 import { waitForCeloTransactionReceipt } from "@/lib/celo-public-client";
 import { createMiniPayWalletClient } from "@/lib/minipay";
 import {
@@ -47,6 +48,7 @@ export async function checkInOnChain(
     abi: ARCADEX_REWARDS_ABI,
     functionName: "checkIn",
     args: [BigInt(campaignId), deadline, signature],
+    dataSuffix: getAttributionSuffix(),
   });
 
   try {

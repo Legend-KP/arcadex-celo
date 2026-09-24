@@ -1,6 +1,7 @@
 import type { Address, Hash, Hex } from "viem";
 import { keccak256, toBytes } from "viem";
 import { celo } from "viem/chains";
+import { getAttributionSuffix } from "@/lib/attribution";
 import { waitForCeloTransactionReceipt } from "@/lib/celo-public-client";
 import { createMiniPayWalletClient } from "@/lib/minipay";
 
@@ -399,6 +400,7 @@ export async function signInOnChain(purpose: Hex): Promise<{ txHash: Hash }> {
     abi: ARCADEX_TX_HUB_ABI,
     functionName: "signIn",
     args: [purpose],
+    dataSuffix: getAttributionSuffix(),
   });
 
   try {

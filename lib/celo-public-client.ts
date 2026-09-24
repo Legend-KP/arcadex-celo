@@ -151,9 +151,102 @@ function isTransactionFailureError(error: unknown): boolean {
   );
 }
 
+/** Pull the revert name/string viem puts on the line under its header. */
+function readContractRevertDetail(error: unknown): string | null {
+  const raw = collectErrorText(error);
+  const reasonLine = raw.match(
+    /reverted with the following (?:reason|signature):\s*\n+\s*([^\n]+)/i
+  );
+  const fromLine = reasonLine?.[1]?.trim() ?? "";
+  if (
+    fromLine &&
+    !/^version:/i.test(fromLine) &&
+    !/^docs:/i.test(fromLine) &&
+    !/^details:/i.test(fromLine)
+  ) {
+    return fromLine.replace(/\(\)$/, "");
+  }
+
+  const custom = raw.match(/Error:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+  if (custom?.[1] && custom[1] !== "Error") return custom[1];
+
+  let current: unknown = error;
+  for (let depth = 0; depth < 6 && current && typeof current === "object"; depth++) {
+    const record = current as Record<string, unknown>;
+    if (
+      typeof record.reason === "string" &&
+      record.reason.trim() &&
+      record.reason.trim().toLowerCase() !== "execution reverted"
+    ) {
+      return record.reason.trim();
+    }
+    const data = record.data;
+    if (data && typeof data === "object") {
+      const errorName = (data as { errorName?: unknown }).errorName;
+      if (typeof errorName === "string" && errorName && errorName !== "Error") {
+        return errorName;
+      }
+    }
+    current = record.cause;
+  }
+
+  return null;
+}
+
+function friendlyContractRevert(detail: string): string {
+  const key = detail.replace(/\(\)$/, "").trim();
+  const lower = key.toLowerCase();
+
+  if (lower === "spintoosoon" || lower === "toosoon") {
+    return "Already shuffled today. Come back after 00:00 UTC.";
+  }
+  if (lower === "claimpending") {
+    return "Claim your pending prize before shuffling again.";
+  }
+  if (lower === "invalidspinsignature" || lower === "spinsignerequired") {
+    return "This shuffle could not be verified. Close the popup and try again.";
+  }
+  if (
+    lower === "invalidspinnonce" ||
+    lower === "signaturealreadyused" ||
+    lower === "spinexpired"
+  ) {
+    return "This shuffle expired. Close the popup and try again.";
+  }
+  if (lower === "exceedsmaxpayout" || lower === "insufficienttreasury") {
+    return "The prize pool can't cover this result. Try again.";
+  }
+  if (lower === "pausederror") {
+    return "Shuffles are paused right now. Try again later.";
+  }
+  if (lower === "maxclaimsreached") {
+    return "Today's prize claims are used up. Try again tomorrow.";
+  }
+  if (lower.includes("no celo accepted")) {
+    return "The wallet attached CELO to this shuffle. Close MiniPay and try again.";
+  }
+  if (lower === "campaigninactive" || lower === "campaigniscancelled") {
+    return "The daily jackpot is not active right now.";
+  }
+  if (lower === "campaignnotstarted") {
+    return "The daily jackpot has not started yet.";
+  }
+  if (lower === "campaignended") {
+    return "The daily jackpot has ended.";
+  }
+
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+    return `Shuffle failed (${key}). Please try again.`;
+  }
+  return key.length > 160 ? `${key.slice(0, 157)}...` : key;
+}
+
 function shortChainErrorMessage(error: unknown): string | null {
   const raw = collectErrorText(error);
   if (!raw || raw === "[object Object]") return null;
+
+  const revertDetail = readContractRevertDetail(error);
+  if (revertDetail) return friendlyContractRevert(revertDetail);
 
   const firstLine = raw.split("\n")[0]?.trim() ?? "";
   const withoutViemFooter = firstLine
@@ -166,7 +259,8 @@ function shortChainErrorMessage(error: unknown): string | null {
     withoutViemFooter &&
     withoutViemFooter.length > 0 &&
     withoutViemFooter.length <= 180 &&
-    !withoutViemFooter.toLowerCase().includes("rpc request failed")
+    !withoutViemFooter.toLowerCase().includes("rpc request failed") &&
+    !/reverted with the following (?:reason|signature):\s*$/i.test(withoutViemFooter)
   ) {
     return withoutViemFooter;
   }

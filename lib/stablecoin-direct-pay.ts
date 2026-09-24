@@ -9,6 +9,10 @@ import {
 } from "viem";
 import { celo } from "viem/chains";
 import {
+  appendAttributionSuffix,
+  getAttributionSuffix,
+} from "@/lib/attribution";
+import {
   formatChainError,
   getCeloFeeCurrencyGasPrice,
   getCeloTransactionCount,
@@ -332,11 +336,13 @@ export async function purchaseStablecoinFeeOnChain(options: {
     getCeloTransactionCount(account)
   );
 
-  const data = encodeFunctionData({
-    abi: ERC20_ABI,
-    functionName: "transfer",
-    args: [recipient, fee],
-  });
+  const data = appendAttributionSuffix(
+    encodeFunctionData({
+      abi: ERC20_ABI,
+      functionName: "transfer",
+      args: [recipient, fee],
+    })
+  );
 
   if (DEBUG_PAYMENTS) {
     console.info("[pay:prepare]", {
@@ -386,6 +392,7 @@ export async function purchaseStablecoinFeeOnChain(options: {
         gas: TRANSFER_GAS_LIMIT,
         gasPrice,
         nonce,
+        dataSuffix: getAttributionSuffix(),
       });
     } catch (writeError) {
       logRawError("writeContract", writeError);
