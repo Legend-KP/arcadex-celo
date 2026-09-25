@@ -1526,14 +1526,14 @@ export async function resolveGameProgressFromServer(
 /**
  * Publish a score after on-chain proof.
  * - Contest live (`contestStartedAt`): $0.05 ScoreSubmit payment → all-time + contest.
- * - Contest off: ArcadeX Tx Hub gas-only signIn → all-time leaderboard only.
- * Client score body is ignored — only D1 personal best is posted.
+ *   Contest uses this run's `opts.score` (≤ personal best). All-time uses personal best.
+ * - Contest off: ArcadeX Tx Hub gas-only signIn → all-time leaderboard only (personal best).
  */
 export async function activateScoreSubmitOnServer(
   walletAddress: string,
   gameId: string,
   txHash: string,
-  opts?: { contestStartedAt?: number }
+  opts?: { contestStartedAt?: number; score?: number }
 ): Promise<{
   highScore: number;
   leaderboardScore: number;
@@ -1575,7 +1575,7 @@ export async function activateScoreSubmitOnServer(
     );
   }
 
-  // Never trust a client-supplied score — only D1/RTDB personal best.
+  // All-time board: never trust a client score — only D1 personal best.
   const highScore = await fetchPersonalBestFromServer(wallet, gameId);
   if (!Number.isFinite(highScore) || highScore <= 0) {
     throw new ScoreSubmitActivationError(
@@ -1583,7 +1583,28 @@ export async function activateScoreSubmitOnServer(
       "NO_SCORE"
     );
   }
-  const score = highScore;
+
+  // Contest board: this run's score (must be > 0 and ≤ saved personal best).
+  let contestScore: number | null = null;
+  if (contestLive) {
+    const raw = opts?.score;
+    if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
+      throw new ScoreSubmitActivationError(
+        "Current run score is required for contest submit.",
+        "NO_SCORE"
+      );
+    }
+    const runScore = Math.floor(raw);
+    if (runScore > highScore) {
+      throw new ScoreSubmitActivationError(
+        "Score exceeds saved personal best. Save progress, then submit.",
+        "NO_SCORE"
+      );
+    }
+    contestScore = runScore;
+  }
+
+  const score = contestLive && contestScore != null ? contestScore : highScore;
 
   const existingPayment = await readGuardWallet(
     normalizedTxHash,
@@ -1652,17 +1673,21 @@ export async function activateScoreSubmitOnServer(
   try {
     await submitLeaderboardEntryOnServer(gameId, {
       name: playerName,
-      score,
+      score: highScore,
       walletAddress: wallet,
     });
 
-    if (contestLive && typeof opts?.contestStartedAt === "number") {
+    if (
+      contestLive &&
+      typeof opts?.contestStartedAt === "number" &&
+      contestScore != null
+    ) {
       await submitContestLeaderboardEntryOnServer(
         gameId,
         opts.contestStartedAt,
         {
           name: playerName,
-          score,
+          score: contestScore,
           walletAddress: wallet,
           createdAt: Date.now(),
         }

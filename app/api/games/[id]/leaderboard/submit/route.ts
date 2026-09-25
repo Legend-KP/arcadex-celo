@@ -60,7 +60,7 @@ export async function POST(
     const body = (await request.json()) as {
       walletAddress?: string;
       txHash?: string;
-      /** Ignored — server uses D1/RTDB personal best only. */
+      /** Required when contest is live — this run's score (≤ personal best). */
       score?: number;
     };
 
@@ -97,9 +97,12 @@ export async function POST(
       isContestActive(game) && typeof game.contestStartedAt === "number"
         ? game.contestStartedAt
         : undefined;
-    // Client `score` is intentionally ignored — see activateScoreSubmitOnServer.
     const result = await activateScoreSubmitOnServer(wallet, id, txHash, {
       contestStartedAt,
+      score:
+        typeof body.score === "number" && Number.isFinite(body.score)
+          ? body.score
+          : undefined,
     });
 
     recordApiMetric({

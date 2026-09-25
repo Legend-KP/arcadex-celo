@@ -82,13 +82,15 @@ export async function submitScoreToLeaderboard(
   highScore: number;
   leaderboardScore: number;
 }> {
-  // `score` is optional and ignored by the server (uses saved personal best).
+  // When a contest is live, `score` is the current run (server-validated).
+  // All-time board still uses saved personal best on the server.
   const res = await fetch(`/api/games/${gameId}/leaderboard/submit`, {
     method: "POST",
     headers: walletAuthHeaders(),
     body: JSON.stringify({
       walletAddress: opts.walletAddress,
       txHash: opts.txHash,
+      ...(typeof opts.score === "number" ? { score: opts.score } : {}),
     }),
   });
 

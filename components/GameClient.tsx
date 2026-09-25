@@ -337,6 +337,11 @@ export default function GameClient({
     setPendingLeaderboardSubmit(game.id, score);
 
     try {
+      // Sync personal best first when this run is a new high, so contest
+      // validation (run ≤ saved PB) accepts a new best score.
+      if (contestLive && score > personalBestRef.current) {
+        await persistProgress(score, playerName || profile?.name || "", wallet);
+      }
       const { txHash } = contestLive
         ? await purchaseScoreSubmitOnChain()
         : await signInOnChain(scoreSubmitPurpose(game.id));
@@ -366,8 +371,11 @@ export default function GameClient({
     payingSubmit,
     walletAddress,
     profile?.walletAddress,
+    profile?.name,
+    playerName,
     game.id,
     contestLive,
+    persistProgress,
     deliverLeaderboardSubmitResult,
   ]);
 
