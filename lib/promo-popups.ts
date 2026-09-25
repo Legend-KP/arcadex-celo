@@ -198,7 +198,8 @@ function buildCommunityCandidates(): PromoPopupCandidate[] {
 
 /**
  * Eligible promos for this moment, sorted by priority (highest first).
- * Does not mutate storage; caller records presentation separately.
+ * Host shows at most one per app open; daily cap still limits how many
+ * opens in a UTC day can surface a promo (max 3).
  */
 export function buildPromoQueue(
   games: Game[],

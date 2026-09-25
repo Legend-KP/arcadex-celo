@@ -29,26 +29,25 @@ export default function PromoPopupHost({
   const router = useRouter();
   const { criticalModalsBlocking } = usePlayerProfile();
   const [active, setActive] = useState<PromoPopupCandidate | null>(null);
-  const [tick, setTick] = useState(0);
+  /** At most one promo per app open — blocks chaining after dismiss/CTA. */
+  const sessionUsedRef = useRef(false);
   const presentedIdsRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (criticalModalsBlocking || active) return;
-    const id = window.setInterval(() => setTick((n) => n + 1), 60_000);
-    return () => window.clearInterval(id);
-  }, [criticalModalsBlocking, active]);
 
   useEffect(() => {
     if (criticalModalsBlocking) {
       setActive(null);
       return;
     }
-    if (active) return;
+    if (sessionUsedRef.current || active) return;
     if (games.length === 0) return;
 
     const next = buildPromoQueue(games);
-    setActive(next[0] ?? null);
-  }, [criticalModalsBlocking, games, active, tick]);
+    const first = next[0] ?? null;
+    if (first) {
+      sessionUsedRef.current = true;
+      setActive(first);
+    }
+  }, [criticalModalsBlocking, games, active]);
 
   useEffect(() => {
     if (!active) return;
@@ -80,6 +79,7 @@ export default function PromoPopupHost({
       if (markPersistent && item.persistent) {
         markPromoEventRead(item.id);
       }
+      sessionUsedRef.current = true;
       setActive(null);
     },
     []
