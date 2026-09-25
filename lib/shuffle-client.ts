@@ -19,6 +19,8 @@ import {
   refreshSessionFromCheckIn,
   type StreakStatus,
 } from "@/lib/streak-client";
+import { setCachedWallet } from "@/lib/player-id";
+import { readConnectedWallet } from "@/lib/walletAuth";
 import { setWalletSessionToken } from "@/lib/wallet-session-client";
 
 export type ShuffleTheaterCard = {
@@ -67,12 +69,13 @@ export type ShuffleSyncResult = {
 
 export async function prepareDailyShuffle(
   walletAddress: string,
-  campaignId: number = DEFAULT_SHUFFLE_CAMPAIGN_ID
+  campaignId: number = DEFAULT_SHUFFLE_CAMPAIGN_ID,
+  forceNew = false
 ): Promise<ShufflePrepareResult> {
   const res = await fetch("/api/shuffle/prepare", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ walletAddress, campaignId }),
+    body: JSON.stringify({ walletAddress, campaignId, forceNew }),
     cache: "no-store",
   });
   const data = (await res.json().catch(() => ({}))) as ShufflePrepareResult & {
@@ -120,17 +123,27 @@ export async function performDailyShuffle(
   sync: ShuffleSyncResult;
   txHash: string;
 }> {
-  if (hasShuffleDoneToday(walletAddress, campaignId)) {
+  const connected = await readConnectedWallet();
+  const player =
+    connected &&
+    connected.toLowerCase() !== walletAddress.toLowerCase()
+      ? connected
+      : walletAddress;
+  if (player !== walletAddress) {
+    setCachedWallet(player);
+  }
+
+  if (hasShuffleDoneToday(player, campaignId)) {
     throw new Error("Already shuffled today. Come back after the daily interval.");
   }
 
-  const preStatus = await fetchStreakStatus(walletAddress, campaignId, {
+  const preStatus = await fetchStreakStatus(player, campaignId, {
     fresh: true,
   });
   if (!preStatus.canCheckIn) {
-    markShuffleDoneToday(walletAddress, campaignId);
+    markShuffleDoneToday(player, campaignId);
     try {
-      await refreshSessionFromCheckIn(walletAddress, campaignId);
+      await refreshSessionFromCheckIn(player, campaignId);
     } catch {
       // ignore
     }
@@ -138,29 +151,44 @@ export async function performDailyShuffle(
   }
 
   try {
-    const prepare = await prepareDailyShuffle(walletAddress, campaignId);
-    const { txHash } = await spinOnChain({
-      campaignId: prepare.campaignId,
-      rewardMode: prepare.rewardMode,
-      rewardTarget: prepare.rewardTarget,
-      rewardAmount: BigInt(prepare.rewardAmount),
-      nonce: BigInt(prepare.nonce),
-      deadline: BigInt(prepare.deadline),
-      signature: prepare.signature,
-    });
+    let prepare = await prepareDailyShuffle(player, campaignId);
+    let txHash: string;
+    try {
+      ({ txHash } = await spinOnChain({
+        campaignId: prepare.campaignId,
+        rewardMode: prepare.rewardMode,
+        rewardTarget: prepare.rewardTarget,
+        rewardAmount: BigInt(prepare.rewardAmount),
+        nonce: BigInt(prepare.nonce),
+        deadline: BigInt(prepare.deadline),
+        signature: prepare.signature,
+      }));
+    } catch (err) {
+      if (!isUnverifiedShuffleError(err)) throw err;
+      prepare = await prepareDailyShuffle(player, campaignId, true);
+      ({ txHash } = await spinOnChain({
+        campaignId: prepare.campaignId,
+        rewardMode: prepare.rewardMode,
+        rewardTarget: prepare.rewardTarget,
+        rewardAmount: BigInt(prepare.rewardAmount),
+        nonce: BigInt(prepare.nonce),
+        deadline: BigInt(prepare.deadline),
+        signature: prepare.signature,
+      }));
+    }
     const sync = await syncShuffleSpin({
-      walletAddress,
+      walletAddress: player,
       txHash,
       campaignId: prepare.campaignId,
       nonce: prepare.nonce,
     });
-    markShuffleDoneToday(walletAddress, campaignId);
+    markShuffleDoneToday(player, campaignId);
     return { prepare, sync, txHash };
   } catch (err) {
     if (isAlreadyCheckedInError(err)) {
-      markShuffleDoneToday(walletAddress, campaignId);
+      markShuffleDoneToday(player, campaignId);
       try {
-        await refreshSessionFromCheckIn(walletAddress, campaignId);
+        await refreshSessionFromCheckIn(player, campaignId);
       } catch {
         // ignore
       }
@@ -168,18 +196,28 @@ export async function performDailyShuffle(
     }
 
     try {
-      const status = await fetchStreakStatus(walletAddress, campaignId, {
+      const status = await fetchStreakStatus(player, campaignId, {
         fresh: true,
       });
       if (!status.canCheckIn && status.lastCheckInAt > 0) {
-        markShuffleDoneToday(walletAddress, campaignId);
-        await refreshSessionFromCheckIn(walletAddress, campaignId);
+        markShuffleDoneToday(player, campaignId);
+        await refreshSessionFromCheckIn(player, campaignId);
       }
     } catch {
       // fall through
     }
     throw err;
   }
+}
+
+function isUnverifiedShuffleError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("could not be verified") ||
+    lower.includes("invalidspinsignature") ||
+    lower.includes("spinsignerequired")
+  );
 }
 
 export async function claimDailyShuffleReward(

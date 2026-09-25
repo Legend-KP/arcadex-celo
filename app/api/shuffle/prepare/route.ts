@@ -52,6 +52,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       walletAddress?: string;
       campaignId?: number;
+      forceNew?: boolean;
     };
 
     const rawWallet = body.walletAddress?.trim() ?? "";
@@ -109,6 +110,7 @@ export async function POST(request: Request) {
     const existing = await getShufflePending(wallet, campaignId, nonce);
     const nowSec = Math.floor(Date.now() / 1000);
     if (
+      !body.forceNew &&
       existing &&
       !existing.consumedAt &&
       existing.deadline > nowSec + 30 &&

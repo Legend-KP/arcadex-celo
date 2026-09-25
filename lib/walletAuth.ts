@@ -39,7 +39,7 @@ function cacheWallet(address: string): string {
   return normalized;
 }
 
-async function readAddressFromProvider(): Promise<string | null> {
+export async function readConnectedWallet(): Promise<string | null> {
   const client = createMiniPayWalletClient();
   if (!client) return null;
 
@@ -83,12 +83,12 @@ async function waitForProviderWallet(
   const start = Date.now();
 
   while (Date.now() - start < timeoutMs) {
-    const wallet = await readAddressFromProvider();
+    const wallet = await readConnectedWallet();
     if (wallet) return wallet;
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 
-  return readAddressFromProvider();
+  return readConnectedWallet();
 }
 
 /** Resolve wallet on app open via MiniPay injected provider (no message signing). */
@@ -96,12 +96,11 @@ export async function resolveWalletOnAppOpen(): Promise<string | null> {
   clearInvalidCachedWallet();
 
   const cached = getMemoryCachedWallet();
+  const immediate = await readConnectedWallet();
+  if (immediate) return cacheWallet(immediate);
   if (cached) return cached;
 
-  const immediate = await readAddressFromProvider();
-  if (immediate) return cacheWallet(immediate);
-
-    const fromProvider = await waitForProviderWallet(1200);
+  const fromProvider = await waitForProviderWallet(1200);
   if (fromProvider) return cacheWallet(fromProvider);
 
   return null;
@@ -109,13 +108,13 @@ export async function resolveWalletOnAppOpen(): Promise<string | null> {
 
 /** Quick re-read after auto-connect — avoids repeating the full init wait. */
 export async function retryResolveWallet(): Promise<string | null> {
+  const immediate = await readConnectedWallet();
+  if (immediate) return cacheWallet(immediate);
+
   const cached = getMemoryCachedWallet();
   if (cached) return cached;
 
-  const immediate = await readAddressFromProvider();
-  if (immediate) return cacheWallet(immediate);
-
-    const fromProvider = await waitForProviderWallet(1200);
+  const fromProvider = await waitForProviderWallet(1200);
   return fromProvider ? cacheWallet(fromProvider) : null;
 }
 
