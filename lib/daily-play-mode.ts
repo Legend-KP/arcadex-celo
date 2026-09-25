@@ -5,9 +5,9 @@ import {
 export type DailyPlayMode = "streak" | "shuffle";
 
 /**
- * Server + build-time mode.
- * Cloudflare: set `DAILY_PLAY_MODE=shuffle` (runtime) and/or
- * `NEXT_PUBLIC_DAILY_PLAY_MODE=shuffle` (must rebuild for client inlining).
+ * Client / local fallback only. Production reads the Cloudflare Worker env
+ * in `loadDailyPlayConfig` (`DAILY_PLAY_MODE` or `NEXT_PUBLIC_DAILY_PLAY_MODE`
+ * set in the dashboard). Do not put those in wrangler.jsonc.
  */
 export function getDailyPlayMode(): DailyPlayMode {
   const mode = (

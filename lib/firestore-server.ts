@@ -1,22 +1,28 @@
 import { prependGameSortOrder, sortGames } from "@/lib/game-sort";
 import {
   getCachedGameDoc,
-  getCachedGameList,
-  readSharedCatalogList,
+  getCachedFullGameList,
+  getCachedPublicGameList,
+  getCachedTestGameId,
+  readSharedPublicCatalog,
   getCatalogEpoch,
   getStaleGameDocFallback,
-  getStaleGameListFallback,
-  invalidateGameCache,
+  getStaleFullGameListFallback,
+  getStalePublicGameListFallback,
   isFirestoreCircuitOpen,
   recordFirestoreFailure,
   recordFirestoreSuccess,
   setCachedGameDoc,
-  setCachedGameList,
-  upsertCachedGame,
+  setCachedFullGameList,
   removeCachedGame,
   refreshCatalogCacheIfStale,
-  bumpCatalogGeneration,
+  republishCatalogSnapshot,
+  warmPublicCatalogMemory,
+  type PublicCatalogSnapshot,
 } from "@/lib/game-cache";
+import {
+  publicCatalogFromFull,
+} from "@/lib/game-visibility";
 import { invalidateGameFlagsCache } from "@/lib/rtdb-cache";
 import {
   deleteGameGatingFlagsFromRtdb,
@@ -27,6 +33,8 @@ import { getFirebaseAccessToken, getProjectId, getServiceAccount } from "@/lib/f
 import { fetchWithTimeout } from "@/lib/firebase-fetch";
 import { noteFirestoreReads } from "@/lib/firestore-read-counter";
 import { normalizeImageAssetUrl } from "@/lib/game-assets";
+
+export { isGameInPublicCatalog, isGameVisible } from "@/lib/game-visibility";
 
 type FirestoreValue = {
   stringValue?: string;
@@ -40,9 +48,12 @@ type FirestoreDocument = {
   fields: Record<string, FirestoreValue>;
 };
 
-/** Coalesce concurrent catalog loads on the same isolate. */
+/** Coalesce concurrent full-catalog loads on the same isolate. */
 let gamesListInFlight: Promise<Game[]> | null = null;
 let gamesListInFlightEpoch = -1;
+/** Coalesce concurrent public-catalog loads on the same isolate. */
+let publicCatalogInFlight: Promise<PublicCatalogSnapshot> | null = null;
+let publicCatalogInFlightEpoch = -1;
 
 function parseField(value: FirestoreValue | undefined): unknown {
   if (!value) return undefined;
@@ -206,38 +217,24 @@ function encodeFields(
   return fields;
 }
 
-export function isGameVisible(game: Game): boolean {
-  // Test games stay reachable by id (password gated in the UI).
-  if (game.isTest === true) return true;
-  return game.active !== false;
-}
-
-/** Public home/arcade grid — excludes hidden and test-only games. */
-export function isGameInPublicCatalog(game: Game): boolean {
-  return game.active !== false && game.isTest !== true;
-}
-
 async function fetchGamesFromFirestore(): Promise<Game[]> {
   const docs = await listDocuments("games");
   return sortGames(docs.map(docToGame));
 }
 
-export async function fetchGamesFromServer(): Promise<Game[]> {
-  const catalogBumped = await refreshCatalogCacheIfStale();
-  const cached = getCachedGameList();
+/**
+ * Admin / mutations / reconcile — full catalog including hidden + test.
+ * Does **not** treat public KV as a full-list source (that snapshot is filtered).
+ *
+ * Order: memory full → Firestore list → memory + public KV write.
+ */
+export async function fetchAllGamesFromServer(): Promise<Game[]> {
+  await refreshCatalogCacheIfStale();
+  const cached = getCachedFullGameList();
   if (cached) return cached;
 
-  // After Hide / Coming Soon, skip KV list — it may lag behind generation.
-  if (!catalogBumped) {
-    const shared = await readSharedCatalogList();
-    if (shared) {
-      setCachedGameList(shared, false);
-      return shared;
-    }
-  }
-
   if (isFirestoreCircuitOpen()) {
-    const stale = getStaleGameListFallback();
+    const stale = getStaleFullGameListFallback();
     if (stale) return stale;
   }
 
@@ -251,11 +248,12 @@ export async function fetchGamesFromServer(): Promise<Game[]> {
     try {
       const games = await fetchGamesFromFirestore();
       if (epoch === getCatalogEpoch()) {
-        setCachedGameList(games);
+        // Miss path: publish public KV so home warms without a second list.
+        setCachedFullGameList(games, true);
       }
       return games;
     } catch (err) {
-      const stale = getStaleGameListFallback();
+      const stale = getStaleFullGameListFallback();
       if (stale) return stale;
       throw err;
     } finally {
@@ -266,6 +264,68 @@ export async function fetchGamesFromServer(): Promise<Game[]> {
   })();
 
   return gamesListInFlight;
+}
+
+/** @deprecated Prefer fetchAllGamesFromServer or fetchPublicCatalogFromServer. */
+export async function fetchGamesFromServer(): Promise<Game[]> {
+  return fetchAllGamesFromServer();
+}
+
+/**
+ * MiniPay home / public arcade — live + Coming Soon only.
+ *
+ * Order: memory public → **KV public** → Firestore list → write KV public.
+ */
+export async function fetchPublicCatalogFromServer(): Promise<PublicCatalogSnapshot> {
+  await refreshCatalogCacheIfStale();
+
+  const memPublic = getCachedPublicGameList();
+  if (memPublic) {
+    return { games: memPublic, testGameId: getCachedTestGameId() };
+  }
+
+  const shared = await readSharedPublicCatalog();
+  if (shared) {
+    return warmPublicCatalogMemory(shared);
+  }
+
+  if (isFirestoreCircuitOpen()) {
+    const stale = getStalePublicGameListFallback();
+    if (stale) {
+      return { games: stale, testGameId: getCachedTestGameId() };
+    }
+  }
+
+  if (
+    publicCatalogInFlight &&
+    publicCatalogInFlightEpoch === getCatalogEpoch()
+  ) {
+    return publicCatalogInFlight;
+  }
+
+  const epoch = getCatalogEpoch();
+  publicCatalogInFlightEpoch = epoch;
+  publicCatalogInFlight = (async () => {
+    try {
+      const games = await fetchGamesFromFirestore();
+      if (epoch === getCatalogEpoch()) {
+        return setCachedFullGameList(games, true);
+      }
+      return publicCatalogFromFull(games);
+    } catch (err) {
+      const stale = getStalePublicGameListFallback();
+      if (stale) {
+        return { games: stale, testGameId: getCachedTestGameId() };
+      }
+      throw err;
+    } finally {
+      if (publicCatalogInFlightEpoch === epoch) {
+        publicCatalogInFlight = null;
+      }
+    }
+  })();
+
+  return publicCatalogInFlight;
 }
 
 async function fetchGameFromFirestore(id: string): Promise<Game | null> {
@@ -303,10 +363,20 @@ export async function fetchGameFromServer(id: string): Promise<Game | null> {
   }
 }
 
+/**
+ * After create / update / delete / reorder: one Firestore list, bump gen,
+ * write public KV so other devices see Hide / Go-live without a home stampede.
+ */
+async function republishAfterMutation(): Promise<Game[]> {
+  const games = await fetchGamesFromFirestore();
+  await republishCatalogSnapshot(games);
+  return games;
+}
+
 export async function createGameOnServer(
   data: Omit<Game, "id" | "createdAt">
 ): Promise<string> {
-  const existing = await fetchGamesFromServer();
+  const existing = await fetchAllGamesFromServer();
   // New games go to the top of the arcade order.
   const sortOrder = data.sortOrder ?? prependGameSortOrder(existing);
   const now = Date.now();
@@ -337,9 +407,8 @@ export async function createGameOnServer(
   const id = doc.name.split("/").pop() ?? "";
   const game = docToGame(doc);
 
-  invalidateGameCache(id);
-  await bumpCatalogGeneration();
   await syncGatingAfterMutation(id, game);
+  await republishAfterMutation();
 
   return id;
 }
@@ -353,9 +422,6 @@ async function clearTestFlagOnOtherGames(
   );
   for (const other of others) {
     await patchGameOnFirestore(other.id, { isTest: false });
-    invalidateGameCache(other.id);
-    const refreshed = await fetchGameFromFirestore(other.id);
-    if (refreshed) upsertCachedGame(refreshed);
   }
 }
 
@@ -370,7 +436,7 @@ export async function updateGameOnServer(
       : null;
 
   if (patch.isTest === true) {
-    const games = await fetchGamesFromServer();
+    const games = await fetchAllGamesFromServer();
     await clearTestFlagOnOtherGames(games, id);
     patch = { ...patch, active: true, live: true };
   }
@@ -388,7 +454,7 @@ export async function updateGameOnServer(
     (becomingLive || forcedLiveFromTest) &&
     typeof patch.newArrivalAt !== "number"
   ) {
-    const games = await fetchGamesFromServer();
+    const games = await fetchAllGamesFromServer();
     patch = {
       ...patch,
       newArrivalAt: Date.now(),
@@ -397,10 +463,8 @@ export async function updateGameOnServer(
   }
 
   await patchGameOnFirestore(id, patch);
-  invalidateGameCache(id);
-  await bumpCatalogGeneration();
-  const refreshed = await fetchGameFromFirestore(id);
-  if (refreshed) upsertCachedGame(refreshed);
+  const games = await republishAfterMutation();
+  const refreshed = games.find((g) => g.id === id) ?? null;
   await syncGatingAfterMutation(id, refreshed);
 }
 
@@ -429,7 +493,7 @@ async function patchGameOnFirestore(
 }
 
 export async function reorderGamesOnServer(orderedIds: string[]): Promise<void> {
-  const games = await fetchGamesFromServer();
+  const games = await fetchAllGamesFromServer();
   const idSet = new Set(orderedIds);
   if (orderedIds.length !== games.length || games.some((g) => !idSet.has(g.id))) {
     throw new Error("Order must include every game exactly once.");
@@ -451,10 +515,7 @@ export async function reorderGamesOnServer(orderedIds: string[]): Promise<void> 
     )
   );
 
-  invalidateGameCache();
-  await bumpCatalogGeneration();
-  const refreshed = await fetchGamesFromFirestore();
-  setCachedGameList(refreshed);
+  await republishAfterMutation();
 }
 
 export async function deleteGameOnServer(id: string): Promise<void> {
@@ -465,8 +526,8 @@ export async function deleteGameOnServer(id: string): Promise<void> {
   }
 
   removeCachedGame(id);
-  await bumpCatalogGeneration();
   await syncGatingAfterMutation(id, null);
+  await republishAfterMutation();
 }
 
 // Re-export project id helper for other modules.

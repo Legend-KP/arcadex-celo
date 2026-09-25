@@ -5,7 +5,7 @@ import {
   syncGameGatingFlagsToRtdb,
   deleteGameGatingFlagsFromRtdb,
 } from "@/lib/player-backend";
-import { fetchGamesFromServer } from "@/lib/firestore-server";
+import { fetchAllGamesFromServer } from "@/lib/firestore-server";
 import { Game, GameGatingFlags } from "@/types";
 
 export type GatingMismatch = {
@@ -84,7 +84,7 @@ export async function reconcileGameFlags(options?: {
   const repair = options?.repair === true;
   invalidateGameFlagsCache();
 
-  const games = await fetchGamesFromServer();
+  const games = await fetchAllGamesFromServer();
   const flagIds = new Set(await listGameGatingFlagIds());
 
   const missing: GatingMismatch[] = [];

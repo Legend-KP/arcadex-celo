@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   isArcadeXRewardsConfigured,
 } from "@/lib/arcadex-rewards";
-import { getDailyCampaignId } from "@/lib/daily-play-mode";
+import { loadDailyPlayConfig } from "@/lib/daily-play-config-server";
 import { STREAK_PROGRESS_CACHE_MS, getStreakProgressCached } from "@/lib/streak-progress-cache";
 import {
   checkRateLimit,
@@ -30,8 +30,9 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const rawWallet = searchParams.get("walletAddress")?.trim() ?? "";
+    const dailyPlay = await loadDailyPlayConfig();
     const campaignId = Number(
-      searchParams.get("campaignId") ?? getDailyCampaignId()
+      searchParams.get("campaignId") ?? dailyPlay.campaignId
     );
 
     if (!rawWallet || !isWalletAddress(rawWallet)) {

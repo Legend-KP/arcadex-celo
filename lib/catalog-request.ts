@@ -1,7 +1,7 @@
 import { verifyAdminRequest } from "@/lib/admin-auth";
 import {
-  fetchGamesFromServer,
-  isGameInPublicCatalog,
+  fetchAllGamesFromServer,
+  fetchPublicCatalogFromServer,
 } from "@/lib/firestore-server";
 import { withFirestoreReadCounter } from "@/lib/firestore-read-counter";
 import { fetchGamePlayCountsForIds } from "@/lib/player-backend";
@@ -19,20 +19,40 @@ export type CatalogListPayload = {
 export async function loadCatalogListForRequest(
   request: Request
 ): Promise<CatalogListPayload> {
-  const { result: games, firestoreReads } = await withFirestoreReadCounter(() =>
-    fetchGamesFromServer()
-  );
-
   const isAdmin = await verifyAdminRequest(request);
-  const testGameId = games.find((g) => g.isTest === true)?.id ?? null;
-  const visible = isAdmin ? games : games.filter(isGameInPublicCatalog);
-  const visibleIds = visible.map((g) => g.id);
 
-  // Prefer id-scoped fetch so an incomplete play-count cache cannot zero the grid.
+  if (isAdmin) {
+    const { result: games, firestoreReads } = await withFirestoreReadCounter(() =>
+      fetchAllGamesFromServer()
+    );
+    const testGameId = games.find((g) => g.isTest === true)?.id ?? null;
+    const visibleIds = games.map((g) => g.id);
+    const allCounts = await fetchGamePlayCountsForIds(visibleIds).catch(
+      () => ({}) as Record<string, number>
+    );
+    const playCounts = Object.fromEntries(
+      visibleIds.map((id) => [
+        id,
+        typeof allCounts[id] === "number" ? allCounts[id] : 0,
+      ])
+    );
+
+    return {
+      games,
+      playCounts,
+      testGameId,
+      firestoreReads,
+      cacheHit: firestoreReads === 0,
+    };
+  }
+
+  const { result: catalog, firestoreReads } = await withFirestoreReadCounter(() =>
+    fetchPublicCatalogFromServer()
+  );
+  const visibleIds = catalog.games.map((g) => g.id);
   const allCounts = await fetchGamePlayCountsForIds(visibleIds).catch(
     () => ({}) as Record<string, number>
   );
-
   const playCounts = Object.fromEntries(
     visibleIds.map((id) => [
       id,
@@ -41,9 +61,9 @@ export async function loadCatalogListForRequest(
   );
 
   return {
-    games: visible,
+    games: catalog.games,
     playCounts,
-    testGameId,
+    testGameId: catalog.testGameId,
     firestoreReads,
     cacheHit: firestoreReads === 0,
   };

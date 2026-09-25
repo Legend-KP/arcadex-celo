@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   isArcadeXRewardsConfigured,
 } from "@/lib/arcadex-rewards";
-import { getDailyCampaignId } from "@/lib/daily-play-mode";
+import { loadDailyPlayConfig } from "@/lib/daily-play-config-server";
 import { getStreakProgressCached } from "@/lib/streak-progress-cache";
 import {
   checkRateLimit,
@@ -47,10 +47,11 @@ export async function POST(request: Request) {
     };
 
     const rawWallet = body.walletAddress?.trim() ?? "";
+    const dailyPlay = await loadDailyPlayConfig();
     const campaignId =
       typeof body.campaignId === "number" && Number.isFinite(body.campaignId)
         ? body.campaignId
-        : getDailyCampaignId();
+        : dailyPlay.campaignId;
 
     if (!rawWallet || !isWalletAddress(rawWallet)) {
       return NextResponse.json(

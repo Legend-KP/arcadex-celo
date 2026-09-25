@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  getDailyCampaignId,
-  getDailyPlayMode,
-} from "@/lib/daily-play-mode";
+import { loadDailyPlayConfig } from "@/lib/daily-play-config-server";
 import {
   checkRateLimit,
   getClientIp,
@@ -18,12 +15,12 @@ export async function GET(request: Request) {
     return rateLimitResponse();
   }
 
-  const mode = getDailyPlayMode();
+  const config = await loadDailyPlayConfig();
   return NextResponse.json(
     {
-      mode,
-      campaignId: getDailyCampaignId(),
-      shuffle: mode === "shuffle",
+      mode: config.mode,
+      campaignId: config.campaignId,
+      shuffle: config.shuffle,
     },
     {
       headers: {
