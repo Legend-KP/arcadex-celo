@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CONTEST_DURATION_OPTIONS,
   ContestDurationDays,
@@ -11,8 +11,13 @@ import {
 import { updateAdminGame } from "@/lib/admin-api";
 import {
   computeContestEndsAt,
+  durationDaysFromRange,
   formatContestCountdown,
   getContestStatus,
+  isContestDurationDays,
+  parseDatetimeLocalValue,
+  toDatetimeLocalValue,
+  MS_PER_HOUR,
 } from "@/lib/contest";
 import { getLeaderboard } from "@/lib/leaderboard-client";
 
@@ -24,9 +29,35 @@ interface AdminContestModalProps {
   showToast: (message: string) => void;
 }
 
+type DurationMode = "preset" | "custom";
+
 function formatWallet(wallet?: string): string {
   if (!wallet) return "Unknown";
   return wallet;
+}
+
+function detectDurationMode(game: Game): DurationMode {
+  const startedAt = game.contestStartedAt;
+  const endsAt = game.contestEndsAt;
+  const days = game.contestDurationDays;
+  if (
+    typeof startedAt === "number" &&
+    typeof endsAt === "number" &&
+    isContestDurationDays(days)
+  ) {
+    const expected = computeContestEndsAt(startedAt, days);
+    if (Math.abs(expected - endsAt) < 60_000) return "preset";
+  }
+  if (
+    typeof startedAt === "number" &&
+    typeof endsAt === "number" &&
+    !isContestDurationDays(days)
+  ) {
+    return "custom";
+  }
+  if (isContestDurationDays(days)) return "preset";
+  if (typeof endsAt === "number") return "custom";
+  return "preset";
 }
 
 export default function AdminContestModal({
@@ -36,7 +67,11 @@ export default function AdminContestModal({
   onSaved,
   showToast,
 }: AdminContestModalProps) {
+  const [durationMode, setDurationMode] = useState<DurationMode>("preset");
   const [durationDays, setDurationDays] = useState<ContestDurationDays>(1);
+  const [customEndsAtLocal, setCustomEndsAtLocal] = useState(() =>
+    toDatetimeLocalValue(Date.now() + 24 * MS_PER_HOUR)
+  );
   const [task, setTask] = useState("");
   const [saving, setSaving] = useState(false);
   const [loadingContest, setLoadingContest] = useState(false);
@@ -51,7 +86,18 @@ export default function AdminContestModal({
   useEffect(() => {
     if (!open || !game) return;
 
-    setDurationDays(game.contestDurationDays ?? 1);
+    const mode = detectDurationMode(game);
+    setDurationMode(mode);
+    setDurationDays(
+      isContestDurationDays(game.contestDurationDays)
+        ? game.contestDurationDays
+        : 1
+    );
+    const defaultEnd =
+      typeof game.contestEndsAt === "number" && game.contestEndsAt > Date.now()
+        ? game.contestEndsAt
+        : Date.now() + 24 * MS_PER_HOUR;
+    setCustomEndsAtLocal(toDatetimeLocalValue(defaultEnd));
     setTask(game.contestTask ?? "");
     setContestInfo(null);
 
@@ -79,7 +125,50 @@ export default function AdminContestModal({
     return () => window.clearInterval(interval);
   }, [open, isLive, game?.contestEndsAt]);
 
+  const customEndsAtMs = useMemo(
+    () => parseDatetimeLocalValue(customEndsAtLocal),
+    [customEndsAtLocal]
+  );
+
+  const plannedHint = useMemo(() => {
+    if (durationMode === "preset") {
+      const hours = durationDays * 24;
+      return `Leaderboard countdown: ${hours} hours`;
+    }
+    if (customEndsAtMs == null) return "Pick a valid end date and time.";
+    const startBase = isLive && game?.contestStartedAt ? game.contestStartedAt : Date.now();
+    const remaining = customEndsAtMs - startBase;
+    if (remaining <= 0) return "End time must be in the future.";
+    return `Ends in ${formatContestCountdown(customEndsAtMs - Date.now())}`;
+  }, [durationMode, durationDays, customEndsAtMs, isLive, game?.contestStartedAt]);
+
   if (!open || !game) return null;
+
+  function resolveEndsAt(startedAt: number): { endsAt: number; durationDays: number } | null {
+    if (durationMode === "preset") {
+      return {
+        endsAt: computeContestEndsAt(startedAt, durationDays),
+        durationDays,
+      };
+    }
+    const endsAt = parseDatetimeLocalValue(customEndsAtLocal);
+    if (endsAt == null) {
+      showToast("Enter a valid end date and time.");
+      return null;
+    }
+    if (endsAt <= Date.now()) {
+      showToast("End time must be in the future.");
+      return null;
+    }
+    if (endsAt <= startedAt) {
+      showToast("End time must be after the contest start.");
+      return null;
+    }
+    return {
+      endsAt,
+      durationDays: durationDaysFromRange(startedAt, endsAt),
+    };
+  }
 
   async function handleStartContest() {
     if (!task.trim()) {
@@ -87,14 +176,17 @@ export default function AdminContestModal({
       return;
     }
 
+    const now = Date.now();
+    const resolved = resolveEndsAt(now);
+    if (!resolved) return;
+
     setSaving(true);
     try {
-      const now = Date.now();
       await updateAdminGame(game!.id, {
-        contestDurationDays: durationDays,
+        contestDurationDays: resolved.durationDays,
         contestTask: task.trim(),
         contestStartedAt: now,
-        contestEndsAt: computeContestEndsAt(now, durationDays),
+        contestEndsAt: resolved.endsAt,
         contestLive: true,
       });
       showToast("Contest started!");
@@ -116,12 +208,15 @@ export default function AdminContestModal({
     }
     if (!game?.contestStartedAt) return;
 
+    const resolved = resolveEndsAt(game.contestStartedAt);
+    if (!resolved) return;
+
     setSaving(true);
     try {
       await updateAdminGame(game.id, {
-        contestDurationDays: durationDays,
+        contestDurationDays: resolved.durationDays,
         contestTask: task.trim(),
-        contestEndsAt: computeContestEndsAt(game.contestStartedAt, durationDays),
+        contestEndsAt: resolved.endsAt,
         contestLive: true,
       });
       showToast("Contest updated!");
@@ -204,24 +299,59 @@ export default function AdminContestModal({
             </h4>
 
             <label className="form-label">Duration</label>
-            <div className="admin-duration-grid">
+            <div className="admin-duration-grid admin-duration-grid--with-custom">
               {CONTEST_DURATION_OPTIONS.map((days) => (
                 <button
                   key={days}
                   type="button"
-                  className={`admin-duration-btn${durationDays === days ? " selected" : ""}`}
-                  onClick={() => setDurationDays(days)}
+                  className={`admin-duration-btn${
+                    durationMode === "preset" && durationDays === days
+                      ? " selected"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    setDurationMode("preset");
+                    setDurationDays(days);
+                  }}
                 >
                   {days}d
                 </button>
               ))}
+              <button
+                type="button"
+                className={`admin-duration-btn${
+                  durationMode === "custom" ? " selected" : ""
+                }`}
+                onClick={() => {
+                  setDurationMode("custom");
+                  if (!customEndsAtLocal) {
+                    setCustomEndsAtLocal(
+                      toDatetimeLocalValue(Date.now() + 24 * MS_PER_HOUR)
+                    );
+                  }
+                }}
+              >
+                Custom
+              </button>
             </div>
-            <p className="admin-contest-hint">
-              {durationDays === 1 && "Leaderboard countdown: 24 hours"}
-              {durationDays === 2 && "Leaderboard countdown: 48 hours"}
-              {durationDays === 4 && "Leaderboard countdown: 96 hours"}
-              {durationDays === 7 && "Leaderboard countdown: 168 hours"}
-            </p>
+
+            {durationMode === "custom" && (
+              <div className="form-group admin-contest-custom-time">
+                <label className="form-label" htmlFor="contest-ends-at">
+                  End date &amp; time
+                </label>
+                <input
+                  id="contest-ends-at"
+                  className="form-input"
+                  type="datetime-local"
+                  value={customEndsAtLocal}
+                  min={toDatetimeLocalValue(Date.now() + 5 * 60_000)}
+                  onChange={(e) => setCustomEndsAtLocal(e.target.value)}
+                />
+              </div>
+            )}
+
+            <p className="admin-contest-hint">{plannedHint}</p>
 
             <label className="form-label" htmlFor="contest-task">
               Contest Task

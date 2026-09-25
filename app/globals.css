@@ -4065,6 +4065,21 @@ a { color: inherit; text-decoration: none; }
   margin-bottom: 8px;
 }
 
+.admin-duration-grid--with-custom {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 480px) {
+  .admin-duration-grid--with-custom {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.admin-contest-custom-time {
+  margin-top: 10px;
+  margin-bottom: 8px;
+}
+
 .admin-duration-btn {
   background: var(--surface2);
   border: 1px solid var(--border);

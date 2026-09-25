@@ -17,7 +17,8 @@ export interface ContestInfo {
   task: string;
   startedAt: number;
   endsAt: number;
-  durationDays: ContestDurationDays;
+  /** Length in days (preset 1/2/4/7, or derived for custom end times). */
+  durationDays: number;
   entries: LeaderboardEntry[];
 }
 
@@ -35,7 +36,7 @@ export interface GameGatingFlags {
   live: boolean;
   hasLeaderboard: boolean;
   contestLive?: boolean;
-  contestDurationDays?: ContestDurationDays;
+  contestDurationDays?: number;
   contestTask?: string;
   contestStartedAt?: number;
   contestEndsAt?: number;
@@ -61,8 +62,8 @@ export interface Game {
   hasLeaderboard?: boolean;
   /** Legacy flag; live status is derived from contestEndsAt. */
   contestLive?: boolean;
-  /** Contest duration in days (1, 2, 4, or 7). */
-  contestDurationDays?: ContestDurationDays;
+  /** Contest duration in days (1, 2, 4, 7, or custom derived from end time). */
+  contestDurationDays?: number;
   /** Admin-defined task text shown on the leaderboard during a contest. */
   contestTask?: string;
   /** Unix ms timestamp when the current contest started. */

@@ -8,6 +8,7 @@ import {
 } from "@/types";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const MS_PER_HOUR = 60 * 60 * 1000;
 
 export function isContestDurationDays(
   value: unknown
@@ -20,9 +21,17 @@ export function isContestDurationDays(
 
 export function computeContestEndsAt(
   startedAt: number,
-  durationDays: ContestDurationDays
+  durationDays: number
 ): number {
   return startedAt + durationDays * MS_PER_DAY;
+}
+
+/** Days (possibly fractional) between start and end. */
+export function durationDaysFromRange(startedAt: number, endsAt: number): number {
+  const ms = Math.max(0, endsAt - startedAt);
+  const days = ms / MS_PER_DAY;
+  // Keep one decimal for custom lengths (e.g. 12h → 0.5).
+  return Math.max(Math.round(days * 10) / 10, ms > 0 ? 0.1 : 0);
 }
 
 export function getContestStatus(
@@ -65,6 +74,20 @@ export function formatContestCountdown(remainingMs: number): string {
   return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
 }
 
+/** Local `YYYY-MM-DDTHH:mm` for `<input type="datetime-local">`. */
+export function toDatetimeLocalValue(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function parseDatetimeLocalValue(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const ms = new Date(trimmed).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
 export function buildContestInfo(
   game: Pick<
     Game,
@@ -84,17 +107,20 @@ export function buildContestInfo(
   }
 
   const durationDays =
-    game.contestDurationDays &&
-    isContestDurationDays(game.contestDurationDays)
+    typeof game.contestDurationDays === "number" &&
+    Number.isFinite(game.contestDurationDays) &&
+    game.contestDurationDays > 0
       ? game.contestDurationDays
-      : Math.max(1, Math.round((endsAt - startedAt) / MS_PER_DAY));
+      : durationDaysFromRange(startedAt, endsAt);
 
   return {
     status,
     task: game.contestTask?.trim() ?? "",
     startedAt,
     endsAt,
-    durationDays: durationDays as ContestDurationDays,
+    durationDays,
     entries,
   };
 }
+
+export { MS_PER_DAY, MS_PER_HOUR };
