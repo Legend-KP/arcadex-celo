@@ -14,6 +14,7 @@ import {
   unlockTestGame,
   verifyTestGamePassword,
 } from "@/lib/test-game-access";
+import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
 
 interface AppFooterProps {
   testGameId?: string | null;
@@ -26,6 +27,8 @@ export default function AppFooter({ testGameId = null }: AppFooterProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [showPw, setShowPw] = useState(false);
+
+  useClaimUiOverlay("test-access", Boolean(testOpen && testGameId));
 
   function openTest() {
     setPassword("");

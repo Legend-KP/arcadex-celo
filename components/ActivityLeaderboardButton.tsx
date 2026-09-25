@@ -9,6 +9,7 @@ import {
   pingActivityVisit,
 } from "@/lib/activity-client";
 import { formatActivityCountdown } from "@/lib/activity-week";
+import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
@@ -59,6 +60,7 @@ export default function ActivityLeaderboardButton({
     if (!controlled) setOpenUncontrolled(next);
     onOpenChange?.(next);
   };
+  useClaimUiOverlay("activity-leaderboard", open);
   const [mounted, setMounted] = useState(false);
   const [entries, setEntries] = useState<ActivityLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(false);

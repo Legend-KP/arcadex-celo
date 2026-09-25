@@ -269,7 +269,7 @@ export default function Leaderboard({
                   strokeLinejoin="round"
                 />
               </svg>
-              {entries.length} Total Participants
+              {contest?.participantCount ?? entries.length} Total Participants
             </span>
           </div>
         )}

@@ -356,6 +356,15 @@ export async function fetchContestLeaderboardFromServer(
   );
 }
 
+export async function countContestParticipantsFromServer(
+  ...args: Parameters<typeof rtdb.countContestParticipantsFromServer>
+): ReturnType<typeof rtdb.countContestParticipantsFromServer> {
+  return withPlayerBackend(
+    () => d1.countContestParticipantsFromServer(...args),
+    () => rtdb.countContestParticipantsFromServer(...args)
+  );
+}
+
 // ─── Progress / state / score submit ─────────────────────────────────────────
 
 export async function fetchGameProgressFromServer(

@@ -97,8 +97,9 @@ export function buildContestInfo(
     | "contestDurationDays"
   >,
   entries: LeaderboardEntry[],
-  now = Date.now()
+  opts?: { participantCount?: number; now?: number }
 ): ContestInfo | null {
+  const now = opts?.now ?? Date.now();
   const status = getContestStatus(game, now);
   const startedAt = game.contestStartedAt;
   const endsAt = game.contestEndsAt;
@@ -113,6 +114,12 @@ export function buildContestInfo(
       ? game.contestDurationDays
       : durationDaysFromRange(startedAt, endsAt);
 
+  const participantCount =
+    typeof opts?.participantCount === "number" &&
+    Number.isFinite(opts.participantCount)
+      ? Math.max(0, Math.floor(opts.participantCount))
+      : entries.length;
+
   return {
     status,
     task: game.contestTask?.trim() ?? "",
@@ -120,6 +127,7 @@ export function buildContestInfo(
     endsAt,
     durationDays,
     entries,
+    participantCount,
   };
 }
 

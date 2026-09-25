@@ -15,7 +15,18 @@ import {
   markPromoEventRead,
   recordPromoPresented,
 } from "@/lib/promo-popups-seen";
+import {
+  hasPromoBeenShownThisSession,
+  isPromoUiBusy,
+  markPromoShownThisSession,
+} from "@/lib/ui-overlay-gate";
+import { useUiOverlayBusy } from "@/lib/use-ui-overlay-gate";
 import { Game } from "@/types";
+
+/** Wait for modal/name/overlay transitions to settle before showing a promo. */
+const PROMO_OPEN_SETTLE_MS = 650;
+/** Only count toward daily/session after the promo has been stably visible. */
+const PROMO_COMMIT_MS = 400;
 
 interface PromoPopupHostProps {
   games: Game[];
@@ -28,33 +39,86 @@ export default function PromoPopupHost({
 }: PromoPopupHostProps) {
   const router = useRouter();
   const { criticalModalsBlocking } = usePlayerProfile();
+  const overlayBusy = useUiOverlayBusy();
+  const gateBusy = criticalModalsBlocking || overlayBusy;
+
   const [active, setActive] = useState<PromoPopupCandidate | null>(null);
-  /** At most one promo per app open — blocks chaining after dismiss/CTA. */
-  const sessionUsedRef = useRef(false);
-  const presentedIdsRef = useRef<Set<string>>(new Set());
+  const sessionConsumedRef = useRef(hasPromoBeenShownThisSession());
+  const committedIdsRef = useRef<Set<string>>(new Set());
+  const openTimerRef = useRef<number | null>(null);
+  const commitTimerRef = useRef<number | null>(null);
+  const gamesRef = useRef(games);
+  gamesRef.current = games;
+
+  const clearOpenTimer = useCallback(() => {
+    if (openTimerRef.current != null) {
+      window.clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+  }, []);
+
+  const clearCommitTimer = useCallback(() => {
+    if (commitTimerRef.current != null) {
+      window.clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
+  }, []);
+
+  const consumeSession = useCallback(() => {
+    sessionConsumedRef.current = true;
+    markPromoShownThisSession();
+  }, []);
 
   useEffect(() => {
-    if (criticalModalsBlocking) {
+    if (gateBusy) {
+      clearOpenTimer();
+      clearCommitTimer();
+      // Interrupted by another panel — do not burn the session slot
+      // unless we already committed a stable show.
       setActive(null);
       return;
     }
-    if (sessionUsedRef.current || active) return;
-    if (games.length === 0) return;
 
-    const next = buildPromoQueue(games);
-    const first = next[0] ?? null;
-    if (first) {
-      sessionUsedRef.current = true;
-      setActive(first);
-    }
-  }, [criticalModalsBlocking, games, active]);
+    if (sessionConsumedRef.current || active) return;
+    if (gamesRef.current.length === 0) return;
 
+    clearOpenTimer();
+    openTimerRef.current = window.setTimeout(function tryOpen() {
+      openTimerRef.current = null;
+      if (sessionConsumedRef.current) return;
+      // Final DOM check — covers panels that race the React registry.
+      if (isPromoUiBusy()) {
+        openTimerRef.current = window.setTimeout(tryOpen, 400);
+        return;
+      }
+      const first = buildPromoQueue(gamesRef.current)[0] ?? null;
+      if (first) setActive(first);
+    }, PROMO_OPEN_SETTLE_MS);
+
+    return clearOpenTimer;
+  }, [gateBusy, games, active, clearOpenTimer, clearCommitTimer]);
+
+  // Commit only after the promo stays visible without other overlays.
   useEffect(() => {
-    if (!active) return;
-    if (presentedIdsRef.current.has(active.id)) return;
-    presentedIdsRef.current.add(active.id);
-    recordPromoPresented(active.id);
-  }, [active]);
+    clearCommitTimer();
+    if (!active || gateBusy) return;
+
+    commitTimerRef.current = window.setTimeout(() => {
+      commitTimerRef.current = null;
+      if (!active || gateBusy) return;
+      if (isPromoUiBusy()) {
+        setActive(null);
+        return;
+      }
+      if (!committedIdsRef.current.has(active.id)) {
+        committedIdsRef.current.add(active.id);
+        recordPromoPresented(active.id);
+      }
+      consumeSession();
+    }, PROMO_COMMIT_MS);
+
+    return clearCommitTimer;
+  }, [active, gateBusy, clearCommitTimer, consumeSession]);
 
   const activeGame = useMemo(() => {
     if (!active?.gameId) return null;
@@ -76,13 +140,19 @@ export default function PromoPopupHost({
 
   const finish = useCallback(
     (item: PromoPopupCandidate, markPersistent: boolean) => {
+      clearOpenTimer();
+      clearCommitTimer();
       if (markPersistent && item.persistent) {
         markPromoEventRead(item.id);
       }
-      sessionUsedRef.current = true;
+      if (!committedIdsRef.current.has(item.id)) {
+        committedIdsRef.current.add(item.id);
+        recordPromoPresented(item.id);
+      }
+      consumeSession();
       setActive(null);
     },
-    []
+    [clearOpenTimer, clearCommitTimer, consumeSession]
   );
 
   const handleDismiss = useCallback(() => {
@@ -110,7 +180,7 @@ export default function PromoPopupHost({
     }
   }, [active, finish, onOpenActivityBoard, router]);
 
-  if (criticalModalsBlocking || !active) return null;
+  if (gateBusy || !active) return null;
 
   return (
     <PromoPopupModal

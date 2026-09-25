@@ -19,7 +19,10 @@ export interface ContestInfo {
   endsAt: number;
   /** Length in days (preset 1/2/4/7, or derived for custom end times). */
   durationDays: number;
+  /** Top scores shown on the board (capped at CONTEST_MAX_ENTRIES). */
   entries: LeaderboardEntry[];
+  /** All wallets that have submitted to this contest (may exceed entries.length). */
+  participantCount: number;
 }
 
 export interface PlayerProfile {

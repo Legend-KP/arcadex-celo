@@ -7,6 +7,7 @@ import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { formatChainError } from "@/lib/celo-public-client";
 import { playSuccessSfx, playTouchSfx, preloadSfx } from "@/lib/sfx";
 import { formatSparkCountdown } from "@/lib/spark";
+import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
 
 export default function SparkBatteryBar() {
   const { sparks, loading, purchaseInfiniteSpark, purchaseSparkRefill } = useSparks();
@@ -20,6 +21,9 @@ export default function SparkBatteryBar() {
     title: string;
     body: string;
   } | null>(null);
+
+  useClaimUiOverlay("spark-panel", open);
+  useClaimUiOverlay("spark-success", Boolean(successMessage));
 
   useEffect(() => {
     if (sessionStorage.getItem("openSparkPanel") === "1") {

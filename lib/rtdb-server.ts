@@ -1525,6 +1525,32 @@ export async function fetchContestLeaderboardFromServer(
   return ranked.slice(0, limit);
 }
 
+/** Total wallets that submitted to this contest (not capped to top-N). */
+export async function countContestParticipantsFromServer(
+  gameId: string,
+  contestStartedAt: number
+): Promise<number> {
+  const base = contestLeaderboardPath(gameId, contestStartedAt);
+  const nested = await readPath<LeaderboardMap>(`${base}/entries`);
+  if (nested && typeof nested === "object") {
+    return Object.keys(nested).length;
+  }
+
+  // Legacy flat layout under the contest root (excluding top/entries mirrors).
+  const legacyRoot = await readPath<Record<string, unknown>>(base);
+  if (!legacyRoot || typeof legacyRoot !== "object") return 0;
+  let count = 0;
+  for (const [key, value] of Object.entries(legacyRoot)) {
+    if (key === "top" || key === "entries") continue;
+    if (!value || typeof value !== "object") continue;
+    const entry = value as LeaderboardEntry;
+    if (typeof entry.score === "number" && typeof entry.name === "string") {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 // ─── Per-user game progress ───────────────────────────────────────────────────
 
 function gameProgressPath(walletAddress: string, gameId: string): string {

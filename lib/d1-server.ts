@@ -1411,6 +1411,24 @@ export async function fetchContestLeaderboardFromServer(
   return (results ?? []).map(rowToLeaderboardEntry);
 }
 
+/** Total wallets that submitted to this contest (not capped to top-N). */
+export async function countContestParticipantsFromServer(
+  gameId: string,
+  contestStartedAt: number
+): Promise<number> {
+  const db = await requireD1();
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n
+       FROM contest_entries
+       WHERE game_id = ? AND contest_started_at = ?`
+    )
+    .bind(gameId, contestStartedAt)
+    .first<{ n: number }>();
+  const n = typeof row?.n === "number" ? row.n : Number(row?.n);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
 // ─── Per-user game progress ───────────────────────────────────────────────────
 
 export function readStoredScore(stored: StoredGameProgress | null): number {

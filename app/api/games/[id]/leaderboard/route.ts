@@ -5,6 +5,7 @@ import {
   resolveGameGating,
 } from "@/lib/game-gating";
 import {
+  countContestParticipantsFromServer,
   fetchContestLeaderboardFromServer,
   fetchLeaderboardFromServer,
   fetchPersonalBestFromServer,
@@ -105,11 +106,11 @@ export async function GET(
 
     let contest = null;
     if (gameHasContest(game) && typeof game.contestStartedAt === "number") {
-      const contestEntries = await fetchContestLeaderboardFromServer(
-        id,
-        game.contestStartedAt
-      );
-      contest = buildContestInfo(game, contestEntries);
+      const [contestEntries, participantCount] = await Promise.all([
+        fetchContestLeaderboardFromServer(id, game.contestStartedAt),
+        countContestParticipantsFromServer(id, game.contestStartedAt),
+      ]);
+      contest = buildContestInfo(game, contestEntries, { participantCount });
     }
 
     return corsJsonResponse(request, {

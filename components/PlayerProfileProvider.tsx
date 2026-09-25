@@ -65,6 +65,7 @@ import {
   hasValidWalletSession,
 } from "@/lib/wallet-session-client";
 import { PlayerProfile } from "@/types";
+import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
 
 interface PlayerProfileContextValue {
   playerId: string;
@@ -348,9 +349,11 @@ export default function PlayerProfileProvider({
       milestone: boolean;
       infiniteSparkGranted: boolean;
     }) => {
-      setShowCheckIn(false);
       const wallet = pendingWalletRef.current || walletAddress;
-      if (!wallet) return;
+      if (!wallet) {
+        setShowCheckIn(false);
+        return;
+      }
 
       if (dailyPlayMode === "shuffle") {
         markShuffleDoneToday(wallet, dailyCampaignId);
@@ -358,6 +361,8 @@ export default function PlayerProfileProvider({
 
       try {
         await refreshStreakStatus();
+        // Keep check-in/shuffle overlay up until name/profile gate is resolved
+        // so promos never flash in the gap before the name panel.
         await finishProfileLoad(wallet);
         if (result.infiniteSparkGranted) {
           // SparkProvider will refresh via wallet / focus; status already updated
@@ -369,6 +374,8 @@ export default function PlayerProfileProvider({
             : "Checked in, but could not load your profile."
         );
         setShowModal(true);
+      } finally {
+        setShowCheckIn(false);
       }
     },
     [
@@ -499,11 +506,27 @@ export default function PlayerProfileProvider({
     !showCheckIn &&
     showModal;
 
+  // Block promos until the home chrome is truly idle — including the gap
+  // after check-in/onboarding while profile/name is still resolving.
+  const awaitingPlayerName =
+    isReady &&
+    onboardingResolved &&
+    !onboardingVisible &&
+    !hasPlayerName(profile);
+
   const criticalModalsBlocking =
+    !isReady ||
     !onboardingResolved ||
     onboardingVisible ||
     checkInVisible ||
-    nameModalVisible;
+    nameModalVisible ||
+    awaitingPlayerName;
+
+  useClaimUiOverlay("onboarding", onboardingVisible);
+  useClaimUiOverlay("streak-broken", streakBrokenVisible);
+  useClaimUiOverlay("daily-check-in", dailyCheckInVisible);
+  useClaimUiOverlay("daily-shuffle", shuffleVisible);
+  useClaimUiOverlay("player-name", nameModalVisible);
 
   const value = useMemo(
     () => ({
