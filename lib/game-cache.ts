@@ -2,8 +2,12 @@ import { Game } from "@/types";
 import { invalidateGameFlagsCache } from "@/lib/rtdb-cache";
 import { getWorkerKv } from "@/lib/worker-kv";
 
-/** Full games list — refreshed on admin mutations. */
-export const GAME_LIST_TTL_MS = 60_000;
+/**
+ * In-memory games list TTL. Admin mutations bump catalog generation so other
+ * isolates drop memory early; this only bounds how long one isolate keeps a
+ * list without re-checking shared KV.
+ */
+export const GAME_LIST_TTL_MS = 10 * 60_000;
 
 /** Single game doc — admin edits are rare. */
 export const GAME_DOC_TTL_MS = 300_000;
@@ -18,7 +22,13 @@ export const GAMES_API_CACHE_CONTROL =
 const CATALOG_GEN_KV_KEY = "cache:gamesCatalog:gen";
 const CATALOG_GEN_KV_TTL_SEC = 60 * 60 * 24 * 7;
 const CATALOG_LIST_KV_KEY = "cache:gamesCatalog:list:v1";
-const CATALOG_LIST_KV_TTL_SEC = Math.ceil(GAME_LIST_TTL_MS / 1000);
+/**
+ * Shared KV catalog must outlive cold isolates. Invalidation is explicit via
+ * bumpCatalogGeneration() (deletes this key). Tying KV TTL to the 60s memory
+ * TTL caused a Firestore list (~1 read per game) on every cold miss after
+ * expiry — enough to burn the free 50k reads/day under normal traffic.
+ */
+const CATALOG_LIST_KV_TTL_SEC = CATALOG_GEN_KV_TTL_SEC;
 
 type CacheEntry<T> = {
   value: T;

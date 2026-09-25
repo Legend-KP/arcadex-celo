@@ -2,6 +2,7 @@ import {
   fetchGameGatingFlagsFromRtdb,
   syncGameGatingFlagsToRtdb,
 } from "@/lib/player-backend";
+import { getCachedGameDoc } from "@/lib/game-cache";
 import { fetchGameFromServer } from "@/lib/firestore-server";
 import { Game, GameGatingFlags } from "@/types";
 
@@ -19,31 +20,34 @@ function flagsFromGame(game: Game): GameGatingFlags {
 }
 
 /**
- * Prefer RTDB mirror for speed, but always overlay catalog fields from
- * Firestore when available. Missing RTDB hasLeaderboard used to default to
- * true and write level progress into `s` instead of `l`.
+ * Hot-path gating for play / progress / state / leaderboard.
+ *
+ * Prefer the RTDB/D1 mirror (synced on admin catalog mutations). Hitting
+ * Firestore on every request burned the free daily read quota even with a
+ * tiny catalog — Cloudflare isolates are cold often, and Unity progress
+ * storms amplify that.
+ *
+ * Firestore is only used when the mirror is missing (then we backfill).
+ * If the in-memory catalog doc is already warm, overlay it at zero cost.
  */
 export async function resolveGameGating(
   gameId: string
 ): Promise<GameGatingFlags | null> {
-  const [fromRtdb, game] = await Promise.all([
-    fetchGameGatingFlagsFromRtdb(gameId),
-    fetchGameFromServer(gameId).catch(() => null),
-  ]);
+  const fromRtdb = await fetchGameGatingFlagsFromRtdb(gameId);
 
-  if (!fromRtdb && !game) return null;
+  if (fromRtdb) {
+    const cached = getCachedGameDoc(gameId);
+    if (!cached) return fromRtdb;
 
-  if (game) {
-    const fromGame = flagsFromGame(game);
+    const fromGame = flagsFromGame(cached);
     const flags: GameGatingFlags = {
-      ...(fromRtdb ?? fromGame),
+      ...fromRtdb,
       active: fromGame.active,
       live: fromGame.live,
       hasLeaderboard: fromGame.hasLeaderboard,
     };
 
     if (
-      !fromRtdb ||
       fromRtdb.hasLeaderboard !== flags.hasLeaderboard ||
       fromRtdb.active !== flags.active ||
       fromRtdb.live !== flags.live
@@ -56,7 +60,14 @@ export async function resolveGameGating(
     return flags;
   }
 
-  return fromRtdb;
+  const game = await fetchGameFromServer(gameId).catch(() => null);
+  if (!game) return null;
+
+  const flags = flagsFromGame(game);
+  void syncGameGatingFlagsToRtdb(gameId, flags).catch(() => {
+    // Backfill is best-effort.
+  });
+  return flags;
 }
 
 export function isGameVisibleFromFlags(flags: GameGatingFlags): boolean {

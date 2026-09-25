@@ -1,4 +1,3 @@
-import { fetchGameFromServer } from "@/lib/firestore-server";
 import { withFirestoreReadCounter } from "@/lib/firestore-read-counter";
 import {
   isGameVisibleFromFlags,
@@ -30,7 +29,6 @@ import {
   lineLinkFieldsFromModes,
   readProgressNumber,
 } from "@/lib/progress-value";
-import { gameHasLeaderboard } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -40,16 +38,6 @@ const PROGRESS_WINDOW_MS = 60_000;
 
 export async function OPTIONS(request: Request) {
   return handleCorsPreflightRequest(request);
-}
-
-async function resolveHasLeaderboard(
-  gameId: string,
-  flagsHasLeaderboard: boolean
-): Promise<boolean> {
-  // Admin catalog is source of truth (Leaderboard toggle).
-  const catalogGame = await fetchGameFromServer(gameId).catch(() => null);
-  if (catalogGame) return gameHasLeaderboard(catalogGame);
-  return flagsHasLeaderboard !== false;
 }
 
 export async function GET(
@@ -153,7 +141,9 @@ export async function GET(
       return corsJsonResponse(request, debounced);
     }
 
-    const flags = await resolveGameGating(id);
+    const { result: flags, firestoreReads } = await withFirestoreReadCounter(
+      () => resolveGameGating(id)
+    );
     if (!flags || !isGameVisibleFromFlags(flags)) {
       return corsJsonResponse(
         request,
@@ -162,10 +152,8 @@ export async function GET(
       );
     }
 
-    const { result: hasLeaderboard, firestoreReads } =
-      await withFirestoreReadCounter(() =>
-        resolveHasLeaderboard(id, flags.hasLeaderboard)
-      );
+    // Mirror flags are source of truth on the hot path (synced on admin edits).
+    const hasLeaderboard = flags.hasLeaderboard !== false;
     const progress = await resolveGameProgressFromServer(
       wallet,
       id,
@@ -220,7 +208,9 @@ export async function POST(
 
   try {
     const { id } = await params;
-    const flags = await resolveGameGating(id);
+    const { result: flags, firestoreReads } = await withFirestoreReadCounter(
+      () => resolveGameGating(id)
+    );
     if (!flags || !isGameVisibleFromFlags(flags)) {
       return corsJsonResponse(
         request,
@@ -281,10 +271,7 @@ export async function POST(
       );
     }
 
-    const { result: hasLeaderboard, firestoreReads } =
-      await withFirestoreReadCounter(() =>
-        resolveHasLeaderboard(id, flags.hasLeaderboard)
-      );
+    const hasLeaderboard = flags.hasLeaderboard !== false;
     const progressValue =
       typeof scoreValue === "number"
         ? scoreValue
@@ -339,6 +326,7 @@ export async function POST(
       gameId: id,
       durationMs: Date.now() - started,
       firestoreReads,
+      cacheHit: firestoreReads === 0,
     });
 
     return corsJsonResponse(request, payload);
