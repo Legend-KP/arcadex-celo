@@ -11,7 +11,6 @@ import {
 import { formatActivityCountdown } from "@/lib/activity-week";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
-const SWIPE_THRESHOLD = 60;
 
 function TrophyIcon() {
   return (
@@ -70,9 +69,8 @@ export default function ActivityLeaderboardButton({
     score: number;
     activeDays: number;
   } | null>(null);
-  const touchStartY = useRef<number | null>(null);
-  const allowSwipeClose = useRef(false);
   const pingedRef = useRef(false);
+  const closeOnBackdrop = useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -131,21 +129,6 @@ export default function ActivityLeaderboardButton({
     };
   }, [open]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
-    const list = (e.currentTarget as HTMLElement).querySelector(".lb-list");
-    const scrollTop = list instanceof HTMLElement ? list.scrollTop : 0;
-    allowSwipeClose.current = scrollTop <= 0;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartY.current === null) return;
-    const delta = e.changedTouches[0].clientY - touchStartY.current;
-    touchStartY.current = null;
-    if (allowSwipeClose.current && delta > SWIPE_THRESHOLD) setOpen(false);
-    allowSwipeClose.current = false;
-  };
-
   const myWallet = walletAddress?.toLowerCase() ?? "";
 
   const sheet =
@@ -153,7 +136,15 @@ export default function ActivityLeaderboardButton({
       ? createPortal(
           <div
             className="lb-backdrop activity-lb-backdrop"
-            onClick={() => setOpen(false)}
+            onPointerDown={(e) => {
+              closeOnBackdrop.current = e.target === e.currentTarget;
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget && closeOnBackdrop.current) {
+                setOpen(false);
+              }
+              closeOnBackdrop.current = false;
+            }}
             role="presentation"
           >
             <div
@@ -162,8 +153,6 @@ export default function ActivityLeaderboardButton({
               aria-modal="true"
               aria-label="Weekly Activity Leaderboard"
               onClick={(e) => e.stopPropagation()}
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
             >
               <div className="lb-header">
                 <div className="lb-title-wrap">

@@ -22,7 +22,6 @@ interface LeaderboardProps {
 }
 
 const MEDALS = ["🥇", "🥈", "🥉"];
-const SWIPE_THRESHOLD = 60;
 
 function CoinIcon() {
   return (
@@ -73,8 +72,7 @@ export default function Leaderboard({
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const touchStartY = useRef<number | null>(null);
-  const allowSwipeClose = useRef(false);
+  const closeOnBackdrop = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -116,34 +114,33 @@ export default function Leaderboard({
     return () => window.clearInterval(interval);
   }, [open, contest]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
-    const list = (e.currentTarget as HTMLElement).querySelector(".lb-list");
-    const scrollTop = list instanceof HTMLElement ? list.scrollTop : 0;
-    // Only allow swipe-down dismiss when the list can't scroll further up.
-    allowSwipeClose.current = scrollTop <= 0;
-  };
-
   const isLiveContest = contest?.status === "live" || (!contest && contestLive);
   const isEndedContest = contest?.status === "ended";
   const showContestBoard = Boolean(contest?.status === "live");
   const showPostSubmit = isPostSubmit && showContestBoard;
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (showPostSubmit) return;
-    if (touchStartY.current === null) return;
-    const delta = e.changedTouches[0].clientY - touchStartY.current;
-    touchStartY.current = null;
-    if (allowSwipeClose.current && delta > SWIPE_THRESHOLD) onClose();
-    allowSwipeClose.current = false;
-  };
 
   if (!open) return null;
 
   return (
     <div
       className="lb-backdrop"
-      onClick={showPostSubmit ? undefined : onClose}
+      onPointerDown={(e) => {
+        if (showPostSubmit) {
+          closeOnBackdrop.current = false;
+          return;
+        }
+        closeOnBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (
+          !showPostSubmit &&
+          e.target === e.currentTarget &&
+          closeOnBackdrop.current
+        ) {
+          onClose();
+        }
+        closeOnBackdrop.current = false;
+      }}
       role="presentation"
     >
       <div
@@ -154,8 +151,6 @@ export default function Leaderboard({
         aria-modal="true"
         aria-label={`${gameName} leaderboard`}
         onClick={(e) => e.stopPropagation()}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
       >
         {showPostSubmit && (
           <div className="lb-success-header" role="status">
