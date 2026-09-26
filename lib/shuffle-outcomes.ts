@@ -8,12 +8,12 @@ import {
 export const USDT_DECIMALS = 6;
 
 /**
- * Hard daily USDT spend ceiling (human units). Must be ≥ jackpot (1) so the
- * 1 USDT prize can still pay. Soft odds target ~0.35 on non-jackpot days at
- * 10k shuffles; the hard gate stops further USDT once this is hit.
+ * Hard daily USDT spend ceiling (human units). 1.5 leaves 0.5 under the
+ * 1 USDT jackpot, so smaller prizes can pay and the jackpot can still fit.
+ * The hard gate stops further USDT once this is hit.
  */
 export const SHUFFLE_DAILY_USDT_BUDGET = Number(
-  process.env.SHUFFLE_DAILY_USDT_BUDGET?.trim() || "1"
+  process.env.SHUFFLE_DAILY_USDT_BUDGET?.trim() || "1.5"
 );
 
 /** Integer micro-USDT (6 decimals) helpers for budget math. */
@@ -49,11 +49,12 @@ export interface ShuffleOutcomeDef {
  * 1/15k, 1/10k, 1/2k all divide 30_000.
  *
  * At 10k daily shuffles (soft EV, before hard daily cap):
- * - 1 USDT @ 1/15k     → ~0.67 expected (often blocked by daily cap)
+ * - 1 USDT @ 1/15k     → ~0.67 expected
  * - 0.05 USDT @ 1/10k  → ~0.05
  * - 0.001 USDT @ 3%    → ~0.30  (maximizes unique USDT winners)
  * - Infinite Spark @ 1/2k → ~5 winners
- * Non-jackpot USDT ≈ 0.35/day; hard cap clamps total spend to budget.
+ * Non-jackpot USDT ≈ 0.35/day. Cap is 1.5, so the jackpot still fits
+ * while smaller prizes have spent 0.5 or less.
  */
 export const SHUFFLE_WEIGHT_TOTAL = 30_000;
 

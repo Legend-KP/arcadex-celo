@@ -35,7 +35,7 @@ interface PromoPopupHostProps {
 
 export default function PromoPopupHost({
   games,
-  onOpenActivityBoard,
+  onOpenActivityBoard: _onOpenActivityBoard,
 }: PromoPopupHostProps) {
   const router = useRouter();
   const { criticalModalsBlocking } = usePlayerProfile();
@@ -172,10 +172,8 @@ export default function PromoPopupHost({
       router.push(`/game/${item.gameId}`);
       return;
     }
-    if (item.kind === "weekStart" || item.kind === "weekEnd") {
-      onOpenActivityBoard();
-    }
-  }, [active, finish, onOpenActivityBoard, router]);
+    // weekStart / weekEnd: board is already shown in the promo — just dismiss.
+  }, [active, finish, router]);
 
   if (gateBusy || !active) return null;
 

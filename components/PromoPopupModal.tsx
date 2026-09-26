@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
+import ActivityLeaderboardPanel from "@/components/ActivityLeaderboardPanel";
 import { formatContestCountdown } from "@/lib/contest";
 import { SUPPORT_URL, TWITTER_URL } from "@/lib/app-footer-links";
 import {
@@ -10,6 +11,7 @@ import {
   getPromoTitle,
   isCommunityPromo,
   isContestPromo,
+  isLeaderboardPromo,
   type PromoPopupCandidate,
 } from "@/lib/promo-popups";
 import { playTouchSfx } from "@/lib/sfx";
@@ -72,7 +74,7 @@ export default function PromoPopupModal({
   }, [item?.id, imageCandidates, imageUrl]);
 
   useEffect(() => {
-    if (!open || !item?.endsAt) {
+    if (!open || !item?.endsAt || isLeaderboardPromo(item.kind)) {
       setCountdown("");
       return;
     }
@@ -105,10 +107,9 @@ export default function PromoPopupModal({
   const cta = getPromoCtaLabel(item);
   const contest = isContestPromo(item.kind);
   const community = isCommunityPromo(item.kind);
+  const leaderboard = isLeaderboardPromo(item.kind);
   const showTimer =
-    (item.kind === "contestEnd" ||
-      item.kind === "contestStart" ||
-      item.kind === "weekEnd") &&
+    (item.kind === "contestEnd" || item.kind === "contestStart") &&
     Boolean(item.endsAt);
 
   const rgb = accentColor ? hexToRgb(accentColor) : null;
@@ -138,10 +139,11 @@ export default function PromoPopupModal({
       <div
         className={`promo-popup${contest ? " promo-popup--contest" : ""}${
           community ? " promo-popup--community" : ""
-        }`}
+        }${leaderboard ? " promo-popup--leaderboard" : ""}`}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="promo-popup-title"
+        aria-labelledby={leaderboard ? undefined : "promo-popup-title"}
+        aria-label={leaderboard ? "XP Leaderboard" : undefined}
         style={themedStyle}
         onClick={(e) => e.stopPropagation()}
       >
@@ -157,7 +159,13 @@ export default function PromoPopupModal({
           ✕
         </button>
 
-        {contest ? (
+        {leaderboard ? (
+          <ActivityLeaderboardPanel
+            active={open}
+            compact
+            hideClose
+          />
+        ) : contest ? (
           <>
             <h2
               id="promo-popup-title"
@@ -187,6 +195,16 @@ export default function PromoPopupModal({
             {item.gameName ? (
               <p className="promo-popup__game">{item.gameName}</p>
             ) : null}
+            <p className="promo-popup__body">{body}</p>
+            {showTimer && countdown ? (
+              <p
+                className="promo-popup__timer promo-popup__timer--glass"
+                role="status"
+              >
+                <span className="promo-popup__timer-label">Time left</span>
+                <span className="promo-popup__timer-value">{countdown}</span>
+              </p>
+            ) : null}
           </>
         ) : community && socialLogo ? (
           <>
@@ -200,6 +218,7 @@ export default function PromoPopupModal({
             <h2 id="promo-popup-title" className="promo-popup__title">
               {title}
             </h2>
+            <p className="promo-popup__body">{body}</p>
           </>
         ) : (
           <>
@@ -228,22 +247,9 @@ export default function PromoPopupModal({
             {item.kind === "newGame" && item.gameName ? (
               <p className="promo-popup__game">{item.gameName}</p>
             ) : null}
+            <p className="promo-popup__body">{body}</p>
           </>
         )}
-
-        <p className="promo-popup__body">{body}</p>
-
-        {showTimer && countdown ? (
-          <p
-            className={`promo-popup__timer${
-              contest ? " promo-popup__timer--glass" : ""
-            }`}
-            role="status"
-          >
-            <span className="promo-popup__timer-label">Time left</span>
-            <span className="promo-popup__timer-value">{countdown}</span>
-          </p>
-        ) : null}
 
         {community && socialHref ? (
           <a
@@ -267,7 +273,7 @@ export default function PromoPopupModal({
             type="button"
             className={`promo-popup__btn${
               contest ? " promo-popup__btn--glass" : ""
-            }`}
+            }${leaderboard ? " promo-popup__btn--leaderboard" : ""}`}
             onClick={() => {
               playTouchSfx();
               onPrimary();

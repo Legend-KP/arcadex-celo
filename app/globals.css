@@ -5703,3 +5703,41 @@ a { color: inherit; text-decoration: none; }
 .promo-popup__btn--x {
   background: #0F1419;
 }
+
+/* Weekly leaderboard promo — embeds the real XP board */
+.promo-popup--leaderboard {
+  max-width: min(100%, 400px);
+  padding: 16px 14px 18px;
+  align-items: stretch;
+  text-align: left;
+  border: 2px solid #eab308;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(234, 179, 8, 0.2);
+}
+.promo-popup--leaderboard .promo-popup__close {
+  z-index: 2;
+}
+.promo-popup--leaderboard .activity-lb-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: min(68dvh, 520px);
+}
+.promo-popup--leaderboard .activity-lb-panel .lb-header {
+  padding-right: 36px;
+}
+.promo-popup--leaderboard .activity-lb-panel--compact .lb-list {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: min(32dvh, 240px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.promo-popup__btn--leaderboard {
+  margin-top: 12px;
+  background: linear-gradient(180deg, #f59e0b, #d97706);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(217, 119, 6, 0.28);
+}

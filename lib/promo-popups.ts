@@ -290,7 +290,7 @@ export function getPromoCtaLabel(item: PromoPopupCandidate): string {
       return "Let's Go";
     case "weekStart":
     case "weekEnd":
-      return "Climb the Board";
+      return "Let's Play";
     case "communityTelegram":
       return "Join now";
     case "communityX":
@@ -304,4 +304,8 @@ export function isCommunityPromo(kind: PromoPopupKind): boolean {
 
 export function isContestPromo(kind: PromoPopupKind): boolean {
   return kind === "contestStart" || kind === "contestEnd";
+}
+
+export function isLeaderboardPromo(kind: PromoPopupKind): boolean {
+  return kind === "weekStart" || kind === "weekEnd";
 }
