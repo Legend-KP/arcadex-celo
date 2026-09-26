@@ -17,7 +17,10 @@ import { playTouchSfx } from "@/lib/sfx";
 interface PromoPopupModalProps {
   open: boolean;
   item: PromoPopupCandidate | null;
-  imageUrl: string | null;
+  /** Square art candidates (logo → thumbnail → fallback); advances on load error. */
+  imageCandidates?: string[];
+  /** @deprecated Prefer imageCandidates */
+  imageUrl?: string | null;
   /** Game accent hex for glassy timer / CTA (contest popups). */
   accentColor?: string | null;
   onDismiss: () => void;
@@ -42,6 +45,7 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
 export default function PromoPopupModal({
   open,
   item,
+  imageCandidates,
   imageUrl,
   accentColor,
   onDismiss,
@@ -49,10 +53,23 @@ export default function PromoPopupModal({
 }: PromoPopupModalProps) {
   const [mounted, setMounted] = useState(false);
   const [countdown, setCountdown] = useState("");
+  const [imageIdx, setImageIdx] = useState(0);
+
+  const candidates =
+    imageCandidates && imageCandidates.length > 0
+      ? imageCandidates
+      : imageUrl
+        ? [imageUrl]
+        : [];
+  const resolvedImage = candidates[imageIdx] ?? null;
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    setImageIdx(0);
+  }, [item?.id, imageCandidates, imageUrl]);
 
   useEffect(() => {
     if (!open || !item?.endsAt) {
@@ -148,13 +165,18 @@ export default function PromoPopupModal({
             >
               {title}
             </h2>
-            {imageUrl ? (
+            {resolvedImage ? (
               <img
-                src={imageUrl}
+                src={resolvedImage}
                 alt=""
                 className="promo-popup__art"
                 width={160}
                 height={160}
+                onError={() =>
+                  setImageIdx((i) =>
+                    i + 1 < candidates.length ? i + 1 : i
+                  )
+                }
               />
             ) : (
               <div
@@ -181,13 +203,18 @@ export default function PromoPopupModal({
           </>
         ) : (
           <>
-            {imageUrl ? (
+            {resolvedImage ? (
               <img
-                src={imageUrl}
+                src={resolvedImage}
                 alt=""
                 className="promo-popup__art"
                 width={160}
                 height={160}
+                onError={() =>
+                  setImageIdx((i) =>
+                    i + 1 < candidates.length ? i + 1 : i
+                  )
+                }
               />
             ) : (
               <div

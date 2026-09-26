@@ -20,6 +20,8 @@ const GAME_THEMES: Record<string, GameTheme> = {
   "orbit-flow": { topbar: "#0891b2", text: "#ffffff" },
   "coin-sort": { topbar: "#d97706", text: "#ffffff" },
   coinsort: { topbar: "#d97706", text: "#ffffff" },
+  coinspot: { topbar: "#d97706", text: "#ffffff" },
+  "coin-spot": { topbar: "#d97706", text: "#ffffff" },
   "line-link": { topbar: "#2563eb", text: "#ffffff" },
   linelink: { topbar: "#2563eb", text: "#ffffff" },
   "jelly-jumble": { topbar: "#db2777", text: "#ffffff" },

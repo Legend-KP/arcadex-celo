@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import PromoPopupModal from "@/components/PromoPopupModal";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
-import { getPrimaryGameMenuImage, gameAssetCandidates } from "@/lib/game-assets";
+import { gameSquareImageCandidates } from "@/lib/game-assets";
 import { getGameTheme } from "@/lib/game-themes";
 import {
   buildPromoQueue,
@@ -125,12 +125,9 @@ export default function PromoPopupHost({
     return games.find((g) => g.id === active.gameId) ?? null;
   }, [active, games]);
 
-  const imageUrl = useMemo(() => {
-    if (!activeGame) return null;
-    return (
-      gameAssetCandidates(activeGame, "logo")[0] ??
-      getPrimaryGameMenuImage(activeGame)
-    );
+  const imageCandidates = useMemo(() => {
+    if (!activeGame) return [] as string[];
+    return gameSquareImageCandidates(activeGame);
   }, [activeGame]);
 
   const accentColor = useMemo(() => {
@@ -186,7 +183,7 @@ export default function PromoPopupHost({
     <PromoPopupModal
       open
       item={active}
-      imageUrl={imageUrl}
+      imageCandidates={imageCandidates}
       accentColor={accentColor}
       onDismiss={handleDismiss}
       onPrimary={handlePrimary}

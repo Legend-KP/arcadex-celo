@@ -12,6 +12,23 @@ const LOCAL_GAME_FOLDERS = [
   "orbit-flow",
 ] as const;
 
+/** Admin / display-name variants that should map onto a local asset folder. */
+const LOCAL_GAME_FOLDER_ALIASES: Record<string, (typeof LOCAL_GAME_FOLDERS)[number]> = {
+  coinspot: "coin-sort",
+  "coin-spot": "coin-sort",
+  coinsort: "coin-sort",
+  "coin-sorts": "coin-sort",
+  linelink: "line-link",
+  "line-links": "line-link",
+  basedrop: "basedrop",
+  "base-drop": "basedrop",
+  blockblast: "block-blast",
+  "block-blasts": "block-blast",
+  mathrun: "math-run",
+  orbitflow: "orbit-flow",
+  "dotconnect": "dot-connect",
+};
+
 /** Root-level logos under public/games/ for titles without a folder. */
 const ROOT_GAME_LOGOS: Record<string, string> = {
   "jelly-jumble": "/games/jelly-logo.webp",
@@ -87,11 +104,17 @@ function resolveLocalGameFolder(game: Game): string | null {
   if (LOCAL_GAME_FOLDERS.includes(nameSlug as (typeof LOCAL_GAME_FOLDERS)[number])) {
     return nameSlug;
   }
+  if (LOCAL_GAME_FOLDER_ALIASES[nameSlug]) {
+    return LOCAL_GAME_FOLDER_ALIASES[nameSlug];
+  }
 
   const id = game.id.trim().toLowerCase();
   if (id && !isFirestoreAutoId(id)) {
     if (LOCAL_GAME_FOLDERS.includes(id as (typeof LOCAL_GAME_FOLDERS)[number])) {
       return id;
+    }
+    if (LOCAL_GAME_FOLDER_ALIASES[id]) {
+      return LOCAL_GAME_FOLDER_ALIASES[id];
     }
   }
 
@@ -103,10 +126,14 @@ function pushLocalGameAssets(
   folder: string,
   kind: "logo" | "thumbnail"
 ) {
+  const prefix = folder.split("-")[0];
+
   if (kind === "thumbnail") {
     push(`/thumbnails/${folder}.webp`);
   }
 
+  // Real on-disk logos for some titles are `{prefix}-logo.webp` (coin-logo, line-logo).
+  push(`/games/${folder}/${prefix}-logo.webp`);
   // Prefer webp; only fall through to png when webp is absent (e.g. block-blast).
   push(`/games/${folder}/logo.webp`);
   push(`/games/${folder}/logo.png`);
@@ -258,6 +285,32 @@ export function gameMenuBackgroundCandidates(game: Game): string[] {
 /** Primary menu hero image — load this before revealing the game menu. */
 export function getPrimaryGameMenuImage(game: Game): string | null {
   return gameMenuImageCandidates(game)[0] ?? null;
+}
+
+/**
+ * Square 1:1 art for promo popups / badges — logo first, then thumbnail/fallback.
+ * Prefer this over a single URL so callers can advance on load errors.
+ */
+export function gameSquareImageCandidates(game: Game): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  const push = (url?: string) => {
+    const normalized = normalizeImageAssetUrl(url);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    out.push(normalized);
+  };
+
+  for (const url of gameAssetCandidates(game, "logo")) push(url);
+  for (const url of gameAssetCandidates(game, "thumbnail")) push(url);
+  for (const url of gameFallbackCandidates(game)) push(url);
+
+  return out;
+}
+
+export function getPrimaryGameSquareImage(game: Game): string | null {
+  return gameSquareImageCandidates(game)[0] ?? null;
 }
 
 /**
