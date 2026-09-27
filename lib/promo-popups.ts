@@ -1,4 +1,4 @@
-import { getIsoWeekWindow } from "@/lib/activity-week";
+import { getIsoWeekWindow, utcDayKey } from "@/lib/activity-week";
 import { isContestActive } from "@/lib/contest";
 import {
   getPromoRemainingSlotsToday,
@@ -13,10 +13,18 @@ import {
 } from "@/types";
 
 export const PROMO_MILESTONES_HOURS = [12, 6, 3, 1] as const;
-export type PromoMilestoneHours = (typeof PROMO_MILESTONES_HOURS)[number];
+export type ContestPromoMilestoneHours = (typeof PROMO_MILESTONES_HOURS)[number];
 
-/** New-week nudge only in the first day of the ISO week. */
-const NEW_WEEK_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** Extra XP-board ending pings so the weekly board surfaces more often. */
+export const WEEK_PROMO_MILESTONES_HOURS = [48, 24, 12, 6, 3, 1] as const;
+export type WeekPromoMilestoneHours = (typeof WEEK_PROMO_MILESTONES_HOURS)[number];
+
+export type PromoMilestoneHours =
+  | ContestPromoMilestoneHours
+  | WeekPromoMilestoneHours;
+
+/** New-week XP nudge through the first 3 days of the ISO week. */
+const NEW_WEEK_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 
 export type PromoPopupKind =
   | "contestEnd"
@@ -42,17 +50,19 @@ export interface PromoPopupCandidate {
   persistent: boolean;
 }
 
-function milestoneForRemaining(remainingMs: number): PromoMilestoneHours | null {
+function milestoneForRemaining(
+  remainingMs: number,
+  milestones: readonly number[]
+): number | null {
   if (remainingMs <= 0) return null;
   const hours = remainingMs / (60 * 60 * 1000);
-  if (hours <= 1) return 1;
-  if (hours <= 3) return 3;
-  if (hours <= 6) return 6;
-  if (hours <= 12) return 12;
+  for (const m of [...milestones].sort((a, b) => a - b)) {
+    if (hours <= m) return m;
+  }
   return null;
 }
 
-function contestEndPriority(hours: PromoMilestoneHours): number {
+function contestEndPriority(hours: ContestPromoMilestoneHours): number {
   switch (hours) {
     case 1:
       return 10;
@@ -65,16 +75,20 @@ function contestEndPriority(hours: PromoMilestoneHours): number {
   }
 }
 
-function weekEndPriority(hours: PromoMilestoneHours): number {
+function weekEndPriority(hours: WeekPromoMilestoneHours): number {
   switch (hours) {
     case 1:
       return 50;
     case 3:
-      return 60;
+      return 55;
     case 6:
-      return 70;
+      return 60;
     case 12:
-      return 80;
+      return 65;
+    case 24:
+      return 70;
+    case 48:
+      return 75;
   }
 }
 
@@ -129,7 +143,10 @@ function buildGameCandidates(games: Game[], now: number): PromoPopupCandidate[] 
       persistent: true,
     });
 
-    const milestone = milestoneForRemaining(endsAt - now);
+    const milestone = milestoneForRemaining(
+      endsAt - now,
+      PROMO_MILESTONES_HOURS
+    ) as ContestPromoMilestoneHours | null;
     if (milestone != null) {
       out.push({
         id: `contestEnd:${game.id}:${endsAt}:${milestone}`,
@@ -152,9 +169,10 @@ function buildWeekCandidates(now: number): PromoPopupCandidate[] {
   const week = getIsoWeekWindow(now);
   const out: PromoPopupCandidate[] = [];
 
+  // First 3 days of the week: at most one "new week" ping per UTC day.
   if (now - week.startsAt < NEW_WEEK_WINDOW_MS) {
     out.push({
-      id: `weekStart:${week.weekId}`,
+      id: `weekStart:${week.weekId}:${utcDayKey(now)}`,
       kind: "weekStart",
       priority: 150,
       weekId: week.weekId,
@@ -163,7 +181,10 @@ function buildWeekCandidates(now: number): PromoPopupCandidate[] {
     });
   }
 
-  const milestone = milestoneForRemaining(week.endsAt - now);
+  const milestone = milestoneForRemaining(
+    week.endsAt - now,
+    WEEK_PROMO_MILESTONES_HOURS
+  ) as WeekPromoMilestoneHours | null;
   if (milestone != null) {
     out.push({
       id: `weekEnd:${week.weekId}:${milestone}`,
