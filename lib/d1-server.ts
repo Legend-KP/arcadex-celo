@@ -71,6 +71,12 @@ import {
   utcDayKey,
   computeActivityXp,
   resolveActivityEntryXp,
+  coerceUserXpRecord,
+  emptyUserXpRecord,
+  foldWeekXpIntoRecord,
+  userXpRecordFromWeeks,
+  type UserXpRecord,
+  type WeekXpSnapshot,
 } from "@/lib/activity-week";
 import {
   GameStateConflictError,
@@ -2754,6 +2760,153 @@ function activityLeaderboardStatement(
     );
 }
 
+type UserXpRow = {
+  wallet: string;
+  all_time_xp: number;
+  best_week_xp: number;
+  best_week_id: string | null;
+  weeks_recorded: number;
+  updated_at: number | null;
+};
+
+type ActivityWeekXpRow = {
+  week_id: string;
+  sparks_spent: number;
+  active_days: number;
+  txs: number;
+  spend_units: number;
+  updated_at: number | null;
+};
+
+function userXpRowToRecord(row: UserXpRow | null): UserXpRecord | null {
+  if (!row) return null;
+  return coerceUserXpRecord({
+    allTimeXp: row.all_time_xp,
+    bestWeekXp: row.best_week_xp,
+    bestWeekId: row.best_week_id ?? undefined,
+    weeksRecorded: row.weeks_recorded,
+    updatedAt: row.updated_at ?? undefined,
+  });
+}
+
+function weekXpSnapshotsFromRows(rows: ActivityWeekXpRow[]): WeekXpSnapshot[] {
+  return rows.map((row) => ({
+    weekId: row.week_id,
+    xp: computeActivityXp({
+      sparksSpent: row.sparks_spent,
+      activeDays: row.active_days,
+      txs: row.txs,
+      spendUnits: row.spend_units,
+    }),
+    updatedAt: row.updated_at ?? undefined,
+  }));
+}
+
+const USER_XP_SELECT = `SELECT wallet, all_time_xp, best_week_xp, best_week_id, weeks_recorded, updated_at
+       FROM user_xp WHERE wallet = ?`;
+
+const USER_ACTIVITY_WEEKS_SELECT = `SELECT week_id, sparks_spent, active_days, txs, spend_units, updated_at
+       FROM user_activity WHERE wallet = ?`;
+
+function userXpUpsertStatement(
+  db: D1DatabaseLike,
+  wallet: string,
+  record: UserXpRecord
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO user_xp (
+         wallet, all_time_xp, best_week_xp, best_week_id, weeks_recorded, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(wallet) DO UPDATE SET
+         all_time_xp = excluded.all_time_xp,
+         best_week_xp = excluded.best_week_xp,
+         best_week_id = excluded.best_week_id,
+         weeks_recorded = excluded.weeks_recorded,
+         updated_at = excluded.updated_at`
+    )
+    .bind(
+      wallet,
+      record.allTimeXp,
+      record.bestWeekXp,
+      record.bestWeekId ?? null,
+      record.weeksRecorded,
+      record.updatedAt ?? null
+    );
+}
+
+function userWeekXpUpsertStatement(
+  db: D1DatabaseLike,
+  wallet: string,
+  weekId: string,
+  xp: number,
+  updatedAt: number | undefined
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO user_week_xp (wallet, week_id, xp, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(wallet, week_id) DO UPDATE SET
+         xp = excluded.xp,
+         updated_at = excluded.updated_at`
+    )
+    .bind(wallet, weekId, xp, updatedAt ?? null);
+}
+
+async function readActivityWeekSnapshots(
+  db: D1DatabaseLike,
+  wallet: string
+): Promise<WeekXpSnapshot[]> {
+  const { results } = await db
+    .prepare(USER_ACTIVITY_WEEKS_SELECT)
+    .bind(wallet)
+    .all<ActivityWeekXpRow>();
+  return weekXpSnapshotsFromRows(results ?? []);
+}
+
+/**
+ * Lifetime row when present, otherwise the sum of saved weeks.
+ * `pendingWeeks` is set only when there is no lifetime row yet, so the caller
+ * can archive every week. Call before overwriting the current week.
+ */
+async function loadUserXpBase(
+  db: D1DatabaseLike,
+  wallet: string
+): Promise<{ record: UserXpRecord; pendingWeeks: WeekXpSnapshot[] | null }> {
+  const row = await db
+    .prepare(USER_XP_SELECT)
+    .bind(wallet)
+    .first<UserXpRow>();
+  const saved = userXpRowToRecord(row);
+  if (saved) return { record: saved, pendingWeeks: null };
+  const weeks = await readActivityWeekSnapshots(db, wallet);
+  return { record: userXpRecordFromWeeks(weeks), pendingWeeks: weeks };
+}
+
+async function persistUserXpRecord(
+  db: D1DatabaseLike,
+  wallet: string,
+  record: UserXpRecord,
+  weeks: WeekXpSnapshot[]
+): Promise<void> {
+  const statements: D1PreparedStatement[] = [
+    userXpUpsertStatement(db, wallet, record),
+  ];
+  for (const week of weeks) {
+    if (week.xp <= 0 || !week.weekId) continue;
+    statements.push(
+      userWeekXpUpsertStatement(
+        db,
+        wallet,
+        week.weekId,
+        week.xp,
+        week.updatedAt ?? record.updatedAt
+      )
+    );
+  }
+  await db.batch(statements);
+}
+
 /**
  * Best-effort activity bump. Never throws to callers — log and swallow.
  * `spendUnits` only applies when kind is "spend".
@@ -2843,6 +2996,32 @@ export async function recordActivityEvent(
       return;
     }
 
+    const previousWeekXp = computeActivityXp(existing);
+    const nextWeekXp = computeActivityXp(next);
+    let lifetime: UserXpRecord | null = null;
+    let weeksToSave: WeekXpSnapshot[] = [];
+    try {
+      const loaded = await loadUserXpBase(db, wallet);
+      lifetime = foldWeekXpIntoRecord(
+        loaded.record,
+        weekId,
+        previousWeekXp,
+        nextWeekXp,
+        now
+      );
+      weeksToSave = (loaded.pendingWeeks ?? []).filter(
+        (week) => week.weekId !== weekId && week.xp > 0
+      );
+      if (nextWeekXp > 0) {
+        weeksToSave.push({ weekId, xp: nextWeekXp, updatedAt: now });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[ArcadeX][activity] lifetime XP read failed: ${scrubSecrets(message)}`
+      );
+    }
+
     const writes: D1PreparedStatement[] = [
       activityCountersStatement(db, wallet, weekId, next),
     ];
@@ -2859,6 +3038,17 @@ export async function recordActivityEvent(
     }
 
     await db.batch(writes);
+
+    if (lifetime && weeksToSave.length > 0) {
+      try {
+        await persistUserXpRecord(db, wallet, lifetime, weeksToSave);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(
+          `[ArcadeX][activity] lifetime XP write failed: ${scrubSecrets(message)}`
+        );
+      }
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(
@@ -2915,4 +3105,40 @@ export async function fetchUserActivityFromServer(
     .bind(wallet, weekId)
     .first<ActivityRow>();
   return activityRowToCounters(row);
+}
+
+/** Saved all-time XP and best week. Falls back to summing archived weeks. */
+export async function fetchUserXpRecord(
+  walletAddress: string
+): Promise<UserXpRecord> {
+  if (!isWalletAddress(walletAddress)) return emptyUserXpRecord();
+  const wallet = normalizeWalletAddress(walletAddress);
+  const db = await requireD1();
+
+  try {
+    const row = await db
+      .prepare(USER_XP_SELECT)
+      .bind(wallet)
+      .first<UserXpRow>();
+    const saved = userXpRowToRecord(row);
+    if (saved) return saved;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[ArcadeX][activity] user_xp read failed: ${scrubSecrets(message)}`
+    );
+  }
+
+  let weeks: WeekXpSnapshot[] = [];
+  try {
+    weeks = await readActivityWeekSnapshots(db, wallet);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[ArcadeX][activity] week XP read failed: ${scrubSecrets(message)}`
+    );
+    return emptyUserXpRecord();
+  }
+
+  return userXpRecordFromWeeks(weeks);
 }

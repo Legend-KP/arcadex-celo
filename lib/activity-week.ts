@@ -63,6 +63,135 @@ export function computeActivityXp(counters: Pick<
   );
 }
 
+/** Lifetime XP plus the best saved week. Never reset when the weekly board rolls. */
+export interface UserXpRecord {
+  allTimeXp: number;
+  /** Highest XP saved for a single ISO week. */
+  bestWeekXp: number;
+  bestWeekId?: string;
+  /** How many ISO weeks have a saved XP total. */
+  weeksRecorded: number;
+  updatedAt?: number;
+}
+
+export interface WeekXpSnapshot {
+  weekId: string;
+  xp: number;
+  updatedAt?: number;
+}
+
+export function emptyUserXpRecord(): UserXpRecord {
+  return { allTimeXp: 0, bestWeekXp: 0, weeksRecorded: 0 };
+}
+
+export function coerceUserXpRecord(raw: unknown): UserXpRecord | null {
+  if (!raw || typeof raw !== "object") return null;
+  const data = raw as Partial<UserXpRecord>;
+  if (typeof data.allTimeXp !== "number" || !Number.isFinite(data.allTimeXp)) {
+    return null;
+  }
+  return {
+    allTimeXp: Math.max(0, Math.floor(data.allTimeXp)),
+    bestWeekXp:
+      typeof data.bestWeekXp === "number" && Number.isFinite(data.bestWeekXp)
+        ? Math.max(0, Math.floor(data.bestWeekXp))
+        : 0,
+    bestWeekId:
+      typeof data.bestWeekId === "string" && data.bestWeekId.trim()
+        ? data.bestWeekId
+        : undefined,
+    weeksRecorded:
+      typeof data.weeksRecorded === "number" &&
+      Number.isFinite(data.weeksRecorded)
+        ? Math.max(0, Math.floor(data.weeksRecorded))
+        : 0,
+    updatedAt:
+      typeof data.updatedAt === "number" && Number.isFinite(data.updatedAt)
+        ? data.updatedAt
+        : undefined,
+  };
+}
+
+/** Sum archived weeks into a lifetime record. Weeks with 0 XP are skipped. */
+export function userXpRecordFromWeeks(
+  weeks: WeekXpSnapshot[],
+  now = Date.now()
+): UserXpRecord {
+  let allTimeXp = 0;
+  let bestWeekXp = 0;
+  let bestWeekId: string | undefined;
+  let bestUpdated = Number.MAX_SAFE_INTEGER;
+  let weeksRecorded = 0;
+
+  for (const week of weeks) {
+    const xp = Math.max(0, Math.floor(week.xp));
+    if (xp <= 0 || !week.weekId) continue;
+    allTimeXp += xp;
+    weeksRecorded += 1;
+    const updated = week.updatedAt ?? Number.MAX_SAFE_INTEGER;
+    if (xp > bestWeekXp || (xp === bestWeekXp && updated < bestUpdated)) {
+      bestWeekXp = xp;
+      bestWeekId = week.weekId;
+      bestUpdated = updated;
+    }
+  }
+
+  return {
+    allTimeXp,
+    bestWeekXp,
+    bestWeekId,
+    weeksRecorded,
+    updatedAt: weeksRecorded > 0 ? now : undefined,
+  };
+}
+
+/**
+ * Apply one week's new XP onto a lifetime record.
+ * `previousWeekXp` is the XP already counted for `weekId`.
+ */
+export function foldWeekXpIntoRecord(
+  current: UserXpRecord,
+  weekId: string,
+  previousWeekXp: number,
+  nextWeekXp: number,
+  now = Date.now()
+): UserXpRecord {
+  const prev = Math.max(0, Math.floor(previousWeekXp));
+  const next = Math.max(0, Math.floor(nextWeekXp));
+  const allTimeXp = Math.max(0, current.allTimeXp + (next - prev));
+  const weeksRecorded =
+    current.weeksRecorded + (prev === 0 && next > 0 ? 1 : 0);
+
+  let bestWeekXp = current.bestWeekXp;
+  let bestWeekId = current.bestWeekId;
+  if (bestWeekId === weekId) {
+    bestWeekXp = next;
+    if (next <= 0) bestWeekId = undefined;
+  }
+  if (next > bestWeekXp) {
+    bestWeekXp = next;
+    bestWeekId = weekId;
+  }
+
+  return {
+    allTimeXp,
+    bestWeekXp,
+    bestWeekId,
+    weeksRecorded,
+    updatedAt: now,
+  };
+}
+
+/** XP for a stored week node: saved `xp` when present, otherwise the counters. */
+export function xpFromStoredWeek(raw: unknown): number {
+  if (!raw || typeof raw !== "object") return 0;
+  const storedXp = (raw as { xp?: unknown }).xp;
+  if (typeof storedXp === "number" && Number.isFinite(storedXp) && storedXp > 0) {
+    return Math.floor(storedXp);
+  }
+  return computeActivityXp(coerceActivityCounters(raw));
+}
+
 /**
  * Normalize a stored board row to current XP.
  * Legacy rows used `score` as sparksSpent before the composite formula.

@@ -119,6 +119,15 @@ export async function fetchUserActivityFromServer(
   );
 }
 
+export async function fetchUserXpRecord(
+  ...args: Parameters<typeof rtdb.fetchUserXpRecord>
+): ReturnType<typeof rtdb.fetchUserXpRecord> {
+  return withPlayerBackend(
+    () => d1.fetchUserXpRecord(...args),
+    () => rtdb.fetchUserXpRecord(...args)
+  );
+}
+
 // ─── Users ───────────────────────────────────────────────────────────────────
 
 export async function fetchUserFromServer(

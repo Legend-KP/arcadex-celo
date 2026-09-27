@@ -67,6 +67,12 @@ import {
   utcDayKey,
   computeActivityXp,
   resolveActivityEntryXp,
+  coerceUserXpRecord,
+  emptyUserXpRecord,
+  foldWeekXpIntoRecord,
+  userXpRecordFromWeeks,
+  xpFromStoredWeek,
+  type UserXpRecord,
 } from "@/lib/activity-week";
 
 type StoredUser = Omit<PlayerProfile, "id">;
@@ -448,7 +454,8 @@ export async function upsertUserOnServer(
     updatedAt: now,
   };
 
-  await writePath(profilePath(wallet), stored);
+  // PATCH so sparks, activity, and XP children under this wallet are kept.
+  await patchPath(profilePath(wallet), stored);
   return toPlayerProfile(wallet, stored)!;
 }
 
@@ -470,7 +477,7 @@ export async function bootstrapUserOnServer(
       createdAt: now,
       updatedAt: now,
     };
-    await writePath(`users/${wallet}`, stored);
+    await patchPath(`users/${wallet}`, stored);
     await writePath(sparksPath(wallet), sparkStateForRtdb(defaultSparkState()));
     return toPlayerProfile(wallet, stored)!;
   }
@@ -2627,8 +2634,16 @@ export async function grantShuffleInfiniteSparkOnServer(
 
 type ActivityLeaderboardMap = Record<string, ActivityLeaderboardEntry>;
 
+function userActivityRoot(wallet: string): string {
+  return `users/${normalizeWalletAddress(wallet)}/activity`;
+}
+
 function userActivityPath(wallet: string, weekId: string): string {
-  return `users/${normalizeWalletAddress(wallet)}/activity/${weekId}`;
+  return `${userActivityRoot(wallet)}/${weekId}`;
+}
+
+function userXpPath(wallet: string): string {
+  return `users/${normalizeWalletAddress(wallet)}/xp`;
 }
 
 function activityEntriesPath(weekId: string, wallet: string): string {
@@ -2782,7 +2797,11 @@ export async function recordActivityEvent(
     }
 
     const path = userActivityPath(wallet, weekId);
-    const existing = coerceActivityCounters(await readPath<unknown>(path));
+    const [existingRaw, xpRaw] = await Promise.all([
+      readPath<unknown>(path),
+      readPath<unknown>(userXpPath(wallet)),
+    ]);
+    const existing = coerceActivityCounters(existingRaw);
     const next: ActivityCounters = { ...existing };
 
     if (kind === "play") {
@@ -2823,7 +2842,43 @@ export async function recordActivityEvent(
       return;
     }
 
-    await writePath(path, next);
+    const previousWeekXp = computeActivityXp(existing);
+    const nextWeekXp = computeActivityXp(next);
+    let lifetime: UserXpRecord | null = null;
+    try {
+      let base = coerceUserXpRecord(xpRaw);
+      if (!base) {
+        const tree = await readPath<Record<string, unknown>>(
+          userActivityRoot(wallet)
+        );
+        base = userXpRecordFromWeeks(weekSnapshotsFromActivityTree(tree));
+      }
+      lifetime = foldWeekXpIntoRecord(
+        base,
+        weekId,
+        previousWeekXp,
+        nextWeekXp,
+        now
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[ArcadeX][activity] lifetime XP read failed: ${scrubSecrets(message)}`
+      );
+    }
+
+    await writePath(path, { ...next, xp: nextWeekXp });
+
+    if (lifetime && nextWeekXp > 0) {
+      try {
+        await writePath(userXpPath(wallet), lifetime);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(
+          `[ArcadeX][activity] lifetime XP write failed: ${scrubSecrets(message)}`
+        );
+      }
+    }
 
     // Public board is sparks-first — don't list visit-only / 0-spark users.
     if (next.sparksSpent <= 0) {
@@ -2882,6 +2937,34 @@ export async function fetchUserActivityFromServer(
   const wallet = normalizeWalletAddress(walletAddress);
   const raw = await readPath<unknown>(userActivityPath(wallet, weekId));
   return coerceActivityCounters(raw);
+}
+
+function weekSnapshotsFromActivityTree(
+  tree: Record<string, unknown> | null
+): { weekId: string; xp: number; updatedAt?: number }[] {
+  if (!tree) return [];
+  return Object.entries(tree).map(([weekId, value]) => ({
+    weekId,
+    xp: xpFromStoredWeek(value),
+    updatedAt: coerceActivityCounters(value).updatedAt,
+  }));
+}
+
+/** Saved all-time XP and best week. Falls back to summing archived weeks. */
+export async function fetchUserXpRecord(
+  walletAddress: string
+): Promise<UserXpRecord> {
+  if (!isWalletAddress(walletAddress)) return emptyUserXpRecord();
+  const wallet = normalizeWalletAddress(walletAddress);
+  const saved = coerceUserXpRecord(
+    await readPath<unknown>(userXpPath(wallet))
+  );
+  if (saved) return saved;
+
+  const tree = await readPath<Record<string, unknown>>(
+    userActivityRoot(wallet)
+  );
+  return userXpRecordFromWeeks(weekSnapshotsFromActivityTree(tree));
 }
 
 export function resolveActivityWeekId(
