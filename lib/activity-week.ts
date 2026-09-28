@@ -44,13 +44,20 @@ export interface ActivityLeaderboardEntry {
 
 /**
  * Simple XP shown on the board.
- * Plays dominate; active days and txs add enough that same-play totals don't look identical.
  * UI never explains these weights.
+ *
+ * - play: each game start
+ * - active day: first activity on a UTC calendar day
+ * - tx: Tx Hub gas-only sign-in (not check-in / shuffle)
+ * - spend unit: one $0.05 paid action (Infinite Spark $0.10 = 2 units)
+ *
+ * Streak ladder grants pass absolute XP into recordActivityEvent as "streak";
+ * the server converts that into spend units so the board still shows the grant amount.
  */
-export const ACTIVITY_XP_PER_PLAY = 10;
+export const ACTIVITY_XP_PER_PLAY = 2;
 export const ACTIVITY_XP_PER_ACTIVE_DAY = 5;
-export const ACTIVITY_XP_PER_TX = 1;
-export const ACTIVITY_XP_PER_SPEND_UNIT = 1;
+export const ACTIVITY_XP_PER_TX = 2;
+export const ACTIVITY_XP_PER_SPEND_UNIT = 10;
 
 export function computeActivityXp(counters: Pick<
   ActivityCounters,
@@ -159,15 +166,22 @@ export function foldWeekXpIntoRecord(
 ): UserXpRecord {
   const prev = Math.max(0, Math.floor(previousWeekXp));
   const next = Math.max(0, Math.floor(nextWeekXp));
-  const allTimeXp = Math.max(0, current.allTimeXp + (next - prev));
+  // Never shrink lifetime when display weights change; only add forward gains.
+  const delta = Math.max(0, next - prev);
+  const allTimeXp = current.allTimeXp + delta;
   const weeksRecorded =
     current.weeksRecorded + (prev === 0 && next > 0 ? 1 : 0);
 
   let bestWeekXp = current.bestWeekXp;
   let bestWeekId = current.bestWeekId;
+  // Never lower a saved best when formula weights change mid-week.
   if (bestWeekId === weekId) {
-    bestWeekXp = next;
-    if (next <= 0) bestWeekId = undefined;
+    if (next <= 0) {
+      bestWeekXp = 0;
+      bestWeekId = undefined;
+    } else {
+      bestWeekXp = Math.max(bestWeekXp, next);
+    }
   }
   if (next > bestWeekXp) {
     bestWeekXp = next;

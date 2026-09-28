@@ -73,6 +73,7 @@ import {
   userXpRecordFromWeeks,
   xpFromStoredWeek,
   type UserXpRecord,
+  ACTIVITY_XP_PER_SPEND_UNIT,
 } from "@/lib/activity-week";
 
 type StoredUser = Omit<PlayerProfile, "id">;
@@ -3244,12 +3245,17 @@ export async function recordActivityEvent(
     const now = Date.now();
     const { weekId } = getIsoWeekWindow(now);
     const day = utcDayKey(now);
-    const spendUnits =
+    // spend: $0.05 units. streak: absolute XP (converted to units below).
+    const rawSpendOpt =
       (kind === "spend" || kind === "streak") &&
       typeof opts?.spendUnits === "number" &&
       Number.isFinite(opts.spendUnits)
         ? Math.max(0, Math.floor(opts.spendUnits))
         : 0;
+    const spendUnits =
+      kind === "streak" && rawSpendOpt > 0
+        ? Math.max(1, Math.round(rawSpendOpt / ACTIVITY_XP_PER_SPEND_UNIT))
+        : rawSpendOpt;
 
     let profileName = opts?.name?.trim() || "";
     if (!profileName) {
@@ -3289,7 +3295,8 @@ export async function recordActivityEvent(
       }
     }
 
-    if (kind === "tx" || kind === "spend") {
+    // Only Tx Hub gas-only sign-ins count as txs (not paid spend / check-in / shuffle).
+    if (kind === "tx") {
       next.txs += 1;
     }
 

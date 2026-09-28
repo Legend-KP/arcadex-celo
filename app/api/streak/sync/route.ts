@@ -15,7 +15,6 @@ import {
   grantStreakInfiniteSparkOnServer,
   applyStreakLadderDayGrant,
   StreakRewardError,
-  recordActivityEventBestEffort,
 } from "@/lib/player-backend";
 import { isStreakLadderGrantsEnabled } from "@/lib/streak-ladder-config";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
@@ -101,7 +100,6 @@ export async function POST(request: Request) {
 
     await recordCheckInTxOnServer(wallet, txHash, verified.day, campaignId);
     await invalidateStreakProgressCache(wallet, campaignId);
-    recordActivityEventBestEffort(wallet, "tx");
 
     let reward: {
       granted: boolean;
