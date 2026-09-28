@@ -41,7 +41,7 @@ export async function loadDailyPlayConfig(): Promise<DailyPlayConfig> {
       : readString(cloudflare, "STREAK_CAMPAIGN_ID") ||
         readString(cloudflare, "NEXT_PUBLIC_STREAK_CAMPAIGN_ID") ||
         readString(process.env, "NEXT_PUBLIC_STREAK_CAMPAIGN_ID") ||
-        "1";
+        "4";
 
   return {
     mode,

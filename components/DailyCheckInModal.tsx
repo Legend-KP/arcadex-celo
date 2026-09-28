@@ -26,6 +26,8 @@ import {
 interface DailyCheckInModalProps {
   open: boolean;
   walletAddress: string;
+  /** Runtime campaign from /api/daily-play-config — never trust build-time alone. */
+  campaignId: number;
   status: StreakStatus | null;
   onComplete: (result: {
     day: number;
@@ -152,6 +154,7 @@ function rewardGlyph(
 export default function DailyCheckInModal({
   open,
   walletAddress,
+  campaignId,
   status,
   onComplete,
 }: DailyCheckInModalProps) {
@@ -175,21 +178,30 @@ export default function DailyCheckInModal({
   const recoverAttemptedRef = useRef(false);
   const daysScrollRef = useRef<HTMLDivElement | null>(null);
   const ladderV2 = isStreakLadderV2Enabled();
+  const activeCampaignId =
+    Number.isFinite(campaignId) && campaignId >= 1
+      ? campaignId
+      : status?.campaignId && status.campaignId >= 1
+        ? status.campaignId
+        : 4;
 
   useEffect(() => {
     if (!open || !walletAddress || recoverAttemptedRef.current) return;
+    // Parent only opens this when check-in is still required. Never silent-skip
+    // off a different campaign's progress (build-time id mismatch).
+    if (status?.canCheckIn !== false) return;
     recoverAttemptedRef.current = true;
 
     let cancelled = false;
     (async () => {
       try {
-        const fresh = await fetchStreakStatus(walletAddress, undefined, {
+        const fresh = await fetchStreakStatus(walletAddress, activeCampaignId, {
           fresh: true,
         });
         if (cancelled || fresh.canCheckIn) return;
 
         setLoading(true);
-        await refreshSessionFromCheckIn(walletAddress);
+        await refreshSessionFromCheckIn(walletAddress, activeCampaignId);
         if (cancelled) return;
         onComplete({
           day: fresh.currentDay,
@@ -206,7 +218,7 @@ export default function DailyCheckInModal({
     return () => {
       cancelled = true;
     };
-  }, [open, walletAddress, onComplete]);
+  }, [open, walletAddress, activeCampaignId, status?.canCheckIn, onComplete]);
 
   useEffect(() => {
     if (!open) {
@@ -387,7 +399,10 @@ export default function DailyCheckInModal({
     setLoading(true);
     setError("");
     try {
-      const result = await performDailyCheckIn(walletAddress);
+      const result = await performDailyCheckIn(
+        walletAddress,
+        activeCampaignId
+      );
       playSuccessSfx();
       const sparkGranted = Boolean(
         result.reward?.granted ||

@@ -569,6 +569,7 @@ export default function PlayerProfileProvider({
       <DailyCheckInModal
         open={dailyCheckInVisible}
         walletAddress={walletAddress}
+        campaignId={dailyCampaignId}
         status={streakStatus}
         onComplete={handleCheckInComplete}
       />

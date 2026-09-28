@@ -8,7 +8,7 @@ export const ARCADEX_REWARDS_CONTRACT_ADDRESS = (
 ) as Address;
 
 export const DEFAULT_STREAK_CAMPAIGN_ID = Number(
-  process.env.NEXT_PUBLIC_STREAK_CAMPAIGN_ID?.trim() || "1"
+  process.env.NEXT_PUBLIC_STREAK_CAMPAIGN_ID?.trim() || "4"
 );
 
 export const CAMPAIGN_TYPE_STREAK = 0;
