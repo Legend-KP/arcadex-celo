@@ -8,10 +8,19 @@
 export const STREAK_LADDER_REQUIRED_DAYS = 30;
 export const STREAK_BASE_XP = 10;
 
-/** Enable 30-day ladder UI without changing STREAK_CAMPAIGN_ID. */
+/**
+ * 30-day streak ladder UI. Defaults ON — campaign 4 is the live 30-day STREAK.
+ * Set NEXT_PUBLIC_STREAK_LADDER_V2=0 only to force the legacy 7-day chrome.
+ */
 export function isStreakLadderV2Enabled(): boolean {
   const raw = process.env.NEXT_PUBLIC_STREAK_LADDER_V2?.trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "on" || raw === "yes";
+  if (raw === "0" || raw === "false" || raw === "off" || raw === "no") {
+    return false;
+  }
+  if (raw === "1" || raw === "true" || raw === "on" || raw === "yes") {
+    return true;
+  }
+  return true;
 }
 
 export interface StreakDayReward {
