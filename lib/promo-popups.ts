@@ -1,4 +1,4 @@
-import { getIsoWeekWindow } from "@/lib/activity-week";
+import { getIsoWeekWindow, utcDayKey } from "@/lib/activity-week";
 import { isContestActive } from "@/lib/contest";
 import {
   getPromoRemainingSlotsToday,
@@ -169,9 +169,10 @@ function buildWeekCandidates(now: number): PromoPopupCandidate[] {
   const week = getIsoWeekWindow(now);
   const out: PromoPopupCandidate[] = [];
 
+  // First 3 days of the week: at most one "new week" ping per UTC day.
   if (now - week.startsAt < NEW_WEEK_WINDOW_MS) {
     out.push({
-      id: `weekStart:${week.weekId}`,
+      id: `weekStart:${week.weekId}:${utcDayKey(now)}`,
       kind: "weekStart",
       priority: 150,
       weekId: week.weekId,

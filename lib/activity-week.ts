@@ -9,7 +9,8 @@ export type ActivityEventKind =
   | "play"
   | "visit"
   | "tx"
-  | "spend";
+  | "spend"
+  | "streak";
 
 export interface ActivityWeekWindow {
   weekId: string;

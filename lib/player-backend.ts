@@ -251,6 +251,33 @@ export async function grantStreakInfiniteSparkOnServer(
   );
 }
 
+export async function applyStreakLadderDayGrant(
+  ...args: Parameters<typeof rtdb.applyStreakLadderDayGrant>
+): ReturnType<typeof rtdb.applyStreakLadderDayGrant> {
+  return withPlayerBackend(
+    () => d1.applyStreakLadderDayGrant(...args),
+    () => rtdb.applyStreakLadderDayGrant(...args)
+  );
+}
+
+export async function listPendingStreakUsdt(
+  ...args: Parameters<typeof rtdb.listPendingStreakUsdt>
+): ReturnType<typeof rtdb.listPendingStreakUsdt> {
+  return withPlayerBackend(
+    () => d1.listPendingStreakUsdt(...args),
+    () => rtdb.listPendingStreakUsdt(...args)
+  );
+}
+
+export async function claimPendingStreakUsdt(
+  ...args: Parameters<typeof rtdb.claimPendingStreakUsdt>
+): ReturnType<typeof rtdb.claimPendingStreakUsdt> {
+  return withPlayerBackend(
+    () => d1.claimPendingStreakUsdt(...args),
+    () => rtdb.claimPendingStreakUsdt(...args)
+  );
+}
+
 export async function recordSpinTxOnServer(
   ...args: Parameters<typeof rtdb.recordSpinTxOnServer>
 ): ReturnType<typeof rtdb.recordSpinTxOnServer> {
