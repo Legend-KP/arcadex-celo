@@ -8,6 +8,7 @@ import Logo from "@/components/Logo";
 import SparkBatteryBar from "@/components/SparkBatteryBar";
 import ActivityLeaderboardButton from "@/components/ActivityLeaderboardButton";
 import PromoPopupHost from "@/components/PromoPopupHost";
+import RewardsPayoutStrip from "@/components/RewardsPayoutStrip";
 import {
   readCachedGamesList,
   shouldBackgroundRefreshGamesList,
@@ -97,16 +98,20 @@ export default function HomePage() {
     <div className="home">
       <div className="home-ambient" aria-hidden />
       <div className="home-shell">
-        <header className="topbar">
-          <Logo variant="header" />
-          <div className="topbar-actions">
-            <ActivityLeaderboardButton
-              open={activityBoardOpen}
-              onOpenChange={setActivityBoardOpen}
-            />
-            <SparkBatteryBar />
-          </div>
-        </header>
+        <div className="home-sticky-chrome">
+          <header className="topbar">
+            <Logo variant="header" />
+            <div className="topbar-actions">
+              <ActivityLeaderboardButton
+                open={activityBoardOpen}
+                onOpenChange={setActivityBoardOpen}
+              />
+              <SparkBatteryBar />
+            </div>
+          </header>
+
+          <RewardsPayoutStrip />
+        </div>
 
         <main className="home-main">
           {error ? (

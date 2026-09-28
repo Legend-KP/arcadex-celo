@@ -95,8 +95,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .topbar {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 20;
   display: flex;
   align-items: center;
@@ -109,6 +108,12 @@ a { color: inherit; text-decoration: none; }
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 
+.home-sticky-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
 .topbar .spark-battery-wrap {
   flex-shrink: 0;
 }
@@ -118,6 +123,100 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+/* Home winners payouts strip — static label + looping addresses */
+.rewards-payout-strip {
+  display: flex;
+  align-items: stretch;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  overflow: hidden;
+  background: linear-gradient(
+    90deg,
+    #fef3c7 0%,
+    #fde68a 50%,
+    #fef3c7 100%
+  );
+  border-bottom: 1px solid rgba(217, 119, 6, 0.22);
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.12);
+}
+
+.rewards-payout-strip-label {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px 7px 14px;
+  font-family: var(--font-head);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #92400e;
+  background: linear-gradient(
+    90deg,
+    rgba(254, 243, 199, 0.98) 70%,
+    rgba(254, 243, 199, 0)
+  );
+  position: relative;
+  z-index: 1;
+}
+
+.rewards-payout-strip-viewport {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 12px,
+    #000 calc(100% - 12px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 12px,
+    #000 calc(100% - 12px),
+    transparent 100%
+  );
+}
+
+.rewards-payout-strip-track {
+  display: flex;
+  width: max-content;
+  gap: 28px;
+  padding: 7px 28px 7px 8px;
+  animation: rewards-payout-marquee 48s linear infinite;
+}
+
+.rewards-payout-strip-item {
+  flex-shrink: 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: #1a1a2e;
+}
+
+.rewards-payout-strip-addr {
+  letter-spacing: 0.2px;
+}
+
+.rewards-payout-strip-amount {
+  color: #b45309;
+  font-weight: 800;
+}
+
+@keyframes rewards-payout-marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rewards-payout-strip-track {
+    animation: none;
+  }
 }
 
 /* Weekly activity leaderboard button — same size language as spark battery */
