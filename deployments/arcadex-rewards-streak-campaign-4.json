@@ -1,0 +1,19 @@
+{
+  "contract": "ArcadeXRewards",
+  "network": "celo-mainnet",
+  "chainId": 42220,
+  "address": "0xc5BE4773D5B4a8e3C6f3E7a4C5f7cfBC38986ccF",
+  "campaignId": 4,
+  "campaignType": "STREAK",
+  "requiredDays": 30,
+  "minIntervalSeconds": 86400,
+  "rewardMode": 0,
+  "rewardMeta": "0x0ab4843ee23ccd969c6d889afda5daeb2a0d59d52a8da8a2b6a3006a8906de71",
+  "resetAfterMilestone": true,
+  "requireEligibility": false,
+  "maxSinglePayout": 0,
+  "startTime": 1790586000,
+  "endTime": 1822122000,
+  "setCampaignTxHash": "0x061af45158c5138383b62c2bcc7597f7a9f189c8131ce99501d71bf7760cc0f0",
+  "notes": "30-day OFFCHAIN ladder. USDT via app Claim path (not on-chain claim)."
+}

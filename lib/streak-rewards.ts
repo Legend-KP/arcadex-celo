@@ -1,9 +1,8 @@
 /**
  * 30-day streak ladder (FINAL product table).
  *
- * Phase A: UI preview only when NEXT_PUBLIC_STREAK_LADDER_V2 is on.
- * Grants / USDT claim / campaign flip come in later phases — do not
- * treat this table as live payout authority until those ship.
+ * Authority for Phase B+ grants when STREAK_LADDER_GRANTS_ENABLED is on.
+ * UI preview when NEXT_PUBLIC_STREAK_LADDER_V2 is on.
  */
 
 export const STREAK_LADDER_REQUIRED_DAYS = 30;

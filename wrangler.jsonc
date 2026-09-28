@@ -55,10 +55,55 @@
 				}
 			]
 		},
+		/**
+		 * Feature preview for 30-day streak ladder (Phase B/C).
+		 * Grants ON for XP / Infinite Spark; USDT payouts stay OFF until funded.
+		 * Deploy: npm run deploy:streak30
+		 * URL: https://streak-30d-arcadex-celo.<account>.workers.dev
+		 */
+		"streak30": {
+			"name": "streak-30d-arcadex-celo",
+			"vars": {
+				"PLAYER_DATA_BACKEND": "d1",
+				"DAILY_PLAY_MODE": "streak",
+				"NEXT_PUBLIC_DAILY_PLAY_MODE": "streak",
+				"STREAK_CAMPAIGN_ID": "4",
+				"NEXT_PUBLIC_STREAK_CAMPAIGN_ID": "4",
+				"NEXT_PUBLIC_STREAK_LADDER_V2": "1",
+				"STREAK_LADDER_GRANTS_ENABLED": "1"
+			},
+			"services": [
+				{
+					"binding": "WORKER_SELF_REFERENCE",
+					"service": "streak-30d-arcadex-celo"
+				}
+			],
+			"kv_namespaces": [
+				{
+					"binding": "RATE_LIMIT_KV",
+					"id": "afc93dfed6514875924b2511a39412cb"
+				}
+			],
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "arcadex-celo-preview",
+					"database_id": "81f8cd4f-6927-4561-861b-e5aa12eba7a6",
+					"migrations_dir": "migrations",
+					"preview_database_id": "arcadex-celo-preview-local"
+				}
+			]
+		},
 		"production": {
 			"name": "arcadex-celo",
 			"vars": {
-				"PLAYER_DATA_BACKEND": "d1"
+				"PLAYER_DATA_BACKEND": "d1",
+				"DAILY_PLAY_MODE": "streak",
+				"NEXT_PUBLIC_DAILY_PLAY_MODE": "streak",
+				"STREAK_CAMPAIGN_ID": "4",
+				"NEXT_PUBLIC_STREAK_CAMPAIGN_ID": "4",
+				"NEXT_PUBLIC_STREAK_LADDER_V2": "1",
+				"STREAK_LADDER_GRANTS_ENABLED": "1"
 			},
 			"services": [
 				{

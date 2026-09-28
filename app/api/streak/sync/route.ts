@@ -13,9 +13,11 @@ import {
   recordCheckInTxOnServer,
   StreakSyncError,
   grantStreakInfiniteSparkOnServer,
+  applyStreakLadderDayGrant,
   StreakRewardError,
   recordActivityEventBestEffort,
 } from "@/lib/player-backend";
+import { isStreakLadderGrantsEnabled } from "@/lib/streak-ladder-config";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import { invalidateStreakProgressCache } from "@/lib/streak-progress-cache";
 import { createWalletSessionToken } from "@/lib/wallet-session";
@@ -33,14 +35,14 @@ const SESSION_TTL_SEC = 24 * 60 * 60;
 
 /**
  * Verify an on-chain checkIn tx, bind a session JWT to that wallet, and
- * auto-grant Infinite Spark if the same tx emitted MilestoneReached.
+ * grant ladder rewards (or legacy day-7 Infinite Spark) when enabled.
  *
  * Attack surface closed by:
  * - on-chain msg.sender must match body wallet (via event)
  * - tx must hit ArcadeXRewards and include CheckedIn
- * - txHash can only be synced once per wallet (RTDB replay guard)
- * - JWT is minted only for the HttpOnly device cookie that loaded
- *   streak status before this check-in tx (not a Celoscan copy)
+ * - txHash can only be synced once per wallet (replay guard)
+ * - ladder day/amount from server table — never client
+ * - JWT only for the HttpOnly device cookie that started check-in
  */
 export async function POST(request: Request) {
   const ip = getClientIp(request);
@@ -107,7 +109,48 @@ export async function POST(request: Request) {
       state?: unknown;
     } | null = null;
 
-    if (verified.milestone) {
+    let ladder: {
+      granted: boolean;
+      day: number;
+      xpGranted: number;
+      infiniteHoursGranted: number | null;
+      usdtPending: number | null;
+      needsUsdtClaim: boolean;
+    } | null = null;
+
+    if (isStreakLadderGrantsEnabled()) {
+      try {
+        const result = await applyStreakLadderDayGrant(
+          wallet,
+          txHash,
+          verified.day,
+          campaignId
+        );
+        ladder = {
+          granted: result.granted,
+          day: result.day,
+          xpGranted: result.xpGranted,
+          infiniteHoursGranted: result.infiniteHoursGranted,
+          usdtPending: result.usdtPending,
+          needsUsdtClaim: result.needsUsdtClaim,
+        };
+        if (result.infiniteHoursGranted) {
+          reward = {
+            granted: result.granted,
+            sparks: result.sparks,
+            state: result.state,
+          };
+        }
+      } catch (err) {
+        if (err instanceof StreakRewardError) {
+          return NextResponse.json(
+            { error: err.message, code: err.code },
+            { status: err.code === "TX_ALREADY_USED" ? 409 : 400 }
+          );
+        }
+        throw err;
+      }
+    } else if (verified.milestone) {
       try {
         const result = await grantStreakInfiniteSparkOnServer(
           wallet,
@@ -162,6 +205,7 @@ export async function POST(request: Request) {
       token,
       expiresIn: SESSION_TTL_SEC,
       reward,
+      ladder,
     });
   } catch (err) {
     if (err instanceof StreakSyncError) {

@@ -881,6 +881,31 @@ function streakGrantPath(txHash: string): string {
   return `streakGrants/${txHash.toLowerCase()}`;
 }
 
+function streakLadderGrantPath(txHash: string): string {
+  return `streakLadderGrants/${txHash.toLowerCase()}`;
+}
+
+function streakUsdtPendingPath(
+  wallet: string,
+  campaignId: number,
+  day: number,
+  checkInTx: string
+): string {
+  return `streakUsdtPending/${wallet.toLowerCase()}/${campaignId}/${day}/${checkInTx.toLowerCase()}`;
+}
+
+function streakUsdtPendingIndexPath(wallet: string): string {
+  return `streakUsdtPendingIndex/${wallet.toLowerCase()}`;
+}
+
+function streakUsdtClaimPath(checkInTx: string): string {
+  return `streakUsdtClaims/${checkInTx.toLowerCase()}`;
+}
+
+function streakUsdtDailyPath(dayKey: string): string {
+  return `streakUsdtDaily/${dayKey}`;
+}
+
 export class StreakSyncError extends Error {
   constructor(
     message: string,
@@ -902,6 +927,12 @@ export class StreakRewardError extends Error {
       | "INVALID_TX"
       | "TX_ALREADY_USED"
       | "NO_MILESTONE"
+      | "GRANTS_DISABLED"
+      | "BAD_DAY"
+      | "NO_PENDING"
+      | "BUDGET"
+      | "PAYOUT_FAILED"
+      | "CLAIM_IN_PROGRESS"
   ) {
     super(message);
     this.name = "StreakRewardError";
@@ -1061,6 +1092,436 @@ export async function grantStreakInfiniteSparkOnServer(
     sparks: computeSparkSnapshot(nextState),
     granted: true,
   };
+}
+
+export type StreakUsdtPendingRow = {
+  wallet: string;
+  campaignId: number;
+  day: number;
+  checkInTx: string;
+  amountMicro: number;
+  status: "pending" | "paying" | "claimed";
+  claimTx: string | null;
+  createdAt: number;
+  claimedAt: number | null;
+};
+
+/**
+ * Idempotent ladder grant (RTDB fallback). Same security model as D1.
+ */
+export async function applyStreakLadderDayGrant(
+  walletAddress: string,
+  txHash: string,
+  day: number,
+  campaignId: number
+): Promise<{
+  granted: boolean;
+  day: number;
+  xpGranted: number;
+  infiniteHoursGranted: number | null;
+  usdtPending: number | null;
+  needsUsdtClaim: boolean;
+  state: StoredSparkState;
+  sparks: ReturnType<typeof computeSparkSnapshot>;
+}> {
+  const {
+    isStreakLadderGrantsEnabled,
+    hoursToMs,
+  } = await import("@/lib/streak-ladder-config");
+  const { getStreakDayReward } = await import("@/lib/streak-rewards");
+  const { usdtToMicro } = await import("@/lib/streak-usdt-payout");
+
+  if (!isStreakLadderGrantsEnabled()) {
+    throw new StreakRewardError(
+      "Streak ladder grants are disabled.",
+      "GRANTS_DISABLED"
+    );
+  }
+
+  if (!isWalletAddress(walletAddress)) {
+    throw new StreakRewardError(
+      "A valid wallet address is required.",
+      "NO_WALLET"
+    );
+  }
+
+  const wallet = normalizeWalletAddress(walletAddress);
+  const normalizedTxHash = txHash.trim().toLowerCase();
+  if (!/^0x[a-f0-9]{64}$/.test(normalizedTxHash)) {
+    throw new StreakRewardError(
+      "A valid transaction hash is required.",
+      "INVALID_TX"
+    );
+  }
+
+  const reward = getStreakDayReward(day);
+  if (!reward) {
+    throw new StreakRewardError("Invalid streak day for ladder grant.", "BAD_DAY");
+  }
+
+  const guardPath = streakLadderGrantPath(normalizedTxHash);
+  const existingGrant = await readPath<{
+    wallet?: string;
+    xpGranted?: number;
+    infiniteHoursGranted?: number | null;
+    usdtPending?: number | null;
+  }>(guardPath);
+
+  if (existingGrant?.wallet) {
+    const recorded = normalizeWalletAddress(existingGrant.wallet);
+    if (recorded !== wallet) {
+      throw new StreakRewardError(
+        "This reward was already used by another wallet.",
+        "TX_ALREADY_USED"
+      );
+    }
+    const state = normalizeSparkState(await ensureSparkStateOnServer(wallet));
+    const usdtPending =
+      typeof existingGrant.usdtPending === "number"
+        ? existingGrant.usdtPending
+        : null;
+    return {
+      granted: false,
+      day,
+      xpGranted:
+        typeof existingGrant.xpGranted === "number" ? existingGrant.xpGranted : 0,
+      infiniteHoursGranted:
+        typeof existingGrant.infiniteHoursGranted === "number"
+          ? existingGrant.infiniteHoursGranted
+          : null,
+      usdtPending,
+      needsUsdtClaim: Boolean(usdtPending && usdtPending > 0),
+      state,
+      sparks: computeSparkSnapshot(state),
+    };
+  }
+
+  const now = Date.now();
+  let infiniteUntil: number | null = null;
+  let nextState = normalizeSparkState(await ensureSparkStateOnServer(wallet), now);
+
+  if (reward.infiniteHours != null && reward.infiniteHours > 0) {
+    const baseUntil =
+      nextState.infiniteUntil && nextState.infiniteUntil > now
+        ? nextState.infiniteUntil
+        : now;
+    infiniteUntil = baseUntil + hoursToMs(reward.infiniteHours);
+    nextState = { ...nextState, infiniteUntil };
+  }
+
+  const usdtPending = reward.usdt != null && reward.usdt > 0 ? reward.usdt : null;
+  const amountMicro = usdtPending != null ? usdtToMicro(usdtPending) : 0;
+
+  const claim = await claimGuardRecord(guardPath, wallet, () => ({
+    wallet,
+    campaignId,
+    day,
+    grantedAt: now,
+    xpGranted: reward.xp,
+    infiniteHoursGranted: reward.infiniteHours,
+    infiniteUntil,
+    usdtPending,
+    amountMicro: amountMicro || undefined,
+    reward: "STREAK_LADDER_V2",
+  }));
+
+  if (claim.status === "conflict_other_wallet") {
+    throw new StreakRewardError(
+      "This reward was already used by another wallet.",
+      "TX_ALREADY_USED"
+    );
+  }
+
+  if (claim.status === "exists") {
+    const state = normalizeSparkState(await ensureSparkStateOnServer(wallet));
+    const extra = claim.record as {
+      xpGranted?: number;
+      infiniteHoursGranted?: number | null;
+      usdtPending?: number | null;
+    };
+    const pending =
+      typeof extra.usdtPending === "number" ? extra.usdtPending : null;
+    return {
+      granted: false,
+      day,
+      xpGranted: typeof extra.xpGranted === "number" ? extra.xpGranted : 0,
+      infiniteHoursGranted:
+        typeof extra.infiniteHoursGranted === "number"
+          ? extra.infiniteHoursGranted
+          : null,
+      usdtPending: pending,
+      needsUsdtClaim: Boolean(pending && pending > 0),
+      state,
+      sparks: computeSparkSnapshot(state),
+    };
+  }
+
+  const pendingPath =
+    usdtPending != null
+      ? streakUsdtPendingPath(wallet, campaignId, day, normalizedTxHash)
+      : null;
+
+  try {
+    if (infiniteUntil != null) {
+      await writePath(sparksPath(wallet), sparkStateForRtdb(nextState));
+    }
+
+    if (pendingPath && usdtPending != null && amountMicro > 0) {
+      const pendingRow: StreakUsdtPendingRow = {
+        wallet,
+        campaignId,
+        day,
+        checkInTx: normalizedTxHash,
+        amountMicro,
+        status: "pending",
+        claimTx: null,
+        createdAt: now,
+        claimedAt: null,
+      };
+      await writePath(pendingPath, pendingRow);
+      await patchPath(streakUsdtPendingIndexPath(wallet), {
+        [normalizedTxHash]: {
+          campaignId,
+          day,
+          checkInTx: normalizedTxHash,
+          amountMicro,
+          status: "pending",
+          createdAt: now,
+        },
+      });
+    }
+
+    if (reward.xp > 0) {
+      await recordActivityEvent(wallet, "streak", { spendUnits: reward.xp });
+    }
+  } catch (err) {
+    await deletePath(guardPath).catch(() => {});
+    if (pendingPath) {
+      await deletePath(pendingPath).catch(() => {});
+    }
+    throw err;
+  }
+
+  return {
+    granted: true,
+    day,
+    xpGranted: reward.xp,
+    infiniteHoursGranted: reward.infiniteHours,
+    usdtPending,
+    needsUsdtClaim: Boolean(usdtPending),
+    state: nextState,
+    sparks: computeSparkSnapshot(nextState),
+  };
+}
+
+export async function listPendingStreakUsdt(
+  walletAddress: string
+): Promise<StreakUsdtPendingRow[]> {
+  if (!isWalletAddress(walletAddress)) return [];
+  const wallet = normalizeWalletAddress(walletAddress);
+  const index = await readPath<
+    Record<
+      string,
+      {
+        campaignId?: number;
+        day?: number;
+        checkInTx?: string;
+        amountMicro?: number;
+        status?: string;
+        createdAt?: number;
+      }
+    >
+  >(streakUsdtPendingIndexPath(wallet));
+
+  if (!index) return [];
+
+  const rows: StreakUsdtPendingRow[] = [];
+  for (const value of Object.values(index)) {
+    if (!value || value.status !== "pending") continue;
+    if (
+      typeof value.campaignId !== "number" ||
+      typeof value.day !== "number" ||
+      typeof value.checkInTx !== "string" ||
+      typeof value.amountMicro !== "number"
+    ) {
+      continue;
+    }
+    rows.push({
+      wallet,
+      campaignId: value.campaignId,
+      day: value.day,
+      checkInTx: value.checkInTx,
+      amountMicro: value.amountMicro,
+      status: "pending",
+      claimTx: null,
+      createdAt: typeof value.createdAt === "number" ? value.createdAt : 0,
+      claimedAt: null,
+    });
+  }
+
+  rows.sort((a, b) => a.day - b.day || a.createdAt - b.createdAt);
+  return rows;
+}
+
+export async function claimPendingStreakUsdt(
+  walletAddress: string,
+  checkInTx?: string
+): Promise<{
+  claimed: boolean;
+  day: number;
+  amountUsdt: number;
+  txHash: string | null;
+}> {
+  const {
+    isStreakUsdtPayoutsEnabled,
+    getStreakDailyUsdtBudget,
+    expectedUsdtForDay,
+  } = await import("@/lib/streak-ladder-config");
+  const {
+    usdtToMicro,
+    microToUsdt,
+    transferStreakUsdtToPlayer,
+    StreakUsdtPayoutError,
+  } = await import("@/lib/streak-usdt-payout");
+
+  if (!isStreakUsdtPayoutsEnabled()) {
+    throw new StreakRewardError(
+      "Streak USDT payouts are disabled.",
+      "GRANTS_DISABLED"
+    );
+  }
+
+  if (!isWalletAddress(walletAddress)) {
+    throw new StreakRewardError(
+      "A valid wallet address is required.",
+      "NO_WALLET"
+    );
+  }
+
+  const wallet = normalizeWalletAddress(walletAddress);
+  const pending = await listPendingStreakUsdt(wallet);
+  const target =
+    checkInTx && /^0x[a-fA-F0-9]{64}$/.test(checkInTx)
+      ? pending.find(
+          (row) => row.checkInTx === checkInTx.trim().toLowerCase()
+        ) ?? null
+      : pending[0] ?? null;
+
+  if (!target) {
+    // Maybe already claimed — check specific path if provided
+    throw new StreakRewardError("No pending streak USDT to claim.", "NO_PENDING");
+  }
+
+  const expected = expectedUsdtForDay(target.day);
+  if (expected == null || usdtToMicro(expected) !== target.amountMicro) {
+    throw new StreakRewardError(
+      "Stored USDT entitlement does not match the reward table.",
+      "BAD_DAY"
+    );
+  }
+
+  const now = Date.now();
+  const dayKey = new Date(now).toISOString().slice(0, 10);
+  const budgetMicro = usdtToMicro(getStreakDailyUsdtBudget());
+  const daily = await readPath<{ spentMicro?: number }>(
+    streakUsdtDailyPath(dayKey)
+  );
+  const spent = typeof daily?.spentMicro === "number" ? daily.spentMicro : 0;
+  if (spent + target.amountMicro > budgetMicro) {
+    throw new StreakRewardError(
+      "Daily streak USDT budget is exhausted. Try again tomorrow.",
+      "BUDGET"
+    );
+  }
+
+  const claimPath = streakUsdtClaimPath(target.checkInTx);
+  const claimGuard = await claimGuardRecord(claimPath, wallet, () => ({
+    wallet,
+    campaignId: target.campaignId,
+    day: target.day,
+    amountMicro: target.amountMicro,
+    claimedAt: now,
+  }));
+
+  if (claimGuard.status === "conflict_other_wallet") {
+    throw new StreakRewardError(
+      "This USDT claim was already used by another wallet.",
+      "TX_ALREADY_USED"
+    );
+  }
+
+  if (claimGuard.status === "exists") {
+    return {
+      claimed: false,
+      day: target.day,
+      amountUsdt: microToUsdt(target.amountMicro),
+      txHash: null,
+    };
+  }
+
+  const pendingPath = streakUsdtPendingPath(
+    wallet,
+    target.campaignId,
+    target.day,
+    target.checkInTx
+  );
+
+  await writePath(pendingPath, {
+    ...target,
+    status: "paying",
+  });
+
+  try {
+    const { txHash } = await transferStreakUsdtToPlayer(
+      wallet as `0x${string}`,
+      expected
+    );
+    const claimedAt = Date.now();
+    await writePath(pendingPath, {
+      ...target,
+      status: "claimed",
+      claimTx: txHash.toLowerCase(),
+      claimedAt,
+    });
+    await patchPath(streakUsdtPendingIndexPath(wallet), {
+      [target.checkInTx]: {
+        campaignId: target.campaignId,
+        day: target.day,
+        checkInTx: target.checkInTx,
+        amountMicro: target.amountMicro,
+        status: "claimed",
+        createdAt: target.createdAt,
+        claimedAt,
+        claimTx: txHash.toLowerCase(),
+      },
+    });
+    await runRtdbTransaction<{ spentMicro?: number }>(
+      streakUsdtDailyPath(dayKey),
+      (current) => {
+        const prev =
+          typeof current?.spentMicro === "number" ? current.spentMicro : 0;
+        return { spentMicro: prev + target.amountMicro };
+      }
+    );
+
+    return {
+      claimed: true,
+      day: target.day,
+      amountUsdt: expected,
+      txHash,
+    };
+  } catch (err) {
+    await writePath(pendingPath, { ...target, status: "pending" }).catch(
+      () => {}
+    );
+    await deletePath(claimPath).catch(() => {});
+    if (err instanceof StreakUsdtPayoutError) {
+      throw new StreakRewardError(err.message, "PAYOUT_FAILED");
+    }
+    const message =
+      err instanceof Error ? err.message : "USDT payout failed.";
+    throw new StreakRewardError(message, "PAYOUT_FAILED");
+  }
 }
 
 // ─── Game gating flags (Firestore mirror for hot paths) ───────────────────────
@@ -2769,7 +3230,7 @@ export async function recordActivityEvent(
     const { weekId } = getIsoWeekWindow(now);
     const day = utcDayKey(now);
     const spendUnits =
-      kind === "spend" &&
+      (kind === "spend" || kind === "streak") &&
       typeof opts?.spendUnits === "number" &&
       Number.isFinite(opts.spendUnits)
         ? Math.max(0, Math.floor(opts.spendUnits))
@@ -2796,7 +3257,13 @@ export async function recordActivityEvent(
       next.lastPlayAt = now;
     }
 
-    if (kind === "tx" || kind === "spend" || kind === "play" || kind === "visit") {
+    if (
+      kind === "tx" ||
+      kind === "spend" ||
+      kind === "play" ||
+      kind === "visit" ||
+      kind === "streak"
+    ) {
       if (next.lastActiveDay !== day) {
         next.activeDays += 1;
         next.lastActiveDay = day;
@@ -2807,7 +3274,7 @@ export async function recordActivityEvent(
       next.txs += 1;
     }
 
-    if (kind === "spend" && spendUnits > 0) {
+    if ((kind === "spend" || kind === "streak") && spendUnits > 0) {
       next.spendUnits += spendUnits;
     }
 
@@ -2825,8 +3292,8 @@ export async function recordActivityEvent(
 
     await writePath(path, next);
 
-    // Public board is sparks-first — don't list visit-only / 0-spark users.
-    if (next.sparksSpent <= 0) {
+    // Public board: show players with plays or streak/spend XP.
+    if (next.sparksSpent <= 0 && next.spendUnits <= 0) {
       return;
     }
 

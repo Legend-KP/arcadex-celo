@@ -4415,105 +4415,221 @@ a { color: inherit; text-decoration: none; }
 }
 
 .daily-checkin-modal--ladder-v2 {
-  max-width: 420px;
-  max-height: min(92vh, 760px);
+  max-width: 400px;
+  max-height: min(92vh, 780px);
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
 
-.daily-checkin-preview-banner {
-  margin: -4px 0 12px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #92400e;
-  background: #fef3c7;
-  border: 1px solid #fcd34d;
-}
-
-.daily-checkin-streak-of {
-  font-size: 0.55em;
-  font-weight: 700;
-  letter-spacing: 0;
-  color: rgba(255, 255, 255, 0.72);
-  vertical-align: middle;
-}
-
-.daily-checkin-weeks {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.daily-checkin-carousel {
   margin-bottom: 12px;
 }
 
-.daily-checkin-week-label {
-  margin: 0 0 4px;
-  padding: 0 4px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+.daily-checkin-days-scroll {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
+  border-radius: 18px;
+  padding: 16px 12px 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  scrollbar-width: none;
+}
+
+.daily-checkin-days-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.daily-checkin-days-scroll .daily-checkin-day {
+  flex: 0 0 auto;
+  width: 48px;
+  scroll-snap-align: start;
+}
+
+.daily-checkin-carousel-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.daily-checkin-carousel-arrow {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
   color: #7c3aed;
-  text-align: left;
+  background: #ede9fe;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.daily-checkin-timeline--week {
-  margin-bottom: 0;
-  padding: 14px 6px 10px;
+.daily-checkin-carousel-arrow:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
-.daily-checkin-timeline--week-wide {
-  grid-template-columns: repeat(9, minmax(0, 1fr));
-  gap: 2px;
+.daily-checkin-carousel-arrow svg {
+  width: 16px;
+  height: 16px;
+}
+
+.daily-checkin-carousel-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.daily-checkin-carousel-dot {
+  width: 7px;
+  height: 7px;
+  border: none;
+  border-radius: 999px;
+  padding: 0;
+  background: #ddd6fe;
+  cursor: pointer;
+}
+
+.daily-checkin-carousel-dot--active {
+  background: #7c3aed;
+  width: 8px;
+  height: 8px;
+}
+
+.daily-checkin-days-scroll-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: center;
+}
+
+.daily-checkin-day--tappable {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.daily-checkin-day--peeked .daily-checkin-day-node {
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.55),
+    0 0 14px rgba(251, 191, 36, 0.45);
 }
 
 .daily-checkin-day--usdt .daily-checkin-day-node {
   background: linear-gradient(160deg, #34d399 0%, #059669 100%);
   border-color: #a7f3d0;
+  border-radius: 14px;
 }
 
 .daily-checkin-day--spark .daily-checkin-day-node {
   background: linear-gradient(160deg, #fbbf24 0%, #d97706 100%);
   border-color: #fde68a;
+  border-radius: 14px;
 }
 
 .daily-checkin-day--xp .daily-checkin-day-node {
-  background: linear-gradient(160deg, #a78bfa 0%, #6d28d9 100%);
-  border-color: #ddd6fe;
+  background: linear-gradient(160deg, #fbbf24 0%, #d97706 100%);
+  border-color: #fde68a;
+  border-radius: 14px;
 }
 
 .daily-checkin-day-glyph {
-  font-size: 13px;
-  font-weight: 900;
+  display: grid;
+  place-items: center;
   line-height: 1;
   color: #fff;
 }
 
-.daily-checkin-day-glyph--xp {
-  font-size: 9px;
+.daily-checkin-xp-icon,
+.daily-checkin-spark-icon,
+.daily-checkin-usdt-icon {
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+  font-weight: 900;
+  color: #fff;
+}
+
+.daily-checkin-xp-icon {
+  min-width: 22px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 6px;
+  font-size: 10px;
   letter-spacing: 0.02em;
+  background: rgba(255, 255, 255, 0.22);
 }
 
-.daily-checkin-timeline--week-wide .daily-checkin-day-node {
-  width: 28px;
-  height: 28px;
+.daily-checkin-spark-icon {
+  font-size: 16px;
 }
 
-.daily-checkin-timeline--week-wide .daily-checkin-day--milestone .daily-checkin-day-node {
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
+.daily-checkin-usdt-icon {
+  font-size: 9px;
+  letter-spacing: -0.04em;
 }
 
-.daily-checkin-timeline--week-wide .daily-checkin-day-label,
-.daily-checkin-timeline--week-wide .daily-checkin-day-today {
-  font-size: 8px;
-  padding-left: 4px;
-  padding-right: 4px;
+.daily-checkin-day--milestone .daily-checkin-day-label {
+  color: #fbbf24;
+}
+
+.daily-checkin-hero-card--compact {
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px 16px;
+  margin-bottom: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.daily-checkin-hero-card--compact::before,
+.daily-checkin-hero-card--compact::after {
+  content: "";
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+}
+
+.daily-checkin-hero-card--compact::before {
+  top: 14px;
+  left: 18px;
+}
+
+.daily-checkin-hero-card--compact::after {
+  top: 18px;
+  right: 22px;
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-reward-row {
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-reward-badge {
+  margin-top: 2px;
 }
 
 .daily-checkin-heading {
@@ -4779,15 +4895,74 @@ a { color: inherit; text-decoration: none; }
 }
 
 .daily-checkin-reward-icon {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin: 0 auto;
 }
 
-.daily-checkin-reward-icon svg {
-  width: 44px;
-  height: 44px;
-  filter: drop-shadow(0 4px 10px rgba(245, 158, 11, 0.35));
+.daily-checkin-reward-icon--xp,
+.daily-checkin-reward-icon--spark {
+  background: linear-gradient(160deg, #fbbf24 0%, #d97706 100%);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+}
+
+.daily-checkin-reward-icon--usdt {
+  background: linear-gradient(160deg, #34d399 0%, #059669 100%);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.daily-checkin-reward-icon .daily-checkin-xp-icon {
+  min-width: 28px;
+  height: 22px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.daily-checkin-reward-icon .daily-checkin-spark-icon {
+  font-size: 22px;
+}
+
+.daily-checkin-reward-icon .daily-checkin-usdt-icon {
+  font-size: 12px;
+}
+
+.daily-checkin-reward-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.daily-checkin-reward-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4c1d95;
+  background: #f5f3ff;
+}
+
+.daily-checkin-reward-chip .daily-checkin-xp-icon {
+  color: #fff;
+  background: linear-gradient(160deg, #a78bfa 0%, #7c3aed 100%);
+}
+
+.daily-checkin-reward-chip .daily-checkin-spark-icon {
+  font-size: 13px;
+  color: #d97706;
+}
+
+.daily-checkin-reward-chip .daily-checkin-usdt-icon {
+  font-size: 9px;
+  color: #059669;
 }
 
 .daily-checkin-reward-copy {
