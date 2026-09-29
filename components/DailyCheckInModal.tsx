@@ -203,10 +203,17 @@ export default function DailyCheckInModal({
         setLoading(true);
         await refreshSessionFromCheckIn(walletAddress, activeCampaignId);
         if (cancelled) return;
-        onComplete({
+        playSuccessSfx();
+        const day = Math.max(1, fresh.currentDay);
+        pendingCompleteRef.current = {
           day: fresh.currentDay,
           milestone: fresh.milestoneReached,
           infiniteSparkGranted: false,
+        };
+        setSuccess({
+          title: "You're signed in!",
+          body: `Welcome back. Day ${day} is already locked in for today — enjoy ArcadeX!`,
+          claimUsdt: null,
         });
       } catch {
         // Still need a check-in / user action
@@ -218,7 +225,7 @@ export default function DailyCheckInModal({
     return () => {
       cancelled = true;
     };
-  }, [open, walletAddress, activeCampaignId, status?.canCheckIn, onComplete]);
+  }, [open, walletAddress, activeCampaignId, status?.canCheckIn]);
 
   useEffect(() => {
     if (!open) {
@@ -259,7 +266,7 @@ export default function DailyCheckInModal({
 
   useEffect(() => {
     if (!success) return;
-    const id = window.setTimeout(() => finishSuccess(), 4000);
+    const id = window.setTimeout(() => finishSuccess(), 5500);
     return () => window.clearTimeout(id);
   }, [success, finishSuccess]);
 
@@ -453,29 +460,33 @@ export default function DailyCheckInModal({
       const rewardLine = dayReward
         ? formatStreakRewardDetail(dayReward)
         : null;
+      const nextDay = Math.min(complete.day + 1, STREAK_LADDER_REQUIRED_DAYS);
 
-      let title = "Day locked in!";
-      let body = `Day ${complete.day} is saved. Come back tomorrow to keep your streak going!`;
+      let title = "You're signed in!";
+      let body = `Day ${complete.day} is locked in. Come back in 24 hours to keep your streak going!`;
 
-      if (isFinale) {
-        title = "Streak complete!";
+      if (result.alreadySignedIn) {
+        title = "You're signed in!";
+        body =
+          complete.day > 0
+            ? `Welcome back — Day ${complete.day} is already counted for today. Jump in and play!`
+            : "Welcome back to ArcadeX. You're all set for today!";
+      } else if (isFinale) {
+        title = "You're signed in!";
         body = rewardLine
-          ? `Day ${complete.day} locked in — ${rewardLine}. Amazing run!`
-          : `Day ${complete.day} locked in. Amazing run!`;
+          ? `Streak complete — Day ${complete.day}: ${rewardLine}. Amazing run!`
+          : `Day ${complete.day} locked in. Streak complete — amazing run!`;
       } else if (sparkGranted) {
-        title = "Milestone reached!";
+        title = "You're signed in!";
         body = hours
-          ? `Infinite Spark is on for ${hours}h. Come back tomorrow for Day ${complete.day + 1}!`
-          : `Infinite Spark is on for 24h. Come back tomorrow for Day ${complete.day + 1}!`;
+          ? `Day ${complete.day} locked in. Infinite Spark is on for ${hours}h — come back later for Day ${nextDay}!`
+          : `Day ${complete.day} locked in. Infinite Spark is on for 24h — come back later for Day ${nextDay}!`;
       } else if (claimUsdt) {
-        title = "USDT unlocked!";
-        body = `Day ${complete.day} locked in — ${formatUsdtAmount(claimUsdt.amountUsdt)}. Come back tomorrow to keep going!`;
+        title = "You're signed in!";
+        body = `Day ${complete.day} locked in — ${formatUsdtAmount(claimUsdt.amountUsdt)} ready to claim. Come back later for Day ${nextDay}!`;
       } else if (rewardLine) {
-        title = `Day ${complete.day} locked in!`;
-        body = `${rewardLine}. Come back tomorrow to keep your streak alive!`;
-      } else {
-        title = `Day ${complete.day} locked in!`;
-        body = `Nice work. Come back tomorrow for Day ${complete.day + 1}!`;
+        title = "You're signed in!";
+        body = `Day ${complete.day} locked in — ${rewardLine}. Come back in 24 hours for Day ${nextDay}!`;
       }
 
       setSuccess({
@@ -865,7 +876,7 @@ export default function DailyCheckInModal({
                 className="spark-success-popup__btn"
                 onClick={() => finishSuccess()}
               >
-                See you tomorrow
+                Let's play
               </button>
             )}
             {success.claimUsdt && usdtPayoutsEnabled ? (
@@ -875,7 +886,7 @@ export default function DailyCheckInModal({
                 onClick={() => finishSuccess()}
                 style={{ marginTop: 8, opacity: 0.85 }}
               >
-                See you tomorrow
+                Let's play
               </button>
             ) : null}
           </div>

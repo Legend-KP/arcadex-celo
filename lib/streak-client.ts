@@ -117,6 +117,8 @@ export interface StreakSyncResult {
     usdtPending: number | null;
     needsUsdtClaim: boolean;
   } | null;
+  /** True when session was restored from an existing on-chain check-in (no new tx). */
+  alreadySignedIn?: boolean;
 }
 
 export async function syncStreakCheckIn(opts: {
@@ -208,6 +210,8 @@ async function sessionFromExistingCheckIn(
     token,
     expiresIn: 24 * 60 * 60,
     reward: null,
+    ladder: null,
+    alreadySignedIn: true,
   };
 }
 
