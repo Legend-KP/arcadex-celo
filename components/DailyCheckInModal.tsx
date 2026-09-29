@@ -589,7 +589,7 @@ export default function DailyCheckInModal({
             )}
           </h2>
           <p className="daily-checkin-sub">
-            Check in once per day (resets 00:00 UTC) to keep your streak alive
+            Check in once every 24 hours to keep your streak alive
             {ladderV2 ? (
               <>
                 {" "}
