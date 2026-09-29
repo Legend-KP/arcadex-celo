@@ -447,19 +447,40 @@ export default function DailyCheckInModal({
       }
 
       const hours = result.ladder?.infiniteHoursGranted;
+      const isFinale =
+        complete.day >= STREAK_LADDER_REQUIRED_DAYS ||
+        (Boolean(result.milestone) && !ladderV2);
+      const rewardLine = dayReward
+        ? formatStreakRewardDetail(dayReward)
+        : null;
+
+      let title = "Day locked in!";
+      let body = `Day ${complete.day} is saved. Come back tomorrow to keep your streak going!`;
+
+      if (isFinale) {
+        title = "Streak complete!";
+        body = rewardLine
+          ? `Day ${complete.day} locked in — ${rewardLine}. Amazing run!`
+          : `Day ${complete.day} locked in. Amazing run!`;
+      } else if (sparkGranted) {
+        title = "Milestone reached!";
+        body = hours
+          ? `Infinite Spark is on for ${hours}h. Come back tomorrow for Day ${complete.day + 1}!`
+          : `Infinite Spark is on for 24h. Come back tomorrow for Day ${complete.day + 1}!`;
+      } else if (claimUsdt) {
+        title = "USDT unlocked!";
+        body = `Day ${complete.day} locked in — ${formatUsdtAmount(claimUsdt.amountUsdt)}. Come back tomorrow to keep going!`;
+      } else if (rewardLine) {
+        title = `Day ${complete.day} locked in!`;
+        body = `${rewardLine}. Come back tomorrow to keep your streak alive!`;
+      } else {
+        title = `Day ${complete.day} locked in!`;
+        body = `Nice work. Come back tomorrow for Day ${complete.day + 1}!`;
+      }
+
       setSuccess({
-        title: sparkGranted
-          ? "Milestone reached!"
-          : claimUsdt
-            ? "USDT unlocked!"
-            : "Check-in successful!",
-        body: sparkGranted
-          ? hours
-            ? `Infinite Spark is active for ${hours} hours. Play any game freely!`
-            : "Infinite Spark is active for 24 hours. Play any game freely!"
-          : dayReward
-            ? `Day ${complete.day} locked in — ${formatStreakRewardDetail(dayReward)}. Come back tomorrow!`
-            : `Day ${complete.day} is locked in. Come back tomorrow to keep your streak!`,
+        title,
+        body,
         claimUsdt,
       });
     } catch (err) {
@@ -484,7 +505,7 @@ export default function DailyCheckInModal({
       );
       setSuccess({
         title: "USDT claimed!",
-        body: `${formatUsdtAmount(result.amountUsdt)} is on its way to your wallet.`,
+        body: `${formatUsdtAmount(result.amountUsdt)} is on its way. Come back tomorrow to keep your streak going!`,
         claimUsdt: null,
       });
     } catch (err) {
@@ -844,7 +865,7 @@ export default function DailyCheckInModal({
                 className="spark-success-popup__btn"
                 onClick={() => finishSuccess()}
               >
-                Great!
+                See you tomorrow
               </button>
             )}
             {success.claimUsdt && usdtPayoutsEnabled ? (
@@ -854,7 +875,7 @@ export default function DailyCheckInModal({
                 onClick={() => finishSuccess()}
                 style={{ marginTop: 8, opacity: 0.85 }}
               >
-                Later
+                See you tomorrow
               </button>
             ) : null}
           </div>
