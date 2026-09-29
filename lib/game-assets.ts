@@ -95,6 +95,60 @@ export function normalizeImageAssetUrl(value: unknown): string {
   return "";
 }
 
+/**
+ * Accept only real video paths/URLs. Same path rules as images, but
+ * `data:video/` instead of `data:image/`.
+ */
+export function normalizeVideoAssetUrl(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  if (
+    trimmed.startsWith("/") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("data:video/")
+  ) {
+    return trimmed;
+  }
+
+  return "";
+}
+
+/**
+ * Games that ship a short muted preview under `public/thumbnails/{slug}.webm`
+ * (and optional `.mp4`). Keep this list in sync with files on disk so cards
+ * without a clip never fire 404 requests.
+ */
+const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set(["dot-connect"]);
+
+export type GameVideoSources = {
+  webm: string;
+  mp4: string;
+};
+
+/**
+ * Local preview-video URLs for a game card, or null when none are shipped.
+ * Prefer WebM; MP4 is the Safari / broader fallback.
+ */
+export function gameVideoSources(game: Game): GameVideoSources | null {
+  const folder =
+    resolveLocalGameFolder(game) ??
+    slugifyGameName(game.name) ??
+    (game.id && !isFirestoreAutoId(game.id) ? game.id.trim().toLowerCase() : "");
+
+  if (!folder || !LOCAL_PREVIEW_VIDEO_FOLDERS.has(folder)) {
+    return null;
+  }
+
+  const webm = normalizeVideoAssetUrl(`/thumbnails/${folder}.webm`);
+  const mp4 = normalizeVideoAssetUrl(`/thumbnails/${folder}.mp4`);
+  if (!webm || !mp4) return null;
+
+  return { webm, mp4 };
+}
+
 function isFirestoreAutoId(id: string): boolean {
   return /^[a-zA-Z0-9]{15,}$/.test(id) && !id.includes("-");
 }
