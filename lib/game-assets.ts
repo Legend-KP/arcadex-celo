@@ -121,26 +121,71 @@ export function normalizeVideoAssetUrl(value: unknown): string {
  * (and optional `.mp4`). Keep this list in sync with files on disk so cards
  * without a clip never fire 404 requests.
  */
-const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set(["dot-connect"]);
+const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
+  "dot-connect",
+  "jelly-jumble",
+  "fruit-game",
+  "hungry-hole",
+  "coin-sort",
+]);
+
+/** Name/id aliases that map onto a preview-video folder slug. */
+const PREVIEW_VIDEO_FOLDER_ALIASES: Record<string, string> = {
+  jellyjumble: "jelly-jumble",
+  jelly: "jelly-jumble",
+  "dotconnect": "dot-connect",
+  "fruit-swipe": "fruit-game",
+  fruitswipe: "fruit-game",
+  fruit: "fruit-game",
+  hungryhole: "hungry-hole",
+  hungry: "hungry-hole",
+  coinsort: "coin-sort",
+  coinspot: "coin-sort",
+  "coin-spot": "coin-sort",
+};
 
 export type GameVideoSources = {
   webm: string;
   mp4: string;
 };
 
+function resolvePreviewVideoFolder(game: Game): string | null {
+  const candidates = [
+    resolveLocalGameFolder(game),
+    slugifyGameName(game.name),
+    game.id && !isFirestoreAutoId(game.id) ? game.id.trim().toLowerCase() : "",
+  ].filter(Boolean) as string[];
+
+  for (const raw of candidates) {
+    const mapped = PREVIEW_VIDEO_FOLDER_ALIASES[raw] ?? raw;
+    if (LOCAL_PREVIEW_VIDEO_FOLDERS.has(mapped)) return mapped;
+    if (raw.includes("jelly") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("jelly-jumble")) {
+      return "jelly-jumble";
+    }
+    if (raw.includes("fruit") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("fruit-game")) {
+      return "fruit-game";
+    }
+    if (raw.includes("hungry") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("hungry-hole")) {
+      return "hungry-hole";
+    }
+    if (
+      (raw.includes("coin-sort") || raw.includes("coinsort") || raw.includes("coin-spot")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("coin-sort")
+    ) {
+      return "coin-sort";
+    }
+  }
+
+  return null;
+}
+
 /**
  * Local preview-video URLs for a game card, or null when none are shipped.
  * Prefer WebM; MP4 is the Safari / broader fallback.
  */
 export function gameVideoSources(game: Game): GameVideoSources | null {
-  const folder =
-    resolveLocalGameFolder(game) ??
-    slugifyGameName(game.name) ??
-    (game.id && !isFirestoreAutoId(game.id) ? game.id.trim().toLowerCase() : "");
-
-  if (!folder || !LOCAL_PREVIEW_VIDEO_FOLDERS.has(folder)) {
-    return null;
-  }
+  const folder = resolvePreviewVideoFolder(game);
+  if (!folder) return null;
 
   const webm = normalizeVideoAssetUrl(`/thumbnails/${folder}.webm`);
   const mp4 = normalizeVideoAssetUrl(`/thumbnails/${folder}.mp4`);
