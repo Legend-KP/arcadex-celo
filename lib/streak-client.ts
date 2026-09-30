@@ -109,6 +109,16 @@ export interface StreakSyncResult {
     sparks?: SparkSnapshot;
     state?: StoredSparkState;
   } | null;
+  ladder?: {
+    granted: boolean;
+    day: number;
+    xpGranted: number;
+    infiniteHoursGranted: number | null;
+    usdtPending: number | null;
+    needsUsdtClaim: boolean;
+  } | null;
+  /** True when session was restored from an existing on-chain check-in (no new tx). */
+  alreadySignedIn?: boolean;
 }
 
 export async function syncStreakCheckIn(opts: {
@@ -200,6 +210,8 @@ async function sessionFromExistingCheckIn(
     token,
     expiresIn: 24 * 60 * 60,
     reward: null,
+    ladder: null,
+    alreadySignedIn: true,
   };
 }
 
@@ -269,4 +281,74 @@ export async function grantStreakReward(opts: {
   }
 
   return data;
+}
+
+export type StreakUsdtPendingItem = {
+  day: number;
+  campaignId: number;
+  checkInTx: string;
+  amountUsdt: number;
+  createdAt: number;
+};
+
+export async function fetchPendingStreakUsdt(
+  walletAddress: string
+): Promise<{ payoutsEnabled: boolean; pending: StreakUsdtPendingItem[] }> {
+  const res = await fetch(
+    `/api/streak/usdt/claim?walletAddress=${encodeURIComponent(walletAddress)}`,
+    {
+      method: "GET",
+      headers: walletAuthHeaders(),
+      cache: "no-store",
+    }
+  );
+  const data = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    payoutsEnabled?: boolean;
+    pending?: StreakUsdtPendingItem[];
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error ?? "Could not load pending USDT.");
+  }
+  return {
+    payoutsEnabled: Boolean(data.payoutsEnabled),
+    pending: Array.isArray(data.pending) ? data.pending : [],
+  };
+}
+
+export async function claimStreakUsdt(opts: {
+  walletAddress: string;
+  checkInTx?: string;
+}): Promise<{
+  claimed: boolean;
+  day: number;
+  amountUsdt: number;
+  txHash: string | null;
+}> {
+  const res = await fetch("/api/streak/usdt/claim", {
+    method: "POST",
+    headers: walletAuthHeaders(),
+    body: JSON.stringify({
+      walletAddress: opts.walletAddress,
+      checkInTx: opts.checkInTx,
+    }),
+    cache: "no-store",
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    claimed?: boolean;
+    day?: number;
+    amountUsdt?: number;
+    txHash?: string | null;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error ?? "Could not claim streak USDT.");
+  }
+  return {
+    claimed: Boolean(data.claimed),
+    day: typeof data.day === "number" ? data.day : 0,
+    amountUsdt: typeof data.amountUsdt === "number" ? data.amountUsdt : 0,
+    txHash: data.txHash ?? null,
+  };
 }
