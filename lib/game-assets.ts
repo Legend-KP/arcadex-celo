@@ -539,6 +539,13 @@ const GAME_TUTORIAL_BY_FOLDER: Record<string, string> = {
   "line-link": "/tutorials/LINE-LINK.webp",
   "math-run": "/tutorials/MATH-RUN.webp",
   "orbit-flow": "/tutorials/ORBIT-FLOW.webp",
+  "hungry-hole": "/tutorials/HUNGRY-HOLE.webp",
+  hungryhole: "/tutorials/HUNGRY-HOLE.webp",
+  hungry: "/tutorials/HUNGRY-HOLE.webp",
+  "fruit-swipe": "/tutorials/FRUIT-SWIPE.webp",
+  fruitswipe: "/tutorials/FRUIT-SWIPE.webp",
+  "fruit-game": "/tutorials/FRUIT-SWIPE.webp",
+  fruit: "/tutorials/FRUIT-SWIPE.webp",
 };
 
 function resolveTutorialKey(game: Game): string {
@@ -563,10 +570,28 @@ export function getGameTutorialCandidates(game: Game): string[] {
   if (nameSlug.includes("jelly") || (!isFirestoreAutoId(id) && id.includes("jelly"))) {
     push(GAME_TUTORIAL_BY_FOLDER["jelly-jumble"]);
   }
+  if (nameSlug.includes("hungry") || (!isFirestoreAutoId(id) && id.includes("hungry"))) {
+    push(GAME_TUTORIAL_BY_FOLDER["hungry-hole"]);
+  }
+  if (
+    nameSlug.includes("fruit") ||
+    (!isFirestoreAutoId(id) && id.includes("fruit"))
+  ) {
+    push(GAME_TUTORIAL_BY_FOLDER["fruit-swipe"]);
+  }
   const hyphen = key.toUpperCase();
   const spaced = key.replace(/-/g, " ").toUpperCase();
   push(`/tutorials/${hyphen}.webp`);
   push(`/tutorials/${spaced}.webp`);
+  if (nameSlug.includes("fruit") || key.includes("fruit")) {
+    push("/tutorials/FRUIT-SWIPE.webp");
+    push("/tutorials/FRUIT-GAME.webp");
+    push("/tutorials/FRUIT SWIPE.webp");
+  }
+  if (nameSlug.includes("hungry") || key.includes("hungry")) {
+    push("/tutorials/HUNGRY-HOLE.webp");
+    push("/tutorials/HUNGRY HOLE.webp");
+  }
 
   return out;
 }
