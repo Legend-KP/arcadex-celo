@@ -11,7 +11,7 @@ import { formatActivityCountdown } from "@/lib/activity-week";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
-/** Inline weekly activity leaderboard for the drawer Global Leaderboard view. */
+/** Inline weekly XP leaderboard for the drawer XP Leaderboard view. */
 export default function ActivityLeaderboardView() {
   const { walletAddress } = usePlayerProfile();
   const [entries, setEntries] = useState<ActivityLeaderboardEntry[]>([]);
@@ -68,7 +68,7 @@ export default function ActivityLeaderboardView() {
   return (
     <div className="activity-lb-view">
       <header className="activity-lb-view__header">
-        <h2 className="activity-lb-view__title">Weekly Activity Leaderboard</h2>
+        <h2 className="activity-lb-view__title">XP Leaderboard</h2>
         <p className="activity-lb-hint">
           Come daily and play games to climb the board.
         </p>
