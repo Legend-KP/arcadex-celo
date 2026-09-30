@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import Logo from "@/components/Logo";
 import {
   FAQ_URL,
@@ -7,6 +10,11 @@ import {
   SUPPORT_URL,
   TERMS_URL,
 } from "@/lib/app-footer-links";
+import {
+  unlockTestGame,
+  verifyTestGamePassword,
+} from "@/lib/test-game-access";
+import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
 
 export type AppView =
   | "home"
@@ -34,6 +42,7 @@ interface AppDrawerProps {
   onEditName: () => void;
   playerName: string;
   walletAddress: string;
+  testGameId?: string | null;
 }
 
 function truncateWallet(wallet: string): string {
@@ -51,7 +60,111 @@ export default function AppDrawer({
   onEditName,
   playerName,
   walletAddress,
+  testGameId = null,
 }: AppDrawerProps) {
+  const router = useRouter();
+  const [testOpen, setTestOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [showPw, setShowPw] = useState(false);
+
+  useClaimUiOverlay("test-access", Boolean(testOpen && testGameId));
+
+  function openTest() {
+    setPassword("");
+    setError("");
+    setShowPw(false);
+    setTestOpen(true);
+    onClose();
+  }
+
+  function closeTest() {
+    setTestOpen(false);
+    setPassword("");
+    setError("");
+  }
+
+  function submitTestPassword() {
+    if (!testGameId) return;
+    if (!verifyTestGamePassword(password)) {
+      setError("Wrong password.");
+      setPassword("");
+      return;
+    }
+    unlockTestGame(testGameId);
+    closeTest();
+    router.push(`/game/${testGameId}`);
+  }
+
+  const testModal =
+    testOpen && testGameId ? (
+      <div
+        className="test-access-backdrop"
+        onClick={closeTest}
+        role="presentation"
+      >
+        <div
+          className="test-access-popup"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="test-access-title"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h2 id="test-access-title" className="test-access-popup__title">
+            Test access
+          </h2>
+          <p className="test-access-popup__subtitle">
+            Enter the password to open the test game.
+          </p>
+          <div className="form-group" style={{ textAlign: "left", marginBottom: 12 }}>
+            <label className="form-label" htmlFor="test-game-password">
+              Password
+            </label>
+            <div className="pw-wrap">
+              <input
+                id="test-game-password"
+                className={`form-input ${error ? "input-error" : ""}`}
+                type={showPw ? "text" : "password"}
+                placeholder="Enter password"
+                value={password}
+                autoFocus
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError("");
+                }}
+                onKeyDown={(e) => e.key === "Enter" && submitTestPassword()}
+              />
+              <button
+                className="pw-toggle"
+                onClick={() => setShowPw((v) => !v)}
+                type="button"
+                tabIndex={-1}
+              >
+                {showPw ? "🙈" : "👁"}
+              </button>
+            </div>
+            {error ? <p className="error-msg">{error}</p> : null}
+          </div>
+          <div className="test-access-popup__actions">
+            <button
+              type="button"
+              className="test-access-popup__btn test-access-popup__btn--ghost"
+              onClick={closeTest}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="test-access-popup__btn"
+              onClick={submitTestPassword}
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
   return (
     <>
       <div
@@ -161,8 +274,20 @@ export default function AppDrawer({
           >
             Tutorial
           </button>
+          {testGameId ? (
+            <button
+              type="button"
+              className="app-drawer__footer-link app-drawer__footer-link--button"
+              onClick={openTest}
+            >
+              Test
+            </button>
+          ) : null}
         </div>
       </aside>
+      {typeof document !== "undefined" && testModal
+        ? createPortal(testModal, document.body)
+        : testModal}
     </>
   );
 }

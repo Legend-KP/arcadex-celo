@@ -6,7 +6,6 @@ import AchievementsView from "@/components/AchievementsView";
 import ActivityLeaderboardButton from "@/components/ActivityLeaderboardButton";
 import ActivityLeaderboardView from "@/components/ActivityLeaderboardView";
 import AppDrawer, { type AppView } from "@/components/AppDrawer";
-import AppFooter from "@/components/AppFooter";
 import GameCard from "@/components/GameCard";
 import HomeFilterBar, { type HomeSort } from "@/components/HomeFilterBar";
 import Logo from "@/components/Logo";
@@ -383,6 +382,7 @@ export default function HomePage() {
         onEditName={openEditName}
         playerName={playerName}
         walletAddress={walletAddress}
+        testGameId={testGameId}
       />
 
       <div className="home-shell">
@@ -505,8 +505,6 @@ export default function HomePage() {
             <AchievementsView gameNames={gameNames} />
           )}
         </main>
-
-        <AppFooter testGameId={testGameId} />
       </div>
 
       <PromoPopupHost
