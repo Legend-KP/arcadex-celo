@@ -80,7 +80,6 @@ export default function PromoPopupHost({
     }
 
     if (sessionConsumedRef.current || active) return;
-    if (gamesRef.current.length === 0) return;
 
     clearOpenTimer();
     openTimerRef.current = window.setTimeout(function tryOpen() {

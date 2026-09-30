@@ -12,6 +12,7 @@ import {
   isCommunityPromo,
   isContestPromo,
   isLeaderboardPromo,
+  isSparksUpgradePromo,
   type PromoPopupCandidate,
 } from "@/lib/promo-popups";
 import { playTouchSfx } from "@/lib/sfx";
@@ -108,6 +109,7 @@ export default function PromoPopupModal({
   const contest = isContestPromo(item.kind);
   const community = isCommunityPromo(item.kind);
   const leaderboard = isLeaderboardPromo(item.kind);
+  const sparksUpgrade = isSparksUpgradePromo(item.kind);
   const showTimer =
     (item.kind === "contestEnd" || item.kind === "contestStart") &&
     Boolean(item.endsAt);
@@ -139,7 +141,9 @@ export default function PromoPopupModal({
       <div
         className={`promo-popup${contest ? " promo-popup--contest" : ""}${
           community ? " promo-popup--community" : ""
-        }${leaderboard ? " promo-popup--leaderboard" : ""}`}
+        }${leaderboard ? " promo-popup--leaderboard" : ""}${
+          sparksUpgrade ? " promo-popup--sparks" : ""
+        }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={leaderboard ? undefined : "promo-popup-title"}
@@ -215,6 +219,16 @@ export default function PromoPopupModal({
               width={96}
               height={96}
             />
+            <h2 id="promo-popup-title" className="promo-popup__title">
+              {title}
+            </h2>
+            <p className="promo-popup__body">{body}</p>
+          </>
+        ) : sparksUpgrade ? (
+          <>
+            <span className="promo-popup__sparks-icon" aria-hidden>
+              ⚡
+            </span>
             <h2 id="promo-popup-title" className="promo-popup__title">
               {title}
             </h2>

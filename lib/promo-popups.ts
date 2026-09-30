@@ -5,6 +5,7 @@ import {
   isPromoEventRead,
   wasPromoShownToday,
 } from "@/lib/promo-popups-seen";
+import { SPARK_MAX } from "@/lib/spark";
 import {
   Game,
   gameIsLive,
@@ -26,6 +27,11 @@ export type PromoMilestoneHours =
 /** New-week XP nudge through the first 3 days of the ISO week (was 24h). */
 const NEW_WEEK_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 
+/** Sparks-cap announcement window (UTC). Shown once per user while active. */
+export const SPARKS_UPGRADE_PROMO_START_MS = Date.UTC(2026, 8, 30);
+export const SPARKS_UPGRADE_PROMO_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+export const SPARKS_UPGRADE_PROMO_ID = `sparksUpgrade:${SPARK_MAX}`;
+
 export type PromoPopupKind =
   | "contestEnd"
   | "contestStart"
@@ -33,7 +39,8 @@ export type PromoPopupKind =
   | "weekStart"
   | "newGame"
   | "communityTelegram"
-  | "communityX";
+  | "communityX"
+  | "sparksUpgrade";
 
 export interface PromoPopupCandidate {
   id: string;
@@ -217,19 +224,35 @@ function buildCommunityCandidates(): PromoPopupCandidate[] {
   ];
 }
 
+function buildSparksUpgradeCandidate(now: number): PromoPopupCandidate | null {
+  const endsAt =
+    SPARKS_UPGRADE_PROMO_START_MS + SPARKS_UPGRADE_PROMO_DURATION_MS;
+  if (now < SPARKS_UPGRADE_PROMO_START_MS || now >= endsAt) return null;
+  return {
+    id: SPARKS_UPGRADE_PROMO_ID,
+    kind: "sparksUpgrade",
+    /** Above contest/week so every visitor sees it first while live. */
+    priority: 5,
+    endsAt,
+    persistent: true,
+  };
+}
+
 /**
  * Eligible promos for this moment, sorted by priority (highest first).
  * Host shows at most one per app open; daily cap still limits how many
  * opens in a UTC day can surface a promo (max 3).
+ * Sparks-upgrade announcement bypasses the daily cap so everyone can see it.
  */
 export function buildPromoQueue(
   games: Game[],
   now = Date.now()
 ): PromoPopupCandidate[] {
   const remainingSlots = getPromoRemainingSlotsToday(now);
-  if (remainingSlots <= 0) return [];
+  const sparksUpgrade = buildSparksUpgradeCandidate(now);
 
   const raw: PromoPopupCandidate[] = [
+    ...(sparksUpgrade ? [sparksUpgrade] : []),
     ...buildGameCandidates(games, now),
     ...buildWeekCandidates(now),
     ...buildCommunityCandidates(),
@@ -245,6 +268,10 @@ export function buildPromoQueue(
     if (a.priority !== b.priority) return a.priority - b.priority;
     return a.id.localeCompare(b.id);
   });
+
+  if (remainingSlots <= 0) {
+    return eligible.filter((item) => item.kind === "sparksUpgrade").slice(0, 1);
+  }
 
   return eligible.slice(0, remainingSlots);
 }
@@ -265,6 +292,8 @@ export function getPromoTitle(item: PromoPopupCandidate): string {
       return "Join Telegram";
     case "communityX":
       return "Follow on X";
+    case "sparksUpgrade":
+      return "More Sparks, more plays";
   }
 }
 
@@ -299,6 +328,8 @@ export function getPromoBody(item: PromoPopupCandidate): string {
       return "Join the Telegram community to stay up to date on the latest ArcadeX news.";
     case "communityX":
       return "Follow ArcadeX on X for the latest updates and drops.";
+    case "sparksUpgrade":
+      return `Your Spark bar just got bigger — you now get ${SPARK_MAX} Sparks. Play more games and climb the XP boards faster.`;
   }
 }
 
@@ -316,6 +347,8 @@ export function getPromoCtaLabel(item: PromoPopupCandidate): string {
       return "Join now";
     case "communityX":
       return "Follow now";
+    case "sparksUpgrade":
+      return "Start playing";
   }
 }
 
@@ -329,4 +362,8 @@ export function isContestPromo(kind: PromoPopupKind): boolean {
 
 export function isLeaderboardPromo(kind: PromoPopupKind): boolean {
   return kind === "weekStart" || kind === "weekEnd";
+}
+
+export function isSparksUpgradePromo(kind: PromoPopupKind): boolean {
+  return kind === "sparksUpgrade";
 }

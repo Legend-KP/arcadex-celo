@@ -18534,6 +18534,19 @@ a { color: inherit; text-decoration: none; }
   object-fit: contain;
   background: transparent;
 }
+.promo-popup__sparks-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  margin-bottom: 14px;
+  border-radius: 50%;
+  font-size: 36px;
+  line-height: 1;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  box-shadow: 0 8px 20px rgba(245, 158, 11, 0.25);
+}
 .promo-popup__title {
   font-family: var(--font-body);
   font-size: 20px;

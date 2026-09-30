@@ -1,6 +1,6 @@
 import { SparkSlotView, SparkSnapshot, StoredSparkState } from "@/types";
 
-export const SPARK_MAX = 4;
+export const SPARK_MAX = 6;
 export const SPARK_REGEN_MS = 180 * 60 * 1000;
 
 export function defaultSparkState(): StoredSparkState {
