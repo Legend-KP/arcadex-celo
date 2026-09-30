@@ -143,7 +143,7 @@ a { color: inherit; text-decoration: none; }
 
 /* Home browse filters (V2) — scrolls with games; only topbar stays sticky */
 .home-filters {
-  padding: 10px 14px 8px;
+  padding: 10px 16px 8px;
   background: transparent;
   border-bottom: none;
 }
@@ -1400,7 +1400,7 @@ a { color: inherit; text-decoration: none; }
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px 12px;
-  padding: 10px 14px 12px;
+  padding: 10px 16px 12px;
 }
 
 .game-card-skeleton {
@@ -5766,8 +5766,10 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   gap: 12px;
   overflow-x: auto;
-  padding: 0 14px 12px;
+  /* Inset via item margins — overflow padding is unreliable in MiniPay WebViews */
+  padding: 0 0 12px;
   scroll-snap-type: x mandatory;
+  scroll-padding-inline: 16px;
   -webkit-overflow-scrolling: touch;
 }
 .home-rail::-webkit-scrollbar { display: none; }
@@ -5775,6 +5777,12 @@ a { color: inherit; text-decoration: none; }
   flex: 0 0 132px;
   width: 132px;
   scroll-snap-align: start;
+}
+.home-rail__item:first-child {
+  margin-left: 16px;
+}
+.home-rail__item:last-child {
+  margin-right: 16px;
 }
 .game-card--square .thumb-wrap {
   aspect-ratio: 1 / 1;
@@ -13815,7 +13823,7 @@ a { color: inherit; text-decoration: none; }
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px 12px;
-  padding: 10px 14px 12px;
+  padding: 10px 16px 12px;
 }
 
 .game-card-skeleton {
