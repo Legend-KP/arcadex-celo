@@ -78,6 +78,68 @@ export function normalizeImageAssetUrl(value: unknown): string {
   return "";
 }
 
+/**
+ * Accept only real video paths/URLs. Same path rules as images, but
+ * `data:video/` instead of `data:image/`.
+ */
+export function normalizeVideoAssetUrl(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  if (
+    trimmed.startsWith("/") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("data:video/")
+  ) {
+    return trimmed;
+  }
+
+  return "";
+}
+
+/**
+ * Games that ship a short muted preview under `public/thumbnails/{slug}.webm`
+ * (and optional `.mp4`). Keep this list in sync with files on disk so cards
+ * without a clip never fire 404 requests.
+ */
+const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
+  "dot-connect",
+  "jelly-jumble",
+  "fruit-game",
+  "hungry-hole",
+  "coin-sort",
+  "block-blast",
+  "orbit-flow",
+  "line-link",
+  "basedrop",
+]);
+
+/** Name/id aliases that map onto a preview-video folder slug. */
+const PREVIEW_VIDEO_FOLDER_ALIASES: Record<string, string> = {
+  jellyjumble: "jelly-jumble",
+  jelly: "jelly-jumble",
+  dotconnect: "dot-connect",
+  "fruit-swipe": "fruit-game",
+  fruitswipe: "fruit-game",
+  fruit: "fruit-game",
+  hungryhole: "hungry-hole",
+  hungry: "hungry-hole",
+  coinsort: "coin-sort",
+  coinspot: "coin-sort",
+  "coin-spot": "coin-sort",
+  blockblast: "block-blast",
+  orbitflow: "orbit-flow",
+  linelink: "line-link",
+  "base-drop": "basedrop",
+};
+
+export type GameVideoSources = {
+  webm: string;
+  mp4: string;
+};
+
 function isFirestoreAutoId(id: string): boolean {
   return /^[a-zA-Z0-9]{15,}$/.test(id) && !id.includes("-");
 }
@@ -96,6 +158,77 @@ function resolveLocalGameFolder(game: Game): string | null {
   }
 
   return null;
+}
+
+function resolvePreviewVideoFolder(game: Game): string | null {
+  const candidates = [
+    resolveLocalGameFolder(game),
+    slugifyGameName(game.name),
+    game.id && !isFirestoreAutoId(game.id) ? game.id.trim().toLowerCase() : "",
+  ].filter(Boolean) as string[];
+
+  for (const raw of candidates) {
+    const mapped = PREVIEW_VIDEO_FOLDER_ALIASES[raw] ?? raw;
+    if (LOCAL_PREVIEW_VIDEO_FOLDERS.has(mapped)) return mapped;
+    if (raw.includes("jelly") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("jelly-jumble")) {
+      return "jelly-jumble";
+    }
+    if (raw.includes("fruit") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("fruit-game")) {
+      return "fruit-game";
+    }
+    if (raw.includes("hungry") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("hungry-hole")) {
+      return "hungry-hole";
+    }
+    if (
+      (raw.includes("coin-sort") ||
+        raw.includes("coinsort") ||
+        raw.includes("coin-spot")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("coin-sort")
+    ) {
+      return "coin-sort";
+    }
+    if (
+      (raw.includes("block-blast") || raw.includes("blockblast")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("block-blast")
+    ) {
+      return "block-blast";
+    }
+    if (
+      (raw.includes("orbit-flow") || raw.includes("orbitflow")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("orbit-flow")
+    ) {
+      return "orbit-flow";
+    }
+    if (
+      (raw.includes("line-link") || raw.includes("linelink")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("line-link")
+    ) {
+      return "line-link";
+    }
+    if (
+      (raw.includes("basedrop") || raw.includes("base-drop")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("basedrop")
+    ) {
+      return "basedrop";
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Local preview-video URLs for a game card, or null when none are shipped.
+ * Prefer WebM; MP4 is the Safari / broader fallback.
+ */
+export function gameVideoSources(game: Game): GameVideoSources | null {
+  const folder = resolvePreviewVideoFolder(game);
+  if (!folder) return null;
+
+  const webm = normalizeVideoAssetUrl(`/thumbnails/${folder}.webm`);
+  const mp4 = normalizeVideoAssetUrl(`/thumbnails/${folder}.mp4`);
+  if (!webm || !mp4) return null;
+
+  return { webm, mp4 };
 }
 
 function pushLocalGameAssets(
@@ -256,6 +389,32 @@ export function gameMenuBackgroundCandidates(game: Game): string[] {
 /** Primary menu hero image — load this before revealing the game menu. */
 export function getPrimaryGameMenuImage(game: Game): string | null {
   return gameMenuImageCandidates(game)[0] ?? null;
+}
+
+/**
+ * Square 1:1 art for promo popups / badges — logo first, then thumbnail/fallback.
+ * Prefer this over a single URL so callers can advance on load errors.
+ */
+export function gameSquareImageCandidates(game: Game): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  const push = (url?: string) => {
+    const normalized = normalizeImageAssetUrl(url);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    out.push(normalized);
+  };
+
+  for (const url of gameAssetCandidates(game, "logo")) push(url);
+  for (const url of gameAssetCandidates(game, "thumbnail")) push(url);
+  for (const url of gameFallbackCandidates(game)) push(url);
+
+  return out;
+}
+
+export function getPrimaryGameSquareImage(game: Game): string | null {
+  return gameSquareImageCandidates(game)[0] ?? null;
 }
 
 /**

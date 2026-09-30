@@ -80,6 +80,11 @@ export interface Game {
   plays: string;       // display string e.g. "1.2m"
   fallbackImage: string; // image URL when thumbnail/logo are missing
   active: boolean;
+  /**
+   * When true, the game is hidden from the public arcade and only reachable
+   * via the footer Test button (password gated). Only one game may be test at a time.
+   */
+  isTest?: boolean;
   /** When false, the game is visible but shows "Coming Soon" and cannot be played. Defaults to true. */
   live?: boolean;
   /** When false, this is a level game: no leaderboard UI; progress is stored as `l`. Defaults to true (score game, stores `s`). */
@@ -96,6 +101,11 @@ export interface Game {
   contestEndsAt?: number;
   /** Display order on the home page (lower = earlier). Set via admin drag-and-drop. */
   sortOrder?: number;
+  /**
+   * Unix ms when the game went live as a new arrival (create live, or Coming Soon → live).
+   * Drives the New Arrival card tag (4 days) and promo popup.
+   */
+  newArrivalAt?: number;
   createdAt: number;
 }
 
@@ -105,6 +115,29 @@ export function gameHasLeaderboard(game: Pick<Game, "hasLeaderboard">): boolean 
 
 export function gameIsLive(game: Pick<Game, "live">): boolean {
   return game.live !== false;
+}
+
+export function gameIsTest(game: Pick<Game, "isTest">): boolean {
+  return game.isTest === true;
+}
+
+/** How long the New Arrival tag stays on a game after it goes live. */
+export const NEW_ARRIVAL_DURATION_MS = 4 * 24 * 60 * 60 * 1000;
+
+/** True while within 4 days of `newArrivalAt` (live, non-test, visible games only). */
+export function gameIsNewArrival(
+  game: Pick<Game, "newArrivalAt" | "live" | "isTest" | "active">,
+  now = Date.now()
+): boolean {
+  if (game.active === false || game.isTest === true || game.live === false) {
+    return false;
+  }
+  const started = game.newArrivalAt;
+  if (typeof started !== "number" || !Number.isFinite(started) || started <= 0) {
+    return false;
+  }
+  const age = now - started;
+  return age >= 0 && age < NEW_ARRIVAL_DURATION_MS;
 }
 
 export function gameHasContestLive(

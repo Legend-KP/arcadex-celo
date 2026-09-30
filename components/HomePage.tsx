@@ -3,11 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Game, gameHasContestLive, gameIsLive } from "@/types";
 import AchievementsView from "@/components/AchievementsView";
+import ActivityLeaderboardButton from "@/components/ActivityLeaderboardButton";
 import ActivityLeaderboardView from "@/components/ActivityLeaderboardView";
 import AppDrawer, { type AppView } from "@/components/AppDrawer";
+import AppFooter from "@/components/AppFooter";
 import GameCard from "@/components/GameCard";
 import HomeFilterBar, { type HomeSort } from "@/components/HomeFilterBar";
 import Logo from "@/components/Logo";
+import PromoPopupHost from "@/components/PromoPopupHost";
+import RewardsPayoutStrip from "@/components/RewardsPayoutStrip";
 import SparkBatteryBar from "@/components/SparkBatteryBar";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import {
@@ -206,6 +210,9 @@ export default function HomePage() {
   const [playCounts, setPlayCounts] = useState<Record<string, number>>(() => {
     return readCachedGamesList()?.playCounts ?? {};
   });
+  const [testGameId, setTestGameId] = useState<string | null>(() => {
+    return readCachedGamesList()?.testGameId ?? null;
+  });
   const [loading, setLoading] = useState(() => !readCachedGamesList());
   const [error, setError] = useState("");
   const [sort, setSort] = useState<HomeSort>("default");
@@ -215,6 +222,7 @@ export default function HomePage() {
   const [recentMap, setRecentMap] = useState<Record<string, number>>({});
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [view, setView] = useState<AppView>("home");
+  const [activityBoardOpen, setActivityBoardOpen] = useState(false);
 
   useEffect(() => {
     if (!walletAddress) return;
@@ -255,11 +263,14 @@ export default function HomePage() {
 
         const nextGames = data.games ?? [];
         const nextPlayCounts = data.playCounts ?? {};
+        const nextTestGameId = data.testGameId ?? null;
         setGames(nextGames);
         setPlayCounts(nextPlayCounts);
+        setTestGameId(nextTestGameId);
         writeCachedGamesList({
           games: nextGames,
           playCounts: nextPlayCounts,
+          testGameId: nextTestGameId,
           fetchedAt: Date.now(),
         });
       } catch (err) {
@@ -356,7 +367,8 @@ export default function HomePage() {
     }
   };
 
-  const showCatalogFilters = view === "home" || view === "games" || view === "contests";
+  const showCatalogFilters =
+    view === "home" || view === "games" || view === "contests";
 
   return (
     <div className="home">
@@ -374,22 +386,30 @@ export default function HomePage() {
       />
 
       <div className="home-shell">
-        <header className="topbar home-sticky">
-          <div className="topbar-left">
-            <button
-              type="button"
-              className="home-menu-btn"
-              aria-label="Open menu"
-              onClick={() => setDrawerOpen(true)}
-            >
-              <span className="home-menu-btn__bars" aria-hidden />
-            </button>
-            <Logo variant="header" />
-          </div>
-          <div className="topbar-actions">
-            <SparkBatteryBar />
-          </div>
-        </header>
+        <div className="home-sticky-chrome">
+          <header className="topbar">
+            <div className="topbar-left">
+              <button
+                type="button"
+                className="home-menu-btn"
+                aria-label="Open menu"
+                onClick={() => setDrawerOpen(true)}
+              >
+                <span className="home-menu-btn__bars" aria-hidden />
+              </button>
+              <Logo variant="header" />
+            </div>
+            <div className="topbar-actions">
+              <ActivityLeaderboardButton
+                open={activityBoardOpen}
+                onOpenChange={setActivityBoardOpen}
+              />
+              <SparkBatteryBar />
+            </div>
+          </header>
+
+          <RewardsPayoutStrip />
+        </div>
 
         {showCatalogFilters && view !== "home" && (
           <HomeFilterBar
@@ -485,7 +505,14 @@ export default function HomePage() {
             <AchievementsView gameNames={gameNames} />
           )}
         </main>
+
+        <AppFooter testGameId={testGameId} />
       </div>
+
+      <PromoPopupHost
+        games={games}
+        onOpenActivityBoard={() => setActivityBoardOpen(true)}
+      />
     </div>
   );
 }

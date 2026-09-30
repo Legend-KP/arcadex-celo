@@ -27,6 +27,12 @@ import { getFirebaseAccessToken, getProjectId, getServiceAccount } from "@/lib/f
 import { fetchWithTimeout } from "@/lib/firebase-fetch";
 import { noteFirestoreReads } from "@/lib/firestore-read-counter";
 import { normalizeImageAssetUrl } from "@/lib/game-assets";
+import {
+  isGameInPublicCatalog,
+  isGameVisible,
+} from "@/lib/game-visibility";
+
+export { isGameInPublicCatalog, isGameVisible };
 
 type FirestoreValue = {
   stringValue?: string;
@@ -84,6 +90,7 @@ function docToGame(doc: FirestoreDocument): Game {
       parseField(fields.fallbackImage)
     ),
     active: parseBooleanFlag(parseField(fields.active), true),
+    isTest: parseField(fields.isTest) === true,
     live: parseBooleanFlag(parseField(fields.live), true),
     hasLeaderboard: parseBooleanFlag(parseField(fields.hasLeaderboard), true),
     contestLive: parseField(fields.contestLive) === true,
@@ -94,6 +101,7 @@ function docToGame(doc: FirestoreDocument): Game {
     contestStartedAt: parseField(fields.contestStartedAt) as number | undefined,
     contestEndsAt: parseField(fields.contestEndsAt) as number | undefined,
     sortOrder: parseField(fields.sortOrder) as number | undefined,
+    newArrivalAt: parseField(fields.newArrivalAt) as number | undefined,
     createdAt: Number(parseField(fields.createdAt) ?? 0),
   };
 }
@@ -204,10 +212,6 @@ function encodeFields(
   return fields;
 }
 
-export function isGameVisible(game: Game): boolean {
-  return game.active !== false;
-}
-
 async function fetchGamesFromFirestore(): Promise<Game[]> {
   const docs = await listDocuments("games");
   return sortGames(docs.map(docToGame));
@@ -294,16 +298,38 @@ export async function fetchGameFromServer(id: string): Promise<Game | null> {
   }
 }
 
+async function clearOtherTestGames(keepId: string | null): Promise<void> {
+  const games = await fetchGamesFromServer();
+  const others = games.filter(
+    (g) => g.isTest === true && (keepId === null || g.id !== keepId)
+  );
+  await Promise.all(
+    others.map((other) => patchGameOnFirestore(other.id, { isTest: false }))
+  );
+}
+
 export async function createGameOnServer(
   data: Omit<Game, "id" | "createdAt">
 ): Promise<string> {
   const existing = await fetchGamesFromServer();
   const sortOrder = data.sortOrder ?? nextGameSortOrder(existing);
+  const now = Date.now();
+  let payload: Omit<Game, "id" | "createdAt"> & {
+    sortOrder: number;
+    createdAt: number;
+  } = { ...data, sortOrder, createdAt: now };
+
+  if (payload.isTest === true) {
+    await clearOtherTestGames(null);
+  }
+  if (payload.live !== false && typeof payload.newArrivalAt !== "number") {
+    payload = { ...payload, newArrivalAt: now };
+  }
 
   const res = await firestoreFetch("games", {
     method: "POST",
     body: JSON.stringify({
-      fields: encodeFields({ ...data, sortOrder, createdAt: Date.now() }),
+      fields: encodeFields(payload),
     }),
   });
 
@@ -327,7 +353,22 @@ export async function updateGameOnServer(
   id: string,
   data: Partial<Omit<Game, "id">>
 ): Promise<void> {
-  await patchGameOnFirestore(id, data);
+  const patch: Partial<Omit<Game, "id">> = { ...data };
+  if (patch.isTest === true) {
+    await clearOtherTestGames(id);
+  }
+  if (
+    (patch.live === true || patch.isTest === true) &&
+    typeof patch.newArrivalAt !== "number"
+  ) {
+    const current = await fetchGameFromServer(id);
+    if (current && current.live === false && patch.live === true) {
+      patch.newArrivalAt = Date.now();
+    } else if (patch.isTest === true && current && !current.newArrivalAt) {
+      patch.newArrivalAt = Date.now();
+    }
+  }
+  await patchGameOnFirestore(id, patch);
   invalidateGameCache(id);
   await bumpCatalogGeneration();
   const refreshed = await fetchGameFromFirestore(id);
