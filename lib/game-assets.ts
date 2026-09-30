@@ -539,13 +539,14 @@ const GAME_TUTORIAL_BY_FOLDER: Record<string, string> = {
   "line-link": "/tutorials/LINE-LINK.webp",
   "math-run": "/tutorials/MATH-RUN.webp",
   "orbit-flow": "/tutorials/ORBIT-FLOW.webp",
-  "hungry-hole": "/tutorials/HUNGRY-HOLE.webp",
-  hungryhole: "/tutorials/HUNGRY-HOLE.webp",
-  hungry: "/tutorials/HUNGRY-HOLE.webp",
-  "fruit-swipe": "/tutorials/FRUIT-SWIPE.webp",
-  fruitswipe: "/tutorials/FRUIT-SWIPE.webp",
-  "fruit-game": "/tutorials/FRUIT-SWIPE.webp",
-  fruit: "/tutorials/FRUIT-SWIPE.webp",
+  "hungry-hole": "/tutorials/hungry-hole.webp",
+  hungryhole: "/tutorials/hungry-hole.webp",
+  hungry: "/tutorials/hungry-hole.webp",
+  "fruit-swipe": "/tutorials/fruite-swipe.webp",
+  fruitswipe: "/tutorials/fruite-swipe.webp",
+  "fruit-game": "/tutorials/fruite-swipe.webp",
+  "fruite-swipe": "/tutorials/fruite-swipe.webp",
+  fruit: "/tutorials/fruite-swipe.webp",
 };
 
 function resolveTutorialKey(game: Game): string {
@@ -584,13 +585,12 @@ export function getGameTutorialCandidates(game: Game): string[] {
   push(`/tutorials/${hyphen}.webp`);
   push(`/tutorials/${spaced}.webp`);
   if (nameSlug.includes("fruit") || key.includes("fruit")) {
-    push("/tutorials/FRUIT-SWIPE.webp");
-    push("/tutorials/FRUIT-GAME.webp");
-    push("/tutorials/FRUIT SWIPE.webp");
+    push("/tutorials/fruite-swipe.webp");
+    push("/tutorials/fruit-swipe.webp");
+    push("/tutorials/fruit-game.webp");
   }
   if (nameSlug.includes("hungry") || key.includes("hungry")) {
-    push("/tutorials/HUNGRY-HOLE.webp");
-    push("/tutorials/HUNGRY HOLE.webp");
+    push("/tutorials/hungry-hole.webp");
   }
 
   return out;
