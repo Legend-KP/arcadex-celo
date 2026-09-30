@@ -127,6 +127,10 @@ const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
   "fruit-game",
   "hungry-hole",
   "coin-sort",
+  "block-blast",
+  "orbit-flow",
+  "line-link",
+  "basedrop",
 ]);
 
 /** Name/id aliases that map onto a preview-video folder slug. */
@@ -142,6 +146,10 @@ const PREVIEW_VIDEO_FOLDER_ALIASES: Record<string, string> = {
   coinsort: "coin-sort",
   coinspot: "coin-sort",
   "coin-spot": "coin-sort",
+  blockblast: "block-blast",
+  orbitflow: "orbit-flow",
+  linelink: "line-link",
+  "base-drop": "basedrop",
 };
 
 export type GameVideoSources = {
@@ -173,6 +181,30 @@ function resolvePreviewVideoFolder(game: Game): string | null {
       LOCAL_PREVIEW_VIDEO_FOLDERS.has("coin-sort")
     ) {
       return "coin-sort";
+    }
+    if (
+      (raw.includes("block-blast") || raw.includes("blockblast")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("block-blast")
+    ) {
+      return "block-blast";
+    }
+    if (
+      (raw.includes("orbit-flow") || raw.includes("orbitflow")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("orbit-flow")
+    ) {
+      return "orbit-flow";
+    }
+    if (
+      (raw.includes("line-link") || raw.includes("linelink")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("line-link")
+    ) {
+      return "line-link";
+    }
+    if (
+      (raw.includes("basedrop") || raw.includes("base-drop")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("basedrop")
+    ) {
+      return "basedrop";
     }
   }
 
