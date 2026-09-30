@@ -2,13 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  Game,
-  gameHasLeaderboard,
-  gameHasContestLive,
-  gameIsLive,
-  gameIsTest,
-} from "@/types";
+import { Game, gameHasLeaderboard, gameHasContestLive, gameIsLive, gameIsTest } from "@/types";
 import GameClient from "@/components/GameClient";
 import GameMenu from "@/components/GameMenu";
 import Leaderboard, { type LeaderboardMode } from "@/components/Leaderboard";
@@ -28,6 +22,7 @@ import {
   playPurpose,
   signInOnChain,
 } from "@/lib/arcadex-tx-hub";
+import { recordRecentPlayed } from "@/lib/recent-played";
 import {
   isTestGameUnlocked,
   unlockTestGame,
@@ -94,6 +89,7 @@ export default function GamePageClient() {
         }
 
         if (nextGame && gameIsLive(nextGame)) {
+          recordRecentPlayed(nextGame.id);
           fetch(`/api/games/${id}/play`, { method: "POST" }).catch(() => {
             // Play tracking is best-effort
           });
@@ -155,6 +151,7 @@ export default function GamePageClient() {
       return;
     }
 
+    recordRecentPlayed(unlockedGame.id);
     fetch(`/api/games/${unlockedGame.id}/play`, { method: "POST" }).catch(
       () => {
         // Play tracking is best-effort

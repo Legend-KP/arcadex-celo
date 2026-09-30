@@ -50,7 +50,11 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(
-      { games: catalog.games, playCounts: catalog.playCounts, testGameId: catalog.testGameId },
+      {
+        games: catalog.games,
+        playCounts: catalog.playCounts,
+        testGameId: catalog.testGameId,
+      },
       {
         headers: {
           "Cache-Control": GAMES_API_CACHE_CONTROL,

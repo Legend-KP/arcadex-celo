@@ -1,6 +1,6 @@
 "use client";
 
-import { Game } from "@/types";
+import { Game, Mission } from "@/types";
 
 const SESSION_KEY = "arcadex_admin_authed";
 const LEGACY_SESSION_KEY = SESSION_KEY;
@@ -169,6 +169,98 @@ export async function reorderAdminGames(orderedIds: string[]): Promise<void> {
       res.status === 401
         ? "Session expired. Lock and sign in again."
         : (data.error ?? "Failed to save game order.")
+    );
+  }
+}
+
+export async function fetchAdminMissions(): Promise<Mission[]> {
+  const res = await fetch("/api/admin/missions", {
+    headers: adminHeaders(),
+    ...fetchOptions,
+  });
+  const data = await parseJson<{ missions?: Mission[]; error?: string }>(res);
+  if (!res.ok) {
+    throw new Error(
+      res.status === 401
+        ? "Session expired. Lock and sign in again."
+        : (data.error ?? "Could not load missions.")
+    );
+  }
+  return data.missions ?? [];
+}
+
+export async function createAdminMission(input: {
+  gameId: string;
+  title: string;
+  type: "score" | "level";
+  threshold: number;
+  mode?: string | null;
+  xpReward: number;
+  active?: boolean;
+}): Promise<Mission> {
+  const res = await fetch("/api/admin/missions", {
+    method: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify(input),
+    credentials: "include",
+  });
+  const data = await parseJson<{ mission?: Mission; error?: string }>(res);
+  if (!res.ok) {
+    throw new Error(
+      res.status === 401
+        ? "Session expired. Lock and sign in again."
+        : (data.error ?? "Failed to create mission.")
+    );
+  }
+  if (!data.mission) throw new Error("Server returned no mission.");
+  return data.mission;
+}
+
+export async function updateAdminMission(
+  id: string,
+  patch: Partial<{
+    gameId: string;
+    title: string;
+    type: "score" | "level";
+    threshold: number;
+    mode: string | null;
+    xpReward: number;
+    active: boolean;
+  }>
+): Promise<Mission> {
+  const res = await fetch("/api/admin/missions", {
+    method: "PATCH",
+    headers: adminHeaders(),
+    body: JSON.stringify({ id, ...patch }),
+    credentials: "include",
+  });
+  const data = await parseJson<{ mission?: Mission; error?: string }>(res);
+  if (!res.ok) {
+    throw new Error(
+      res.status === 401
+        ? "Session expired. Lock and sign in again."
+        : (data.error ?? "Failed to update mission.")
+    );
+  }
+  if (!data.mission) throw new Error("Server returned no mission.");
+  return data.mission;
+}
+
+export async function deleteAdminMission(id: string): Promise<void> {
+  const res = await fetch(
+    `/api/admin/missions?id=${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+      headers: adminHeaders(),
+      credentials: "include",
+    }
+  );
+  const data = await parseJson<{ error?: string }>(res);
+  if (!res.ok) {
+    throw new Error(
+      res.status === 401
+        ? "Session expired. Lock and sign in again."
+        : (data.error ?? "Failed to delete mission.")
     );
   }
 }

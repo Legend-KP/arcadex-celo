@@ -24,6 +24,7 @@ import {
   gameIsTest,
 } from "@/types";
 import AdminContestModal from "@/components/AdminContestModal";
+import AdminMissionsPanel from "@/components/AdminMissionsPanel";
 import Logo from "@/components/Logo";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "/";
@@ -659,7 +660,12 @@ export default function AdminPortal() {
                     <p className="admin-game-url">{g.url}</p>
                     <p className="admin-game-plays">
                       {g.plays} plays · {g.active ? "🟢 Visible" : "⚫ Hidden"} ·{" "}
-                      {gameIsTest(g) ? "🧪 Test" : gameIsLive(g) ? "✅ Live" : "🔜 Coming Soon"} ·{" "}
+                      {gameIsTest(g)
+                        ? "🧪 Test"
+                        : gameIsLive(g)
+                          ? "✅ Live"
+                          : "🔜 Coming Soon"}{" "}
+                      ·{" "}
                       {gameHasLeaderboard(g) ? "🏆 Leaderboard" : "📊 Level-based"} ·{" "}
                       {gameHasContestLive(g)
                         ? "🔥 Contest Live"
@@ -716,6 +722,8 @@ export default function AdminPortal() {
             )}
           </div>
         )}
+
+        <AdminMissionsPanel games={games} showToast={showToast} />
       </div>
 
       <AdminContestModal
