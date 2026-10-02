@@ -272,7 +272,7 @@ export default function DailyXpLiveBoard({
   const xp = live ? me?.score ?? 0 : 0;
   const progressPct = Math.min(100, Math.round((xp / threshold) * 100));
   const rewardLabel = `$${DAILY_XP_REWARD_USDT.toFixed(2)} USDT`;
-  const previewGames = games.slice(0, 2);
+  const previewGames = games.slice(0, 1);
   const xpLabel = loading && live ? "…" : `${xp} / ${threshold} XP`;
 
   function renderGameRow(game: Game) {
@@ -430,7 +430,7 @@ export default function DailyXpLiveBoard({
           <h3 className="daily-xp-board__section-title">
             Play Games to earn XP
           </h3>
-          {games.length > 0 ? (
+          {games.length > 1 ? (
             <button
               type="button"
               className="daily-xp-board__see-more"

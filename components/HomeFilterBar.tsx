@@ -15,13 +15,15 @@ const SORT_OPTIONS: { id: HomeSort; label: string }[] = [
 
 interface HomeFilterBarProps {
   sort: HomeSort;
-  contestOnly: boolean;
+  continueOnly: boolean;
   searchOpen: boolean;
   searchQuery: string;
   onSortChange: (sort: HomeSort) => void;
-  onContestOnlyChange: (on: boolean) => void;
+  onContinueOnlyChange: (on: boolean) => void;
   onSearchOpenChange: (open: boolean) => void;
   onSearchQueryChange: (query: string) => void;
+  /** Hide Continue playing chip (e.g. Contests drawer view). */
+  hideContinueChip?: boolean;
 }
 
 function SortIcon() {
@@ -68,13 +70,14 @@ function SearchIcon() {
 
 export default function HomeFilterBar({
   sort,
-  contestOnly,
+  continueOnly,
   searchOpen,
   searchQuery,
   onSortChange,
-  onContestOnlyChange,
+  onContinueOnlyChange,
   onSearchOpenChange,
   onSearchQueryChange,
+  hideContinueChip = false,
 }: HomeFilterBarProps) {
   const [sortSheetOpen, setSortSheetOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -177,18 +180,20 @@ export default function HomeFilterBar({
           {sortActive ? sortLabel : "Sort"}
         </button>
 
-        <button
-          type="button"
-          className={
-            contestOnly
-              ? "home-filter-chip home-filter-chip--active"
-              : "home-filter-chip"
-          }
-          aria-pressed={contestOnly}
-          onClick={() => onContestOnlyChange(!contestOnly)}
-        >
-          Contest live
-        </button>
+        {!hideContinueChip ? (
+          <button
+            type="button"
+            className={
+              continueOnly
+                ? "home-filter-chip home-filter-chip--active"
+                : "home-filter-chip"
+            }
+            aria-pressed={continueOnly}
+            onClick={() => onContinueOnlyChange(!continueOnly)}
+          >
+            Continue playing
+          </button>
+        ) : null}
 
         <button
           type="button"

@@ -6,6 +6,7 @@ import AchievementsView from "@/components/AchievementsView";
 import ActivityLeaderboardButton from "@/components/ActivityLeaderboardButton";
 import ActivityLeaderboardView from "@/components/ActivityLeaderboardView";
 import AppDrawer, { type AppView } from "@/components/AppDrawer";
+import DailyXpHomeBanner from "@/components/DailyXpHomeBanner";
 import GameCard from "@/components/GameCard";
 import HomeFilterBar, { type HomeSort } from "@/components/HomeFilterBar";
 import Logo from "@/components/Logo";
@@ -24,14 +25,14 @@ import { getRecentPlayedMap } from "@/lib/recent-played";
 function applyHomeBrowse(
   games: Game[],
   sort: HomeSort,
-  contestOnly: boolean,
+  continueOnly: boolean,
   searchQuery: string,
   recentMap: Record<string, number>
 ): Game[] {
   let next = games;
 
-  if (contestOnly) {
-    next = next.filter((game) => gameHasContestLive(game));
+  if (continueOnly) {
+    next = next.filter((game) => recentMap[game.id] !== undefined);
   }
 
   const q = searchQuery.trim().toLowerCase();
@@ -39,7 +40,7 @@ function applyHomeBrowse(
     next = next.filter((game) => game.name.toLowerCase().includes(q));
   }
 
-  if (sort === "recent") {
+  if (sort === "recent" || continueOnly) {
     next = [...next]
       .filter((game) => recentMap[game.id] !== undefined)
       .sort((a, b) => (recentMap[b.id] ?? 0) - (recentMap[a.id] ?? 0));
@@ -60,7 +61,7 @@ function applyHomeBrowse(
 
 function emptyMessage(
   sort: HomeSort,
-  contestOnly: boolean,
+  continueOnly: boolean,
   searchQuery: string,
   hasAnyGames: boolean
 ): string {
@@ -68,8 +69,8 @@ function emptyMessage(
   if (searchQuery.trim()) {
     return `No games match “${searchQuery.trim()}”.`;
   }
-  if (contestOnly) {
-    return "No live contests right now. Check back soon!";
+  if (continueOnly) {
+    return "No recently played games yet. Open a game to see it here.";
   }
   if (sort === "recent") {
     return "No recently played games yet. Open a game to see it here.";
@@ -215,7 +216,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(() => !readCachedGamesList());
   const [error, setError] = useState("");
   const [sort, setSort] = useState<HomeSort>("default");
-  const [contestOnly, setContestOnly] = useState(false);
+  const [continueOnly, setContinueOnly] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [recentMap, setRecentMap] = useState<Record<string, number>>({});
@@ -317,16 +318,6 @@ export default function HomePage() {
     () => games.filter((g) => !gameIsLive(g)),
     [games]
   );
-  const continueGames = useMemo(() => {
-    const ids = Object.keys(recentMap).sort(
-      (a, b) => (recentMap[b] ?? 0) - (recentMap[a] ?? 0)
-    );
-    const byId = new Map(liveGames.map((g) => [g.id, g]));
-    return ids
-      .map((id) => byId.get(id))
-      .filter((g): g is Game => Boolean(g))
-      .slice(0, 12);
-  }, [liveGames, recentMap]);
 
   const catalogGames = useMemo(() => {
     const source =
@@ -338,7 +329,7 @@ export default function HomePage() {
     return applyHomeBrowse(
       source,
       sort,
-      view === "home" ? contestOnly : view === "contests",
+      view === "contests" ? false : continueOnly,
       searchOpen ? searchQuery : "",
       recentMap
     );
@@ -347,7 +338,7 @@ export default function HomePage() {
     contestGames,
     liveGames,
     sort,
-    contestOnly,
+    continueOnly,
     searchOpen,
     searchQuery,
     recentMap,
@@ -364,6 +355,11 @@ export default function HomePage() {
     if (next === "recent") {
       setRecentMap(getRecentPlayedMap());
     }
+  };
+
+  const handleContinueOnlyChange = (on: boolean) => {
+    setContinueOnly(on);
+    if (on) setRecentMap(getRecentPlayedMap());
   };
 
   const showCatalogFilters =
@@ -414,33 +410,32 @@ export default function HomePage() {
         {showCatalogFilters && view !== "home" && (
           <HomeFilterBar
             sort={sort}
-            contestOnly={view === "contests" ? true : contestOnly}
+            continueOnly={view === "contests" ? false : continueOnly}
             searchOpen={searchOpen}
             searchQuery={searchQuery}
             onSortChange={handleSortChange}
-            onContestOnlyChange={
-              view === "contests" ? () => undefined : setContestOnly
+            onContinueOnlyChange={
+              view === "contests" ? () => undefined : handleContinueOnlyChange
             }
             onSearchOpenChange={setSearchOpen}
             onSearchQueryChange={setSearchQuery}
+            hideContinueChip={view === "contests"}
           />
         )}
 
         <main className="home-main">
           {view === "home" && (
             <>
+              <DailyXpHomeBanner
+                onOpenBoard={() => setActivityBoardOpen(true)}
+              />
+
               <HorizontalGameRow
                 title="Live contests"
                 badge={contestGames.length || undefined}
                 games={contestGames}
                 playCounts={playCounts}
                 showContestTimer
-              />
-              <HorizontalGameRow
-                title="Continue playing"
-                games={continueGames}
-                playCounts={playCounts}
-                recentMap={recentMap}
               />
 
               <section className="home-section home-section--catalog">
@@ -449,11 +444,11 @@ export default function HomePage() {
                 </div>
                 <HomeFilterBar
                   sort={sort}
-                  contestOnly={contestOnly}
+                  continueOnly={continueOnly}
                   searchOpen={searchOpen}
                   searchQuery={searchQuery}
                   onSortChange={handleSortChange}
-                  onContestOnlyChange={setContestOnly}
+                  onContinueOnlyChange={handleContinueOnlyChange}
                   onSearchOpenChange={setSearchOpen}
                   onSearchQueryChange={setSearchQuery}
                 />
@@ -461,7 +456,7 @@ export default function HomePage() {
                   games={applyHomeBrowse(
                     liveGames,
                     sort,
-                    contestOnly,
+                    continueOnly,
                     searchOpen ? searchQuery : "",
                     recentMap
                   )}
@@ -470,7 +465,7 @@ export default function HomePage() {
                   error={error}
                   empty={emptyMessage(
                     sort,
-                    contestOnly,
+                    continueOnly,
                     searchOpen ? searchQuery : "",
                     liveGames.length > 0
                   )}
@@ -493,7 +488,7 @@ export default function HomePage() {
               error={error}
               empty={emptyMessage(
                 sort,
-                view === "contests" || contestOnly,
+                view === "contests" ? false : continueOnly,
                 searchOpen ? searchQuery : "",
                 (view === "contests" ? contestGames : liveGames).length > 0
               )}
