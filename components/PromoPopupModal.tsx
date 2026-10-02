@@ -168,6 +168,12 @@ export default function PromoPopupModal({
             active={open}
             compact
             hideClose
+            onGoHome={() => {
+              onDismiss();
+              if (typeof window !== "undefined") {
+                window.location.assign("/");
+              }
+            }}
           />
         ) : contest ? (
           <>

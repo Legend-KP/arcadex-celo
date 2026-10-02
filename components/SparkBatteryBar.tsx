@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useSparks } from "@/components/SparkProvider";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { formatChainError } from "@/lib/celo-public-client";
 import { playSuccessSfx, playTouchSfx, preloadSfx } from "@/lib/sfx";
-import { formatSparkCountdown } from "@/lib/spark";
+import { formatSparkDuration } from "@/lib/spark";
 import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
 
 export default function SparkBatteryBar() {
@@ -148,7 +148,7 @@ export default function SparkBatteryBar() {
         <header className="spark-panel__header">
           <div className="spark-panel__title-row">
             <h2 id="spark-panel-title" className="spark-panel__title">
-              Sparks
+              SPARKS
             </h2>
           </div>
           <p className="spark-panel__intro">
@@ -156,76 +156,81 @@ export default function SparkBatteryBar() {
           </p>
         </header>
 
-        {sparks.hasInfinite ? (
-          <section className="spark-panel__status">
-            <div className="spark-panel__count-row">
-              <span className="spark-panel__count-icon" aria-hidden>
-                ∞
+        <section className="spark-panel__status">
+          <div className="spark-panel__status-main">
+            <div
+              className="spark-panel__ring"
+              style={
+                {
+                  "--spark-ring-pct": sparks.hasInfinite
+                    ? "100"
+                    : String(Math.min(100, Math.max(0, sparks.fillPercent))),
+                } as CSSProperties
+              }
+              aria-hidden
+            >
+              <svg className="spark-panel__ring-svg" viewBox="0 0 100 100">
+                <circle
+                  className="spark-panel__ring-track"
+                  cx="50"
+                  cy="50"
+                  r="42"
+                />
+                <circle
+                  className="spark-panel__ring-fill"
+                  cx="50"
+                  cy="50"
+                  r="42"
+                />
+              </svg>
+              <span className="spark-panel__ring-bolt">
+                {sparks.hasInfinite ? "∞" : "⚡"}
               </span>
-              <p className="spark-panel__count-text spark-panel__count-text--infinite">
-                Infinite Spark active
-              </p>
             </div>
+
+            <div className="spark-panel__count-block">
+              {sparks.hasInfinite ? (
+                <>
+                  <p className="spark-panel__count-line spark-panel__count-line--infinite">
+                    ∞
+                  </p>
+                  <p className="spark-panel__count-caption">Infinite active</p>
+                </>
+              ) : (
+                <>
+                  <p className="spark-panel__count-line">
+                    <strong>{sparks.available}</strong>
+                    <span className="spark-panel__count-sep"> / {sparks.max}</span>
+                  </p>
+                  <p className="spark-panel__count-caption">Sparks Available</p>
+                </>
+              )}
+            </div>
+          </div>
+
+          {sparks.hasInfinite ? (
             <p className="spark-panel__infinite-hint">
               Play any game freely — no Spark cost while this lasts.
             </p>
-          </section>
-        ) : (
-          <section className="spark-panel__status">
-            <p className="spark-panel__status-label">Your Sparks</p>
-            <div className="spark-panel__count-row">
-              <span className="spark-panel__count-icon" aria-hidden>
-                ⚡
+          ) : isFull ? (
+            <span className="spark-panel__badge">All Sparks are ready! ✨</span>
+          ) : sparks.timeToNextMs > 0 ? (
+            <p className="spark-panel__next-spark">
+              <span className="spark-panel__next-spark-icon" aria-hidden>
+                ⏱
               </span>
-              <p className="spark-panel__count-text">
-                <strong>{sparks.available}</strong>
-                <span className="spark-panel__count-sep">/</span>
-                {sparks.max} Sparks Available
-              </p>
-            </div>
-
-            <div
-              className="spark-panel__segments"
-              style={{
-                gridTemplateColumns: `repeat(${Math.max(1, sparks.max)}, 1fr)`,
-              }}
-            >
-              {sparks.slots.map((slot) => (
-                <div key={slot.index} className="spark-panel__segment-col">
-                  <div className="spark-panel__segment">
-                    <span
-                      className="spark-panel__segment-fill"
-                      style={{ width: `${slot.fillPercent}%` }}
-                    />
-                  </div>
-                  {slot.status === "regenerating" ? (
-                    <span className="spark-panel__segment-time">
-                      {formatSparkCountdown(slot.timeRemainingMs)}
-                    </span>
-                  ) : slot.status === "queued" ? (
-                    <span className="spark-panel__segment-time spark-panel__segment-time--queued">
-                      Waiting
-                    </span>
-                  ) : (
-                    <span className="spark-panel__segment-time spark-panel__segment-time--ready">
-                      Ready
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {isFull && (
-              <span className="spark-panel__badge">All Sparks are full! ✦</span>
-            )}
-
-            <p className="spark-panel__info">
-              <span aria-hidden>ℹ</span> 1 Spark = 1 game entry. Sparks refill
-              one at a time — each takes 3 hours, and the next starts only after
-              the previous one is ready.
+              Next Spark in {formatSparkDuration(sparks.timeToNextMs)}
             </p>
-          </section>
-        )}
+          ) : null}
+
+          <p className="spark-panel__info">
+            <span className="spark-panel__info-icon" aria-hidden>
+              i
+            </span>
+            1 Spark = 1 game entry. Sparks refill one at a time — each takes 3
+            hours, and the next starts only after the previous one is ready.
+          </p>
+        </section>
 
         <section className="spark-panel__shop">
           <h3 className="spark-panel__shop-title">

@@ -12,6 +12,7 @@ import {
   DAILY_XP_PLAY_COOLDOWN_MS,
   emptyDailyXpCounters,
   getUtcDayWindow,
+  isDailyXpLive,
   type DailyXpCounters,
   type DailyXpEventKind,
   type DailyXpLeaderboardEntry,
@@ -167,6 +168,8 @@ export async function recordDailyXpEventOnD1(
   opts?: { spendUnits?: number; name?: string }
 ): Promise<void> {
   try {
+    // Daily XP only counts from Saturday 00:00 UTC go-live onward.
+    if (!isDailyXpLive()) return;
     if (!isWalletAddress(walletAddress)) return;
     const wallet = normalizeWalletAddress(walletAddress);
     const now = Date.now();

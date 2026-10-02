@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
+import { claimShuffleRewardOnChain } from "@/lib/arcadex-rewards-spin";
 import {
   getDailyXpLeaderboard,
   performDailyXpClaim,
@@ -9,50 +11,138 @@ import {
 } from "@/lib/daily-xp-client";
 import {
   DAILY_XP_CAMPAIGN_ID,
+  DAILY_XP_GO_LIVE_AT_MS,
+  DAILY_XP_REWARD_USDT,
   DAILY_XP_THRESHOLD,
   formatDailyXpCountdown,
-  type DailyXpLeaderboardEntry,
+  formatDailyXpStartsIn,
+  isDailyXpLive,
+  isDailyXpTransition,
 } from "@/lib/daily-xp-board";
-import { claimShuffleRewardOnChain } from "@/lib/arcadex-rewards-spin";
-
-const MEDALS = ["🥇", "🥈", "🥉"];
+import { gameAssetCandidates } from "@/lib/game-assets";
+import { readCachedGamesList } from "@/lib/games-list-client-cache";
+import { fetchHomeShell } from "@/lib/home-client";
+import { Game, gameIsLive, gameIsTest } from "@/types";
 
 interface DailyXpLiveBoardProps {
   compact?: boolean;
   hideClose?: boolean;
   onClose?: () => void;
+  /** Navigate to home catalog (drawer view / sheet). */
+  onGoHome?: () => void;
+}
+
+type PromptKind = "under_threshold" | "no_check_in" | null;
+
+const TIP_ROWS = [
+  {
+    icon: "⚡",
+    tone: "play",
+    title: "Play a game",
+    xp: "+10 XP each time",
+  },
+  {
+    icon: "🏆",
+    tone: "score",
+    title: "Submit your score",
+    xp: "+10 XP each time",
+  },
+  {
+    icon: "✓",
+    tone: "checkin",
+    title: "Daily check-in",
+    xp: "+10 XP once per day",
+  },
+  {
+    icon: "♾️",
+    tone: "infinite",
+    title: "Infinite Spark",
+    xp: "+20 XP",
+  },
+  {
+    icon: "🔋",
+    tone: "refill",
+    title: "Spark Refill",
+    xp: "+10 XP",
+  },
+] as const;
+
+function GameThumb({ game }: { game: Game }) {
+  const candidates = useMemo(
+    () => [
+      ...gameAssetCandidates(game, "logo"),
+      ...gameAssetCandidates(game, "thumbnail"),
+    ],
+    [game]
+  );
+  const [idx, setIdx] = useState(0);
+  const src = candidates[idx] ?? candidates[0];
+
+  if (!src) {
+    return <span className="daily-xp-board__game-fallback">{game.name[0]}</span>;
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- static/CDN game art
+    <img
+      className="daily-xp-board__game-img"
+      src={src}
+      alt=""
+      draggable={false}
+      onError={() => {
+        if (idx + 1 < candidates.length) setIdx((v) => v + 1);
+      }}
+    />
+  );
 }
 
 export default function DailyXpLiveBoard({
   compact = false,
   hideClose = false,
   onClose,
+  onGoHome,
 }: DailyXpLiveBoardProps) {
+  const router = useRouter();
   const { walletAddress } = usePlayerProfile();
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [claimMsg, setClaimMsg] = useState<string | null>(null);
-  const [entries, setEntries] = useState<DailyXpLeaderboardEntry[]>([]);
-  const [countdown, setCountdown] = useState("");
-  const [endsAt, setEndsAt] = useState(0);
+  const [tipsOpen, setTipsOpen] = useState(false);
+  const [prompt, setPrompt] = useState<PromptKind>(null);
   const [me, setMe] = useState<DailyXpBoardResponse["me"]>(null);
   const [threshold, setThreshold] = useState(DAILY_XP_THRESHOLD);
+  const [dayEndsAt, setDayEndsAt] = useState(0);
+  const [resetCountdown, setResetCountdown] = useState("");
+  const [live, setLive] = useState(() => isDailyXpLive());
+  const [startsIn, setStartsIn] = useState(() =>
+    formatDailyXpStartsIn(DAILY_XP_GO_LIVE_AT_MS - Date.now())
+  );
+  const [games, setGames] = useState<Game[]>(() => {
+    const cached = readCachedGamesList()?.games ?? [];
+    return cached.filter(
+      (g) => gameIsLive(g) && g.active !== false && !gameIsTest(g)
+    );
+  });
 
   const reload = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getDailyXpLeaderboard({
-        walletAddress: walletAddress || undefined,
-      });
-      setEntries(data.entries ?? []);
-      setEndsAt(data.endsAtMs || data.endsAt || 0);
-      setMe(data.me);
-      setThreshold(data.threshold ?? DAILY_XP_THRESHOLD);
-      if (data.resetsIn) setCountdown(data.resetsIn);
+      if (isDailyXpTransition()) {
+        setMe(null);
+        setDayEndsAt(0);
+        setThreshold(DAILY_XP_THRESHOLD);
+      } else {
+        const data = await getDailyXpLeaderboard({
+          walletAddress: walletAddress || undefined,
+        });
+        setMe(data.me);
+        setThreshold(data.threshold ?? DAILY_XP_THRESHOLD);
+        setDayEndsAt(data.endsAtMs || data.endsAt || 0);
+        if (data.resetsIn) setResetCountdown(data.resetsIn);
+      }
     } catch (err) {
-      setEntries([]);
       setMe(null);
       setError(err instanceof Error ? err.message : "Failed to load board.");
     } finally {
@@ -65,32 +155,89 @@ export default function DailyXpLiveBoard({
   }, [reload]);
 
   useEffect(() => {
-    if (!endsAt) {
-      setCountdown("");
-      return;
+    let cancelled = false;
+    async function loadGames() {
+      try {
+        const data = await fetchHomeShell();
+        if (cancelled) return;
+        const next = (data.games ?? []).filter(
+          (g) => gameIsLive(g) && g.active !== false && !gameIsTest(g)
+        );
+        setGames(next);
+      } catch {
+        // Keep cached list.
+      }
     }
+    void loadGames();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const tick = () => {
-      setCountdown(formatDailyXpCountdown(endsAt - Date.now()));
+      const remaining = DAILY_XP_GO_LIVE_AT_MS - Date.now();
+      if (remaining <= 0) {
+        setLive(true);
+        setStartsIn("00:00:00");
+        return;
+      }
+      setLive(false);
+      setStartsIn(formatDailyXpStartsIn(remaining));
     };
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [endsAt]);
+  }, []);
 
-  async function handleClaim() {
+  useEffect(() => {
+    if (!live) {
+      // After flip to live, refresh XP state once.
+      return;
+    }
+    void reload();
+  }, [live, reload]);
+
+  useEffect(() => {
+    if (!dayEndsAt) {
+      setResetCountdown("");
+      return;
+    }
+    const tick = () => {
+      setResetCountdown(formatDailyXpCountdown(dayEndsAt - Date.now()));
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [dayEndsAt]);
+
+  function goHome() {
+    onClose?.();
+    if (onGoHome) {
+      onGoHome();
+      return;
+    }
+    router.push("/");
+  }
+
+  function openGame(gameId: string) {
+    onClose?.();
+    router.push(`/game/${gameId}`);
+  }
+
+  async function runClaim() {
     if (!walletAddress || claiming) return;
     setClaiming(true);
     setClaimMsg(null);
     setError(null);
     try {
       if (me?.claimed) {
-        // Spin already synced — retry on-chain claim() only.
         await claimShuffleRewardOnChain(DAILY_XP_CAMPAIGN_ID);
-        setClaimMsg("0.02 USDT claimed!");
       } else {
         await performDailyXpClaim(walletAddress);
-        setClaimMsg("0.02 USDT claimed!");
       }
+      setClaimMsg("0.02 USDT claimed!");
+      setPrompt(null);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Claim failed.");
@@ -99,32 +246,38 @@ export default function DailyXpLiveBoard({
     }
   }
 
-  const myWallet = walletAddress?.toLowerCase() ?? "";
-  const xp = me?.score ?? 0;
+  function handlePrimaryClick() {
+    if (!live) return;
+    setError(null);
+    setClaimMsg(null);
+
+    if (me?.claimed) {
+      void runClaim();
+      return;
+    }
+
+    const xp = me?.score ?? 0;
+    if (xp < threshold) {
+      setPrompt("under_threshold");
+      return;
+    }
+    if (!me?.checkedIn) {
+      setPrompt("no_check_in");
+      return;
+    }
+    void runClaim();
+  }
+
+  const xp = live ? me?.score ?? 0 : 0;
   const progressPct = Math.min(100, Math.round((xp / threshold) * 100));
-  const canClaim = Boolean(me?.canClaim);
+  const rewardLabel = `$${DAILY_XP_REWARD_USDT.toFixed(2)} USDT`;
 
   return (
     <div
-      className={`daily-xp-live${compact ? " daily-xp-live--compact" : ""}`}
+      className={`daily-xp-board${compact ? " daily-xp-board--compact" : ""}`}
     >
-      <div className="lb-header">
-        <div className="lb-title-wrap">
-          <span className="lb-trophy-hex" aria-hidden="true">
-            ⚡
-          </span>
-          <div className="lb-title-stack">
-            <span className="lb-title">Daily XP Board</span>
-            <span className="activity-lb-reset" role="status">
-              <span className="activity-lb-reset__dot" aria-hidden="true" />
-              <span className="activity-lb-reset__label">Resets in</span>
-              <span className="activity-lb-reset__value">
-                {countdown || "…"}
-              </span>
-            </span>
-          </div>
-        </div>
-        {!hideClose && onClose ? (
+      {!hideClose && onClose ? (
+        <div className="daily-xp-board__top">
           <button
             type="button"
             className="lb-close"
@@ -133,112 +286,194 @@ export default function DailyXpLiveBoard({
           >
             ✕
           </button>
-        ) : null}
-      </div>
-
-      <div className="daily-xp-progress" role="status">
-        <div className="daily-xp-progress__row">
-          <span className="daily-xp-progress__label">
-            {xp.toLocaleString()} / {threshold} XP
-          </span>
-          {me?.checkedIn ? (
-            <span className="daily-xp-progress__badge">Checked in</span>
-          ) : (
-            <span className="daily-xp-progress__badge daily-xp-progress__badge--warn">
-              Check in required
-            </span>
-          )}
         </div>
-        <div className="daily-xp-progress__bar" aria-hidden>
-          <span style={{ width: `${progressPct}%` }} />
-        </div>
-        {me?.claimed ? (
-          <p className="daily-xp-progress__hint">Reward claimed for today.</p>
-        ) : xp < threshold ? (
-          <p className="daily-xp-progress__hint">
-            Reach {threshold} XP today to unlock Claim (0.02 USDT).
-          </p>
-        ) : !me?.checkedIn ? (
-          <p className="daily-xp-progress__hint">
-            Check in today to unlock Claim.
-          </p>
-        ) : (
-          <p className="daily-xp-progress__hint">
-            You&apos;re eligible — claim 0.02 USDT before UTC midnight.
-          </p>
-        )}
-        <button
-          type="button"
-          className="daily-xp-live-shell__claim"
-          disabled={(!canClaim && !me?.claimed) || claiming}
-          onClick={() => void handleClaim()}
-          style={
-            (canClaim || me?.claimed) && !claiming
-              ? { opacity: 1, cursor: "pointer" }
-              : undefined
-          }
-        >
-          {claiming
-            ? "Claiming…"
-            : me?.claimed
-              ? "Claim USDT (if pending)"
-              : "Claim 0.02 USDT"}
-        </button>
-        {claimMsg ? (
-          <p className="daily-xp-progress__ok">{claimMsg}</p>
-        ) : null}
-        {error ? <p className="daily-xp-progress__err">{error}</p> : null}
-      </div>
-
-      {me ? (
-        <p className="activity-lb-you">
-          You ·{" "}
-          {me.score > 0 && me.rank != null ? `#${me.rank}` : "Unranked"} ·{" "}
-          {me.score.toLocaleString()} XP
-        </p>
       ) : null}
 
-      <div className="lb-table-head" aria-hidden="true">
-        <span className="lb-table-head__rank">#</span>
-        <span className="lb-table-head__player">PLAYER</span>
-        <span className="lb-table-head__score">XP</span>
+      <section className="daily-xp-board__reward">
+        <p className="daily-xp-board__eyebrow">Daily reward</p>
+        <div className="daily-xp-board__reward-row">
+          <p className="daily-xp-board__reward-amount">{rewardLabel}</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="daily-xp-board__usdt"
+            src="/tether-usdt-logo.png"
+            alt=""
+            draggable={false}
+          />
+        </div>
+        <p className="daily-xp-board__reward-copy">
+          Reach {threshold} XP today → Claim your reward
+        </p>
+      </section>
+
+      <section className="daily-xp-board__progress" aria-label="Today's progress">
+        <div className="daily-xp-board__progress-head">
+          <span>Today&apos;s Progress</span>
+          <span className="daily-xp-board__progress-mid">
+            {loading && live ? "…" : `${xp} / ${threshold} XP`}
+          </span>
+          <span className="daily-xp-board__progress-pct">{progressPct}%</span>
+        </div>
+        <div className="daily-xp-board__progress-bar" aria-hidden>
+          <span style={{ width: `${progressPct}%` }} />
+        </div>
+        {live && resetCountdown ? (
+          <p className="daily-xp-board__reset">Resets in {resetCountdown}</p>
+        ) : null}
+      </section>
+
+      <section className="daily-xp-board__earn">
+        <div className="daily-xp-board__earn-head">
+          <h3 className="daily-xp-board__section-title">How to Earn XP</h3>
+          <button
+            type="button"
+            className="daily-xp-board__tips-btn"
+            aria-label="XP tips"
+            onClick={() => setTipsOpen(true)}
+          >
+            ?
+          </button>
+        </div>
+        <div className="daily-xp-board__earn-grid">
+          <div className="daily-xp-board__earn-card daily-xp-board__earn-card--play">
+            <span className="daily-xp-board__earn-icon" aria-hidden>
+              🎮
+            </span>
+            <span className="daily-xp-board__earn-title">Play a game</span>
+            <span className="daily-xp-board__earn-xp">+10 XP each time</span>
+          </div>
+          <div className="daily-xp-board__earn-card daily-xp-board__earn-card--score">
+            <span className="daily-xp-board__earn-icon" aria-hidden>
+              🏆
+            </span>
+            <span className="daily-xp-board__earn-title">Submit your score</span>
+            <span className="daily-xp-board__earn-xp">+10 XP each time</span>
+          </div>
+        </div>
+      </section>
+
+      <div className="daily-xp-board__cta-wrap">
+        {!live ? (
+          <button type="button" className="daily-xp-board__cta" disabled>
+            Starts in {startsIn}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="daily-xp-board__cta"
+            disabled={claiming}
+            onClick={handlePrimaryClick}
+          >
+            {claiming
+              ? "Claiming…"
+              : me?.claimed
+                ? "Claim USDT"
+                : "Claim now"}
+          </button>
+        )}
+
+        {prompt === "under_threshold" ? (
+          <div className="daily-xp-board__prompt" role="status">
+            <p>Play games and earn XP to claim your reward.</p>
+            <button
+              type="button"
+              className="daily-xp-board__cta daily-xp-board__cta--secondary"
+              onClick={goHome}
+            >
+              ▶ Play Games
+            </button>
+          </div>
+        ) : null}
+
+        {prompt === "no_check_in" ? (
+          <div className="daily-xp-board__prompt daily-xp-board__prompt--warn" role="status">
+            <p>You haven&apos;t checked in yet. Check in today to claim.</p>
+          </div>
+        ) : null}
+
+        {claimMsg ? (
+          <p className="daily-xp-board__ok">{claimMsg}</p>
+        ) : null}
+        {error ? <p className="daily-xp-board__err">{error}</p> : null}
+
+        <p className="daily-xp-board__banner">
+          <span aria-hidden>🔥</span> Come back tomorrow to earn again!
+        </p>
       </div>
 
-      <div className="lb-list">
-        {loading && <p className="lb-empty">Loading...</p>}
-        {!loading && entries.length === 0 && (
-          <p className="lb-empty">No activity yet — play a game!</p>
-        )}
-        {!loading &&
-          entries.map((e, i) => {
-            const isYou =
-              Boolean(myWallet) &&
-              e.walletAddress.toLowerCase() === myWallet;
-            return (
-              <div
-                key={`${e.walletAddress}-${i}`}
-                className={`lb-row${i === 0 ? " lb-row--first" : ""}${
-                  i < 3 ? " lb-row--podium" : ""
-                }${isYou ? " activity-lb-row--you" : ""}`}
+      <section className="daily-xp-board__games">
+        <div className="daily-xp-board__games-head">
+          <h3 className="daily-xp-board__section-title">
+            Play Games to earn XP
+          </h3>
+        </div>
+        <ul className="daily-xp-board__game-list">
+          {games.map((game) => (
+            <li key={game.id}>
+              <button
+                type="button"
+                className="daily-xp-board__game-row"
+                onClick={() => openGame(game.id)}
               >
-                <span
-                  className={`lb-pos ${
-                    i < 3 ? ["gold", "silver", "bronze"][i] : "other"
-                  }`}
+                <span className="daily-xp-board__game-thumb">
+                  <GameThumb game={game} />
+                </span>
+                <span className="daily-xp-board__game-meta">
+                  <span className="daily-xp-board__game-name">{game.name}</span>
+                </span>
+                <span className="daily-xp-board__game-xp">+10 XP</span>
+                <span className="daily-xp-board__game-chevron" aria-hidden>
+                  ›
+                </span>
+              </button>
+            </li>
+          ))}
+          {games.length === 0 ? (
+            <li className="daily-xp-board__games-empty">No playable games yet.</li>
+          ) : null}
+        </ul>
+      </section>
+
+      {tipsOpen ? (
+        <div
+          className="daily-xp-board__tips-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="How to earn XP"
+          onClick={() => setTipsOpen(false)}
+        >
+          <div
+            className="daily-xp-board__tips-sheet"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="daily-xp-board__tips-head">
+              <h3>How to Earn XP</h3>
+              <button
+                type="button"
+                className="lb-close"
+                onClick={() => setTipsOpen(false)}
+                aria-label="Close tips"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="daily-xp-board__tips-list">
+              {TIP_ROWS.map((row) => (
+                <div
+                  key={row.title}
+                  className={`daily-xp-board__earn-card daily-xp-board__earn-card--${row.tone} daily-xp-board__earn-card--tip`}
                 >
-                  {i < 3 ? MEDALS[i] : `#${i + 1}`}
-                </span>
-                <span className="lb-name">
-                  {e.name}
-                  {isYou ? " (you)" : ""}
-                </span>
-                <span className="lb-score">
-                  {e.score.toLocaleString()} XP
-                </span>
-              </div>
-            );
-          })}
-      </div>
+                  <span className="daily-xp-board__earn-icon" aria-hidden>
+                    {row.icon}
+                  </span>
+                  <span className="daily-xp-board__earn-title">{row.title}</span>
+                  <span className="daily-xp-board__earn-xp">{row.xp}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -500,7 +500,9 @@ export default function HomePage() {
             />
           )}
 
-          {view === "leaderboard" && <ActivityLeaderboardView />}
+          {view === "leaderboard" && (
+            <ActivityLeaderboardView onGoHome={() => setView("home")} />
+          )}
           {view === "achievements" && (
             <AchievementsView gameNames={gameNames} />
           )}

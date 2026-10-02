@@ -2207,6 +2207,7 @@ export async function activateScoreSubmitOnServer(
   } else {
     recordActivityEventBestEffort(wallet, "tx");
   }
+  recordDailyXpSpendBestEffort(wallet, 1);
 
   return { highScore, leaderboardScore, submitted: true };
 }

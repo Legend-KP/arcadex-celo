@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import ActivityLeaderboardPanel from "@/components/ActivityLeaderboardPanel";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { pingActivityVisit } from "@/lib/activity-client";
@@ -46,6 +47,7 @@ export default function ActivityLeaderboardButton({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 } = {}) {
+  const router = useRouter();
   const { walletAddress } = usePlayerProfile();
   const [openUncontrolled, setOpenUncontrolled] = useState(false);
   const controlled = typeof openControlled === "boolean";
@@ -109,6 +111,10 @@ export default function ActivityLeaderboardButton({
               <ActivityLeaderboardPanel
                 active={open}
                 onClose={() => setOpen(false)}
+                onGoHome={() => {
+                  setOpen(false);
+                  router.push("/");
+                }}
               />
             </div>
           </div>,
