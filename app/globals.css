@@ -498,6 +498,9 @@ a { color: inherit; text-decoration: none; }
   gap: 8px;
   margin-bottom: 2px;
 }
+.daily-xp-transition__top--end {
+  justify-content: flex-end;
+}
 .daily-xp-transition__eyebrow {
   font-size: 11px;
   font-weight: 800;
@@ -525,9 +528,9 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.4;
   color: #64748b;
 }
-.daily-xp-transition__timer {
-  margin: 0;
-  min-height: 112px;
+.daily-xp-transition__timer .lb-timer-panel__label {
+  letter-spacing: 0.4px;
+  text-wrap: balance;
 }
 .daily-xp-transition__countdown {
   font-variant-numeric: tabular-nums;
@@ -571,6 +574,12 @@ a { color: inherit; text-decoration: none; }
   font-size: 18px;
   font-weight: 800;
   line-height: 1;
+}
+.daily-xp-transition__usdt-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
 }
 .daily-xp-transition__highlight-label {
   font-size: 14px;

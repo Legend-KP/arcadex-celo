@@ -7,11 +7,18 @@ import {
   isDailyXpTransition,
 } from "@/lib/daily-xp-board";
 
-const HIGHLIGHTS = [
+const HIGHLIGHTS: Array<{
+  label: string;
+  icon?: string;
+  src?: string;
+}> = [
   { icon: "⚡", label: "Reach 100 XP" },
-  { icon: "₮", label: "Win USDT rewards" },
+  {
+    src: "/tether-usdt-logo.png",
+    label: "Win USDT rewards",
+  },
   { icon: "↻", label: "Resets daily" },
-] as const;
+];
 
 interface DailyXpTransitionProps {
   /** Compact layout for sheet / promo. */
@@ -56,8 +63,7 @@ export default function DailyXpTransition({
       }`}
     >
       {!hideClose && onClose ? (
-        <div className="daily-xp-transition__top">
-          <span className="daily-xp-transition__eyebrow">ArcadeX</span>
+        <div className="daily-xp-transition__top daily-xp-transition__top--end">
           <button
             type="button"
             className="lb-close"
@@ -79,7 +85,7 @@ export default function DailyXpTransition({
       <div className="lb-timer-panel daily-xp-transition__timer" role="status">
         <div className="lb-timer-panel__glow" aria-hidden="true" />
         <div className="lb-timer-panel__content">
-          <p className="lb-timer-panel__label">Starts in</p>
+          <p className="lb-timer-panel__label">New XP board starts soon</p>
           <p className="lb-timer-panel__value daily-xp-transition__countdown">
             {countdown}
           </p>
@@ -93,7 +99,17 @@ export default function DailyXpTransition({
         {HIGHLIGHTS.map((item) => (
           <li key={item.label} className="daily-xp-transition__highlight">
             <span className="daily-xp-transition__highlight-icon" aria-hidden>
-              {item.icon}
+              {item.src ? (
+                // eslint-disable-next-line @next/next/no-img-element -- static public asset
+                <img
+                  className="daily-xp-transition__usdt-logo"
+                  src={item.src}
+                  alt=""
+                  draggable={false}
+                />
+              ) : (
+                item.icon
+              )}
             </span>
             <span className="daily-xp-transition__highlight-label">
               {item.label}
