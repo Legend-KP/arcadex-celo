@@ -761,6 +761,7 @@ a { color: inherit; text-decoration: none; }
 .daily-xp-board__reward {
   padding: 0 36px 0 2px;
   margin-top: 0;
+  flex-shrink: 0;
 }
 .daily-xp-board__eyebrow {
   margin: 0;
@@ -806,7 +807,8 @@ a { color: inherit; text-decoration: none; }
   background: #fff;
   border: 1px solid rgba(15, 23, 42, 0.06);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  overflow: hidden;
+  flex-shrink: 0;
+  overflow: visible;
 }
 .daily-xp-board__progress-head {
   display: flex;
@@ -867,6 +869,9 @@ a { color: inherit; text-decoration: none; }
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
+}
+.daily-xp-board__earn {
+  flex-shrink: 0;
 }
 .daily-xp-board__section-title {
   margin: 0;
@@ -948,6 +953,7 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex-shrink: 0;
 }
 .daily-xp-board__cta {
   width: 100%;
@@ -1026,6 +1032,7 @@ a { color: inherit; text-decoration: none; }
   min-height: 0;
   flex: 0 0 auto;
   margin-top: 2px;
+  flex-shrink: 0;
 }
 .daily-xp-board__game-list {
   list-style: none;
@@ -13541,6 +13548,12 @@ a { color: inherit; text-decoration: none; }
   min-height: 0;
   width: 100%;
   overflow: hidden;
+}
+.activity-lb-panel > .daily-xp-board {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 @keyframes activity-lb-sheet-in {
