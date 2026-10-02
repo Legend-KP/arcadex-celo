@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatChainError } from "@/lib/celo-public-client";
 import { playSuccessSfx, playTouchSfx } from "@/lib/sfx";
@@ -102,32 +102,114 @@ function ChevronIcon({ dir }: { dir: "left" | "right" }) {
 }
 
 function XpIcon({ className }: { className?: string }) {
+  const uid = useId().replace(/:/g, "");
+  const gradId = `streakXpGrad-${uid}`;
   return (
-    <span className={`daily-checkin-xp-icon ${className ?? ""}`.trim()} aria-hidden>
-      XP
-    </span>
+    <svg
+      className={`daily-checkin-xp-coin ${className ?? ""}`.trim()}
+      viewBox="0 0 40 40"
+      aria-hidden
+    >
+      <circle cx="20" cy="20" r="18" fill={`url(#${gradId})`} />
+      <circle
+        cx="20"
+        cy="20"
+        r="14.5"
+        fill="none"
+        stroke="rgba(255,255,255,0.45)"
+        strokeWidth="1.5"
+      />
+      <text
+        x="20"
+        y="24"
+        textAnchor="middle"
+        fill="#7c2d12"
+        fontSize="11"
+        fontWeight="900"
+        fontFamily="system-ui,sans-serif"
+      >
+        XP
+      </text>
+      <defs>
+        <linearGradient id={gradId} x1="8" y1="4" x2="32" y2="36">
+          <stop stopColor="#fde68a" />
+          <stop offset="0.45" stopColor="#fbbf24" />
+          <stop offset="1" stopColor="#d97706" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
+function GiftIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={`daily-checkin-gift-icon ${className ?? ""}`.trim()}
+      viewBox="0 0 40 40"
+      aria-hidden
+    >
+      <rect x="7" y="16" width="26" height="18" rx="3" fill="#a78bfa" />
+      <rect x="7" y="16" width="26" height="6" rx="2" fill="#c4b5fd" />
+      <rect x="18" y="16" width="4" height="18" fill="#7c3aed" />
+      <path
+        d="M20 16c-3.2-4.8-8-4.2-8-1.2 0 1.8 1.7 2.8 4.2 2.8H20z"
+        fill="#f9a8d4"
+      />
+      <path
+        d="M20 16c3.2-4.8 8-4.2 8-1.2 0 1.8-1.7 2.8-4.2 2.8H20z"
+        fill="#f472b6"
+      />
+    </svg>
   );
 }
 
 function SparkBoltIcon({ className }: { className?: string }) {
+  const uid = useId().replace(/:/g, "");
+  const gradId = `streakSparkGrad-${uid}`;
   return (
-    <span
+    <svg
       className={`daily-checkin-spark-icon ${className ?? ""}`.trim()}
+      viewBox="0 0 40 40"
       aria-hidden
     >
-      ⚡
-    </span>
+      <circle cx="20" cy="20" r="18" fill={`url(#${gradId})`} />
+      <path
+        d="M22.5 8 12 22h7l-1.5 10L29 18h-7l.5-10z"
+        fill="#fff"
+        stroke="rgba(255,255,255,0.35)"
+        strokeWidth="0.6"
+      />
+      <defs>
+        <linearGradient id={gradId} x1="8" y1="4" x2="32" y2="36">
+          <stop stopColor="#fde68a" />
+          <stop offset="1" stopColor="#f59e0b" />
+        </linearGradient>
+      </defs>
+    </svg>
   );
 }
 
 function UsdtGlyphIcon({ className }: { className?: string }) {
   return (
-    <span
+    <svg
       className={`daily-checkin-usdt-icon ${className ?? ""}`.trim()}
+      viewBox="0 0 40 40"
       aria-hidden
     >
-      $$$
-    </span>
+      <circle cx="20" cy="20" r="18" fill="#26a17b" />
+      <circle
+        cx="20"
+        cy="20"
+        r="14.5"
+        fill="none"
+        stroke="rgba(255,255,255,0.35)"
+        strokeWidth="1.4"
+      />
+      <path
+        d="M20.2 11.2v2.4c3.3.1 5.8.8 5.8 1.7s-2.5 1.6-5.8 1.7v5.3c4.6-.2 8-1.5 8-3.2 0-1.8-3.6-3.2-8-3.4V11.2c5.2.2 9.2 2 9.2 4.3s-4 4.1-9.2 4.3v7.5h-1.6v-7.5c-5.2-.2-9.2-1.9-9.2-4.3s4-4.1 9.2-4.3v-2.5h1.6zm-1.6 7.5c-3.3-.1-5.8-.8-5.8-1.7s2.5-1.6 5.8-1.7v3.4z"
+        fill="#fff"
+      />
+    </svg>
   );
 }
 
@@ -146,12 +228,14 @@ function dayNodeState(
 }
 
 function rewardGlyph(
-  reward: StreakDayReward | null
-): "usdt" | "spark" | "xp" {
+  reward: StreakDayReward | null,
+  state: "done" | "today" | "upcoming"
+): "usdt" | "spark" | "xp" | "gift" {
   if (!reward) return "xp";
   if (reward.usdt != null) return "usdt";
   if (reward.infiniteHours != null) return "spark";
-  return "xp";
+  if (state === "today" || state === "done") return "xp";
+  return "gift";
 }
 
 export default function DailyCheckInModal({
@@ -328,10 +412,6 @@ export default function DailyCheckInModal({
 
   const pageCount = Math.max(1, Math.ceil(requiredDays / CAROUSEL_PAGE_SIZE));
   const safePage = Math.min(carouselPage, pageCount - 1);
-  const progressPct = Math.min(
-    100,
-    Math.round((displayStreak / requiredDays) * 100)
-  );
 
   const streakHint = wouldReset
     ? "Your previous run ended — check in to start day 1 again."
@@ -385,7 +465,16 @@ export default function DailyCheckInModal({
         : `Day ${requiredDays}`;
 
   const rewardIconKind = ladderV2
-    ? rewardGlyph(cardReward)
+    ? rewardGlyph(
+        cardReward,
+        selectedDay != null && selectedDay === checkInDay
+          ? "today"
+          : selectedDay != null && selectedDay < checkInDay
+            ? "done"
+            : selectedDay != null
+              ? "upcoming"
+              : "today"
+      )
     : "spark";
 
   function scrollToPage(page: number) {
@@ -546,7 +635,7 @@ export default function DailyCheckInModal({
       ? Boolean(reward && isStreakHighlightDay(reward))
       : day === requiredDays;
     const glyph = ladderV2
-      ? rewardGlyph(reward)
+      ? rewardGlyph(reward, state)
       : day === requiredDays
         ? "spark"
         : "xp";
@@ -559,26 +648,46 @@ export default function DailyCheckInModal({
           : formatDayColumnCaption(reward)
         : null;
 
-    const nodeInner = (
+    const rewardGlyphNode =
+      state === "done" ? (
+        <span className="daily-checkin-check">
+          <CheckIcon />
+        </span>
+      ) : glyph === "usdt" ? (
+        <UsdtGlyphIcon className="daily-checkin-day-glyph" />
+      ) : glyph === "spark" ? (
+        <SparkBoltIcon className="daily-checkin-day-glyph" />
+      ) : glyph === "gift" ? (
+        <GiftIcon className="daily-checkin-day-glyph" />
+      ) : ladderV2 ? (
+        <XpIcon className="daily-checkin-day-glyph" />
+      ) : (
+        <span className="daily-checkin-day-num">{day}</span>
+      );
+
+    const nodeInner = ladderV2 ? (
       <>
-        <div className="daily-checkin-day-node">
-          {state === "done" ? (
-            <span className="daily-checkin-check">
-              <CheckIcon />
-            </span>
-          ) : glyph === "usdt" ? (
-            <UsdtGlyphIcon className="daily-checkin-day-glyph" />
-          ) : glyph === "spark" ? (
-            <SparkBoltIcon className="daily-checkin-day-glyph" />
-          ) : ladderV2 ? (
-            <XpIcon className="daily-checkin-day-glyph" />
+        <div className="daily-checkin-day-card">
+          <div className="daily-checkin-day-node">{rewardGlyphNode}</div>
+          {caption ? (
+            <span className="daily-checkin-day-caption">{caption}</span>
+          ) : null}
+          {state === "today" ? (
+            <span className="daily-checkin-day-today">Today</span>
           ) : (
-            <span className="daily-checkin-day-num">{day}</span>
+            <span className="daily-checkin-day-label">D{day}</span>
           )}
         </div>
-        {caption ? (
-          <span className="daily-checkin-day-caption">{caption}</span>
-        ) : null}
+        <span
+          className={`daily-checkin-day-rail-mark daily-checkin-day-rail-mark--${state}`}
+          aria-hidden
+        >
+          {state === "done" ? <CheckIcon /> : null}
+        </span>
+      </>
+    ) : (
+      <>
+        <div className="daily-checkin-day-node">{rewardGlyphNode}</div>
         {state === "today" ? (
           <span className="daily-checkin-day-today">Today</span>
         ) : (
@@ -592,8 +701,10 @@ export default function DailyCheckInModal({
     }${glyph === "usdt" ? " daily-checkin-day--usdt" : ""}${
       glyph === "spark" ? " daily-checkin-day--spark" : ""
     }${glyph === "xp" && ladderV2 ? " daily-checkin-day--xp" : ""}${
-      isSelected ? " daily-checkin-day--peeked" : ""
-    }${tappable ? " daily-checkin-day--tappable" : ""}`;
+      glyph === "gift" ? " daily-checkin-day--gift" : ""
+    }${isSelected ? " daily-checkin-day--peeked" : ""}${
+      tappable ? " daily-checkin-day--tappable" : ""
+    }`;
 
     if (tappable) {
       return (
@@ -672,15 +783,32 @@ export default function DailyCheckInModal({
                 >
                   {days.map((day) => renderDayNode(day))}
                 </div>
-                <div
-                  className="daily-checkin-progress-rail"
-                  aria-label={`Streak progress ${displayStreak} of ${requiredDays}`}
-                >
+
+                <section className="daily-checkin-next-reward daily-checkin-next-reward--embedded">
                   <div
-                    className="daily-checkin-progress-rail-fill"
-                    style={{ width: `${progressPct}%` }}
-                  />
-                </div>
+                    className={`daily-checkin-next-reward-icon daily-checkin-reward-icon--${rewardIconKind}`}
+                    aria-hidden
+                  >
+                    {rewardIconKind === "usdt" ? (
+                      <UsdtGlyphIcon />
+                    ) : rewardIconKind === "spark" ? (
+                      <SparkBoltIcon />
+                    ) : rewardIconKind === "gift" ? (
+                      <GiftIcon />
+                    ) : (
+                      <XpIcon />
+                    )}
+                  </div>
+                  <div className="daily-checkin-next-reward-copy">
+                    <p className="daily-checkin-section-label">Next Reward</p>
+                    <p className="daily-checkin-next-reward-line">
+                      {nextRewardTitle}
+                    </p>
+                  </div>
+                  <span className="daily-checkin-reward-badge">
+                    {nextRewardBadge}
+                  </span>
+                </section>
               </div>
 
               <div className="daily-checkin-carousel-nav">
@@ -741,28 +869,6 @@ export default function DailyCheckInModal({
             </section>
           )}
 
-          {ladderV2 ? (
-            <section className="daily-checkin-next-reward">
-              <div
-                className={`daily-checkin-next-reward-icon daily-checkin-reward-icon--${rewardIconKind}`}
-                aria-hidden
-              >
-                {rewardIconKind === "usdt" ? (
-                  <UsdtGlyphIcon />
-                ) : rewardIconKind === "spark" ? (
-                  <SparkBoltIcon />
-                ) : (
-                  <XpIcon />
-                )}
-              </div>
-              <div className="daily-checkin-next-reward-copy">
-                <p className="daily-checkin-section-label">Next Reward</p>
-                <p className="daily-checkin-next-reward-line">{nextRewardTitle}</p>
-              </div>
-              <span className="daily-checkin-reward-badge">{nextRewardBadge}</span>
-            </section>
-          ) : null}
-
           <section
             className={`daily-checkin-hero-card${
               ladderV2 ? " daily-checkin-hero-card--compact" : ""
@@ -772,7 +878,15 @@ export default function DailyCheckInModal({
               <div className="daily-checkin-hero-flame" aria-hidden>
                 <FlameIcon />
               </div>
-            ) : null}
+            ) : (
+              <div className="daily-checkin-hero-ambiance" aria-hidden>
+                <span className="daily-checkin-hero-blob daily-checkin-hero-blob--a" />
+                <span className="daily-checkin-hero-blob daily-checkin-hero-blob--b" />
+                <span className="daily-checkin-hero-sparkle daily-checkin-hero-sparkle--a" />
+                <span className="daily-checkin-hero-sparkle daily-checkin-hero-sparkle--b" />
+                <span className="daily-checkin-hero-sparkle daily-checkin-hero-sparkle--c" />
+              </div>
+            )}
             <div className="daily-checkin-hero-copy">
               <p className="daily-checkin-section-label daily-checkin-section-label--light">
                 Your streak

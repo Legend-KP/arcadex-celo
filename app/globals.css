@@ -479,6 +479,251 @@ a { color: inherit; text-decoration: none; }
   background: rgba(234, 179, 8, 0.08);
 }
 
+/* Daily XP Board — transition until Saturday 00:00 UTC */
+.daily-xp-transition {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  padding: 4px 0 8px;
+}
+.daily-xp-transition--compact {
+  gap: 12px;
+  padding-top: 0;
+}
+.daily-xp-transition__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.daily-xp-transition__eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.daily-xp-transition__header {
+  text-align: center;
+  margin: 0;
+}
+.daily-xp-transition__title {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: clamp(22px, 5.5vw, 28px);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: #1a1a2e;
+  line-height: 1.15;
+}
+.daily-xp-transition__status {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #64748b;
+}
+.daily-xp-transition__timer {
+  margin: 0;
+  min-height: 112px;
+}
+.daily-xp-transition__countdown {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+.daily-xp-transition__timer-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(254, 243, 199, 0.88);
+}
+.daily-xp-transition__highlights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.daily-xp-transition__highlight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.daily-xp-transition__highlight-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #fef3c7, #fde68a);
+  color: #92400e;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+.daily-xp-transition__highlight-label {
+  font-size: 14px;
+  font-weight: 800;
+  color: #1a1a2e;
+  letter-spacing: 0.01em;
+}
+.daily-xp-transition__footer {
+  margin: 2px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.28);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #92400e;
+  text-align: center;
+}
+
+.daily-xp-live-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 20px 16px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #fff8eb 100%);
+  border: 1px solid rgba(214, 168, 75, 0.35);
+  text-align: center;
+}
+.daily-xp-live-shell--panel {
+  margin: 12px 0 0;
+}
+.daily-xp-live-shell__title {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: 18px;
+  color: #1a1a2e;
+}
+.daily-xp-live-shell__copy {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #64748b;
+  font-weight: 600;
+  max-width: 28ch;
+}
+.daily-xp-live-shell__claim {
+  margin-top: 4px;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 18px;
+  font-weight: 800;
+  font-size: 14px;
+  color: #fff;
+  background: linear-gradient(135deg, #ca8a04, #eab308);
+  box-shadow: 0 4px 12px rgba(202, 138, 4, 0.28);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.daily-xp-live-shell__note {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.daily-xp-live {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  gap: 8px;
+}
+.daily-xp-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #fff8eb 100%);
+  border: 1px solid rgba(214, 168, 75, 0.35);
+}
+.daily-xp-progress__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.daily-xp-progress__label {
+  font-family: var(--font-head);
+  font-size: 16px;
+  color: #1a1a2e;
+}
+.daily-xp-progress__badge {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #15803d;
+  background: rgba(34, 197, 94, 0.12);
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+.daily-xp-progress__badge--warn {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.14);
+}
+.daily-xp-progress__bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+.daily-xp-progress__bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ca8a04, #eab308);
+  border-radius: inherit;
+}
+.daily-xp-progress__hint {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.4;
+}
+.daily-xp-progress__ok {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #15803d;
+}
+.daily-xp-progress__err {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #dc2626;
+}
+.daily-xp-live .daily-xp-live-shell__claim:not(:disabled) {
+  opacity: 1;
+  cursor: pointer;
+}
+.daily-xp-live .lb-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+
 .activity-lb-week-id {
   margin: 8px 0 0;
   text-align: center;
@@ -18716,69 +18961,264 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* -- 30-day streak mock layout (ladder v2) ----------------- */
+.daily-checkin-modal--ladder-v2 {
+  background:
+    radial-gradient(ellipse 90% 45% at 50% -8%, rgba(167, 139, 250, 0.22), transparent 55%),
+    radial-gradient(ellipse 60% 35% at 100% 100%, rgba(59, 130, 246, 0.08), transparent 50%),
+    var(--surface);
+}
+
 .daily-checkin-modal--ladder-v2 .daily-checkin-heading {
   letter-spacing: 0.04em;
+  color: #6d28d9;
+  text-shadow: 0 0 24px rgba(124, 58, 237, 0.18);
 }
 
 .daily-checkin-days-panel {
-  background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
-  border-radius: 18px;
-  padding: 16px 12px 12px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 0%, rgba(167, 139, 250, 0.28), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 90% 100%, rgba(59, 130, 246, 0.22), transparent 50%),
+    linear-gradient(165deg, #1e1b4b 0%, #312e81 48%, #1e1b4b 100%);
+  border-radius: 20px;
+  padding: 16px 12px 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 12px 28px rgba(49, 46, 129, 0.28);
+  border: 1px solid rgba(167, 139, 250, 0.22);
 }
 
 .daily-checkin-modal--ladder-v2 .daily-checkin-days-scroll {
+  position: relative;
   background: transparent;
   border-radius: 0;
-  padding: 0 0 10px;
+  padding: 0 2px 18px;
   box-shadow: none;
+  gap: 8px;
 }
 
 .daily-checkin-modal--ladder-v2 .daily-checkin-days-scroll .daily-checkin-day {
-  width: 56px;
+  width: 58px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 10px;
+  position: relative;
+}
+
+/* Connecting rail line behind day markers */
+.daily-checkin-modal--ladder-v2 .daily-checkin-days-scroll .daily-checkin-day::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  right: -8px;
+  bottom: 6px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.18);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-days-scroll .daily-checkin-day:last-child::after {
+  display: none;
+}
+
+.daily-checkin-day-card {
+  width: 100%;
+  min-height: 86px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  padding: 8px 4px 8px;
+  border-radius: 16px;
+  background: rgba(15, 10, 40, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(6px);
+}
+
+.daily-checkin-day--today .daily-checkin-day-card {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: rgba(91, 33, 182, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px rgba(251, 191, 36, 0.2),
+    0 0 18px rgba(251, 191, 36, 0.28);
+}
+
+.daily-checkin-day--done .daily-checkin-day-card {
+  border-color: rgba(167, 139, 250, 0.35);
+  background: rgba(76, 29, 149, 0.4);
+}
+
+.daily-checkin-day--milestone .daily-checkin-day-card {
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+.daily-checkin-day--peeked .daily-checkin-day-card {
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.55),
+    0 0 16px rgba(251, 191, 36, 0.4);
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-day-node {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--done .daily-checkin-day-node {
+  background: linear-gradient(160deg, #8b5cf6 0%, #6d28d9 100%);
+  border: 2px solid rgba(196, 181, 253, 0.65);
+  box-shadow:
+    0 0 0 3px rgba(124, 58, 237, 0.28),
+    0 6px 14px rgba(91, 33, 182, 0.45);
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--today .daily-checkin-day-node,
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--xp .daily-checkin-day-node,
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--gift .daily-checkin-day-node,
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--spark .daily-checkin-day-node,
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--usdt .daily-checkin-day-node,
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--milestone .daily-checkin-day-node {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.daily-checkin-day-glyph,
+.daily-checkin-xp-coin,
+.daily-checkin-gift-icon,
+.daily-checkin-spark-icon,
+.daily-checkin-usdt-icon {
+  width: 36px;
+  height: 36px;
+  display: block;
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--today .daily-checkin-day-glyph,
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--milestone .daily-checkin-day-glyph,
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--spark .daily-checkin-day-glyph,
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--usdt .daily-checkin-day-glyph,
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--xp .daily-checkin-day-glyph {
+  filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.75));
+  animation: daily-checkin-glow-pulse 2.2s ease-in-out infinite;
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--gift .daily-checkin-day-glyph {
+  filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.55));
+  animation: none;
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--usdt .daily-checkin-day-glyph {
+  filter: drop-shadow(0 0 10px rgba(52, 211, 153, 0.7));
+}
+
+@keyframes daily-checkin-glow-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.55));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(251, 191, 36, 0.95));
+    transform: scale(1.05);
+  }
 }
 
 .daily-checkin-day-caption {
   display: block;
-  max-width: 56px;
+  max-width: 54px;
   font-size: 9px;
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: 0.01em;
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(255, 255, 255, 0.82);
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.daily-checkin-day--milestone .daily-checkin-day-caption {
+.daily-checkin-day--milestone .daily-checkin-day-caption,
+.daily-checkin-day--spark .daily-checkin-day-caption {
   color: #fde68a;
 }
 
+.daily-checkin-day--usdt .daily-checkin-day-caption {
+  color: #a7f3d0;
+}
+
 .daily-checkin-day--done .daily-checkin-day-caption {
-  color: rgba(167, 243, 208, 0.9);
+  color: rgba(196, 181, 253, 0.95);
 }
 
-.daily-checkin-progress-rail {
+.daily-checkin-modal--ladder-v2 .daily-checkin-day-label {
+  color: rgba(226, 232, 240, 0.65);
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--milestone .daily-checkin-day-label,
+.daily-checkin-modal--ladder-v2 .daily-checkin-day--spark .daily-checkin-day-label {
+  color: #fbbf24;
+}
+
+.daily-checkin-day-rail-mark {
   position: relative;
-  height: 6px;
-  margin: 2px 4px 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  overflow: hidden;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(30, 27, 75, 0.9);
+  border: 2px solid rgba(148, 163, 184, 0.45);
+  flex-shrink: 0;
 }
 
-.daily-checkin-progress-rail-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #34d399 0%, #fbbf24 55%, #a78bfa 100%);
-  box-shadow: 0 0 10px rgba(251, 191, 36, 0.45);
-  transition: width 0.35s ease;
+.daily-checkin-day-rail-mark svg {
+  width: 9px;
+  height: 9px;
+}
+
+.daily-checkin-day-rail-mark--done {
+  background: linear-gradient(160deg, #8b5cf6, #6d28d9);
+  border-color: #c4b5fd;
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.55);
+}
+
+.daily-checkin-day-rail-mark--today {
+  background: #fbbf24;
+  border-color: #fef3c7;
+  box-shadow:
+    0 0 0 3px rgba(251, 191, 36, 0.35),
+    0 0 14px rgba(251, 191, 36, 0.85);
+  animation: daily-checkin-rail-pulse 1.8s ease-in-out infinite;
+}
+
+.daily-checkin-day-rail-mark--upcoming {
+  background: rgba(30, 27, 75, 0.85);
+  border-color: rgba(148, 163, 184, 0.4);
+}
+
+@keyframes daily-checkin-rail-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 3px rgba(251, 191, 36, 0.3),
+      0 0 12px rgba(251, 191, 36, 0.7);
+  }
+  50% {
+    box-shadow:
+      0 0 0 5px rgba(251, 191, 36, 0.45),
+      0 0 18px rgba(251, 191, 36, 1);
+  }
 }
 
 .daily-checkin-next-reward {
@@ -18793,27 +19233,59 @@ a { color: inherit; text-decoration: none; }
   margin-bottom: 12px;
 }
 
+.daily-checkin-next-reward--embedded {
+  margin: 12px 2px 0;
+  background: rgba(15, 10, 40, 0.55);
+  border: 1px solid rgba(196, 181, 253, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 8px 20px rgba(15, 10, 40, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+.daily-checkin-next-reward--embedded .daily-checkin-section-label {
+  color: #c4b5fd;
+}
+
+.daily-checkin-next-reward--embedded .daily-checkin-next-reward-line {
+  color: #fff;
+  font-size: 14px;
+}
+
+.daily-checkin-next-reward--embedded .daily-checkin-reward-badge {
+  color: #6d28d9;
+  background: #ede9fe;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+}
+
 .daily-checkin-next-reward-icon {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
   border-radius: 14px;
   display: grid;
   place-items: center;
   color: #fff;
-  background: linear-gradient(160deg, #fbbf24 0%, #d97706 100%);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.35);
+}
+
+.daily-checkin-next-reward-icon .daily-checkin-xp-coin,
+.daily-checkin-next-reward-icon .daily-checkin-gift-icon,
+.daily-checkin-next-reward-icon .daily-checkin-spark-icon,
+.daily-checkin-next-reward-icon .daily-checkin-usdt-icon {
+  width: 36px;
+  height: 36px;
+  filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.55));
 }
 
 .daily-checkin-next-reward-icon.daily-checkin-reward-icon--usdt {
-  background: linear-gradient(160deg, #34d399 0%, #059669 100%);
+  box-shadow: 0 0 16px rgba(52, 211, 153, 0.4);
 }
 
-.daily-checkin-next-reward-icon.daily-checkin-reward-icon--spark {
-  background: linear-gradient(160deg, #fbbf24 0%, #d97706 100%);
-}
-
-.daily-checkin-next-reward-icon.daily-checkin-reward-icon--xp {
-  background: linear-gradient(160deg, #a78bfa 0%, #7c3aed 100%);
+.daily-checkin-next-reward-icon.daily-checkin-reward-icon--gift {
+  box-shadow: 0 0 16px rgba(167, 139, 250, 0.45);
 }
 
 .daily-checkin-next-reward-copy {
@@ -18840,8 +19312,135 @@ a { color: inherit; text-decoration: none; }
   margin-top: 2px;
 }
 
-.daily-checkin-modal--ladder-v2 .daily-checkin-day--xp .daily-checkin-day-node {
-  background: linear-gradient(160deg, #c4b5fd 0%, #7c3aed 100%);
-  border-color: #ddd6fe;
-  border-radius: 14px;
+.daily-checkin-modal--ladder-v2 .daily-checkin-carousel-arrow {
+  background: #fff;
+  color: #6d28d9;
+  box-shadow: 0 4px 12px rgba(109, 40, 217, 0.18);
+  border: 1px solid rgba(196, 181, 253, 0.5);
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-hero-card--compact {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 80% at 15% 20%, rgba(167, 139, 250, 0.45), transparent 55%),
+    radial-gradient(ellipse 60% 70% at 90% 80%, rgba(59, 130, 246, 0.35), transparent 50%),
+    linear-gradient(135deg, #2e1065 0%, #5b21b6 45%, #312e81 100%);
+  border: 1px solid rgba(196, 181, 253, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 12px 28px rgba(76, 29, 149, 0.35);
+}
+
+.daily-checkin-hero-ambiance {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.daily-checkin-hero-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(2px);
+  opacity: 0.55;
+}
+
+.daily-checkin-hero-blob--a {
+  width: 70px;
+  height: 70px;
+  top: -18px;
+  left: -10px;
+  background: radial-gradient(circle, rgba(196, 181, 253, 0.7), transparent 70%);
+}
+
+.daily-checkin-hero-blob--b {
+  width: 90px;
+  height: 90px;
+  bottom: -30px;
+  right: -16px;
+  background: radial-gradient(circle, rgba(96, 165, 250, 0.55), transparent 70%);
+}
+
+.daily-checkin-hero-sparkle {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.9);
+  animation: daily-checkin-sparkle 2.8s ease-in-out infinite;
+}
+
+.daily-checkin-hero-sparkle--a {
+  top: 14px;
+  left: 18px;
+}
+
+.daily-checkin-hero-sparkle--b {
+  top: 22px;
+  right: 28px;
+  animation-delay: 0.7s;
+}
+
+.daily-checkin-hero-sparkle--c {
+  bottom: 18px;
+  left: 42%;
+  width: 4px;
+  height: 4px;
+  animation-delay: 1.3s;
+}
+
+@keyframes daily-checkin-sparkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-hero-card--compact::before,
+.daily-checkin-modal--ladder-v2 .daily-checkin-hero-card--compact::after {
+  display: none;
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-streak-num {
+  color: #fbbf24;
+  text-shadow: 0 0 18px rgba(251, 191, 36, 0.45);
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-streak-unit {
+  color: #fde68a;
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-btn {
+  background: linear-gradient(90deg, #2563eb 0%, #7c3aed 52%, #9333ea 100%);
+  box-shadow:
+    0 10px 26px rgba(99, 102, 241, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-btn-sub {
+  color: rgba(219, 234, 254, 0.95);
+}
+
+@media (max-width: 360px) {
+  .daily-checkin-modal--ladder-v2 .daily-checkin-days-scroll .daily-checkin-day {
+    width: 50px;
+  }
+
+  .daily-checkin-day-card {
+    min-height: 78px;
+  }
+
+  .daily-checkin-modal--ladder-v2 .daily-checkin-day-node {
+    width: 34px;
+    height: 34px;
+  }
+
+  .daily-checkin-day-glyph,
+  .daily-checkin-xp-coin,
+  .daily-checkin-gift-icon,
+  .daily-checkin-spark-icon,
+  .daily-checkin-usdt-icon {
+    width: 30px;
+    height: 30px;
+  }
 }
