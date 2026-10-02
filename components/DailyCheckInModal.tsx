@@ -871,9 +871,6 @@ export default function DailyCheckInModal({
               <div className="daily-checkin-hero-ambiance" aria-hidden>
                 <span className="daily-checkin-hero-blob daily-checkin-hero-blob--a" />
                 <span className="daily-checkin-hero-blob daily-checkin-hero-blob--b" />
-                <span className="daily-checkin-hero-sparkle daily-checkin-hero-sparkle--a" />
-                <span className="daily-checkin-hero-sparkle daily-checkin-hero-sparkle--b" />
-                <span className="daily-checkin-hero-sparkle daily-checkin-hero-sparkle--c" />
               </div>
             )}
             <div className="daily-checkin-hero-copy">

@@ -19445,7 +19445,12 @@ a { color: inherit; text-decoration: none; }
 
 .daily-checkin-modal--ladder-v2 .daily-checkin-hero-card--compact::before,
 .daily-checkin-modal--ladder-v2 .daily-checkin-hero-card--compact::after {
-  display: none;
+  content: none !important;
+  display: none !important;
+}
+
+.daily-checkin-hero-sparkle {
+  display: none !important;
 }
 
 .daily-checkin-modal--ladder-v2 .daily-checkin-streak-num {
