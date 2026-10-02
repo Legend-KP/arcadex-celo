@@ -171,7 +171,7 @@ export default function PromoPopupHost({
       router.push(`/game/${item.gameId}`);
       return;
     }
-    // weekStart / weekEnd: board is already shown in the promo — just dismiss.
+    // dailyXp: board is already shown in the promo — just dismiss.
   }, [active, finish, router]);
 
   if (gateBusy || !active) return null;

@@ -46,6 +46,9 @@ const ROOT_GAME_LOGOS: Record<string, string> = {
   "dunk-master": "/games/Dunk-logo.webp",
   sanddrop: "/games/sanddrop-logo.webp",
   "sand-drop": "/games/sanddrop-logo.webp",
+  "free-fall": "/games/free-logo.webp",
+  freefall: "/games/free-logo.webp",
+  free: "/games/free-logo.webp",
 };
 
 function resolveRootLogo(game: Game): string | null {
@@ -64,6 +67,13 @@ function resolveRootLogo(game: Game): string | null {
 
   if (nameSlug.includes("jelly") || (!isFirestoreAutoId(id) && id.includes("jelly"))) {
     return ROOT_GAME_LOGOS["jelly-jumble"];
+  }
+
+  if (
+    (nameSlug.includes("free") && nameSlug.includes("fall")) ||
+    (!isFirestoreAutoId(id) && id.includes("free") && id.includes("fall"))
+  ) {
+    return ROOT_GAME_LOGOS["free-fall"];
   }
 
   return null;
@@ -131,6 +141,7 @@ const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
   "orbit-flow",
   "line-link",
   "basedrop",
+  "free-fall",
 ]);
 
 /** Name/id aliases that map onto a preview-video folder slug. */
@@ -150,6 +161,7 @@ const PREVIEW_VIDEO_FOLDER_ALIASES: Record<string, string> = {
   orbitflow: "orbit-flow",
   linelink: "line-link",
   "base-drop": "basedrop",
+  freefall: "free-fall",
 };
 
 export type GameVideoSources = {
@@ -205,6 +217,14 @@ function resolvePreviewVideoFolder(game: Game): string | null {
       LOCAL_PREVIEW_VIDEO_FOLDERS.has("basedrop")
     ) {
       return "basedrop";
+    }
+    if (
+      (raw.includes("free-fall") ||
+        raw.includes("freefall") ||
+        (raw.includes("free") && raw.includes("fall"))) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("free-fall")
+    ) {
+      return "free-fall";
     }
   }
 
