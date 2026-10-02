@@ -12,14 +12,15 @@ export default function DailyXpHomeBanner({
   onOpenBoard,
 }: DailyXpHomeBannerProps) {
   return (
-    <section className="daily-xp-home-banner" aria-label="Daily XP reward">
+    <section className="daily-xp-home-banner" aria-label="Earn Daily XP reward">
       <button
         type="button"
         className="daily-xp-home-banner__card"
         onClick={onOpenBoard}
+        aria-label="Open Daily XP Board — Earn Daily, reach 100 XP to claim 0.02 USDT"
       >
         <div className="daily-xp-home-banner__copy">
-          <p className="daily-xp-home-banner__eyebrow">Daily Reward</p>
+          <p className="daily-xp-home-banner__eyebrow">Earn Daily</p>
           <p className="daily-xp-home-banner__amount">
             <span className="daily-xp-home-banner__amount-text">$0.02 USDT</span>
             <img

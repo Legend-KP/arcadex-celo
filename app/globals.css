@@ -517,9 +517,9 @@ a { color: inherit; text-decoration: none; }
 .daily-xp-home-banner__eyebrow {
   margin: 0;
   font-family: var(--font-head);
-  font-size: clamp(15px, 4.2vw, 18px);
+  font-size: clamp(20px, 5.5vw, 26px);
   font-weight: 800;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   color: #0f172a;
 }
 .daily-xp-home-banner__amount {
