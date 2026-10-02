@@ -217,15 +217,19 @@ export default function GameCard({
             <source src={videoSources.mp4} type="video/mp4" />
           </video>
         )}
-        {isNewArrival && (
-          <span className="game-card-new-badge" aria-label="New arrival">
-            NEW ARRIVAL
-          </span>
-        )}
-        {contestLive && (
-          <span className="game-card-contest-badge" aria-label="Contest live">
-            CONTEST LIVE
-          </span>
+        {(isNewArrival || contestLive) && (
+          <div className="game-card-badges">
+            {contestLive && (
+              <span className="game-card-contest-badge" aria-label="Contest live">
+                CONTEST LIVE
+              </span>
+            )}
+            {isNewArrival && (
+              <span className="game-card-new-badge" aria-label="New arrival">
+                NEW ARRIVAL
+              </span>
+            )}
+          </div>
         )}
         {!isLive && (
           <div className="coming-soon-overlay" aria-hidden>

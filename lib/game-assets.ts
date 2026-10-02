@@ -547,6 +547,8 @@ const GAME_TUTORIAL_BY_FOLDER: Record<string, string> = {
   "fruit-game": "/tutorials/fruite-swipe.webp",
   "fruite-swipe": "/tutorials/fruite-swipe.webp",
   fruit: "/tutorials/fruite-swipe.webp",
+  "free-fall": "/tutorials/free-fall.webp",
+  freefall: "/tutorials/free-fall.webp",
 };
 
 function resolveTutorialKey(game: Game): string {
@@ -580,6 +582,14 @@ export function getGameTutorialCandidates(game: Game): string[] {
   ) {
     push(GAME_TUTORIAL_BY_FOLDER["fruit-swipe"]);
   }
+  if (
+    nameSlug.includes("free-fall") ||
+    nameSlug.includes("freefall") ||
+    (nameSlug.includes("free") && nameSlug.includes("fall")) ||
+    (!isFirestoreAutoId(id) && id.includes("free") && id.includes("fall"))
+  ) {
+    push(GAME_TUTORIAL_BY_FOLDER["free-fall"]);
+  }
   const hyphen = key.toUpperCase();
   const spaced = key.replace(/-/g, " ").toUpperCase();
   push(`/tutorials/${hyphen}.webp`);
@@ -591,6 +601,15 @@ export function getGameTutorialCandidates(game: Game): string[] {
   }
   if (nameSlug.includes("hungry") || key.includes("hungry")) {
     push("/tutorials/hungry-hole.webp");
+  }
+  if (
+    nameSlug.includes("free-fall") ||
+    nameSlug.includes("freefall") ||
+    key.includes("free-fall") ||
+    (nameSlug.includes("free") && nameSlug.includes("fall"))
+  ) {
+    push("/tutorials/free-fall.webp");
+    push("/tutorials/free fall.webp");
   }
 
   return out;
