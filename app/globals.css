@@ -19007,21 +19007,42 @@ a { color: inherit; text-decoration: none; }
   position: relative;
 }
 
-/* Connecting rail line behind day markers */
+/* Connecting rail: center of this day → center of next day (includes gap) */
 .daily-checkin-modal--ladder-v2 .daily-checkin-days-scroll .daily-checkin-day::after {
   content: "";
   position: absolute;
   left: 50%;
-  right: -8px;
+  width: calc(100% + 8px);
   bottom: 6px;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.18);
+  height: 3px;
+  background: rgba(255, 255, 255, 0.28);
   z-index: 0;
   pointer-events: none;
 }
 
 .daily-checkin-modal--ladder-v2 .daily-checkin-days-scroll .daily-checkin-day:last-child::after {
   display: none;
+}
+
+.daily-checkin-carousel-nav--embedded {
+  margin: 2px 0 4px;
+  padding: 4px 0 2px;
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-carousel-nav--embedded .daily-checkin-carousel-arrow {
+  background: rgba(255, 255, 255, 0.95);
+  color: #6d28d9;
+  box-shadow: 0 4px 12px rgba(15, 10, 40, 0.28);
+  border: 1px solid rgba(196, 181, 253, 0.55);
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-carousel-nav--embedded .daily-checkin-carousel-dot {
+  background: rgba(196, 181, 253, 0.45);
+}
+
+.daily-checkin-modal--ladder-v2 .daily-checkin-carousel-nav--embedded .daily-checkin-carousel-dot--active {
+  background: #c4b5fd;
+  box-shadow: 0 0 8px rgba(196, 181, 253, 0.65);
 }
 
 .daily-checkin-day-card {
@@ -19254,7 +19275,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .daily-checkin-next-reward--embedded {
-  margin: 12px 2px 0;
+  margin: 8px 2px 0;
   background: rgba(15, 10, 40, 0.55);
   border: 1px solid rgba(196, 181, 253, 0.28);
   box-shadow:

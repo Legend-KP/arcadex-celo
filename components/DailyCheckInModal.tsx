@@ -773,6 +773,51 @@ export default function DailyCheckInModal({
                   {days.map((day) => renderDayNode(day))}
                 </div>
 
+                <div className="daily-checkin-carousel-nav daily-checkin-carousel-nav--embedded">
+                  <button
+                    type="button"
+                    className="daily-checkin-carousel-arrow"
+                    aria-label="Previous days"
+                    disabled={safePage <= 0}
+                    onClick={() => {
+                      playTouchSfx();
+                      scrollToPage(safePage - 1);
+                    }}
+                  >
+                    <ChevronIcon dir="left" />
+                  </button>
+                  <div className="daily-checkin-carousel-dots" aria-hidden>
+                    {Array.from({ length: pageCount }, (_, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className={`daily-checkin-carousel-dot${
+                          i === safePage
+                            ? " daily-checkin-carousel-dot--active"
+                            : ""
+                        }`}
+                        aria-label={`Page ${i + 1}`}
+                        onClick={() => {
+                          playTouchSfx();
+                          scrollToPage(i);
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="daily-checkin-carousel-arrow"
+                    aria-label="Next days"
+                    disabled={safePage >= pageCount - 1}
+                    onClick={() => {
+                      playTouchSfx();
+                      scrollToPage(safePage + 1);
+                    }}
+                  >
+                    <ChevronIcon dir="right" />
+                  </button>
+                </div>
+
                 <section className="daily-checkin-next-reward daily-checkin-next-reward--embedded">
                   <div
                     className={`daily-checkin-next-reward-icon daily-checkin-reward-icon--${rewardIconKind}`}
@@ -798,51 +843,6 @@ export default function DailyCheckInModal({
                     {nextRewardBadge}
                   </span>
                 </section>
-              </div>
-
-              <div className="daily-checkin-carousel-nav">
-                <button
-                  type="button"
-                  className="daily-checkin-carousel-arrow"
-                  aria-label="Previous days"
-                  disabled={safePage <= 0}
-                  onClick={() => {
-                    playTouchSfx();
-                    scrollToPage(safePage - 1);
-                  }}
-                >
-                  <ChevronIcon dir="left" />
-                </button>
-                <div className="daily-checkin-carousel-dots" aria-hidden>
-                  {Array.from({ length: pageCount }, (_, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      className={`daily-checkin-carousel-dot${
-                        i === safePage
-                          ? " daily-checkin-carousel-dot--active"
-                          : ""
-                      }`}
-                      aria-label={`Page ${i + 1}`}
-                      onClick={() => {
-                        playTouchSfx();
-                        scrollToPage(i);
-                      }}
-                    />
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className="daily-checkin-carousel-arrow"
-                  aria-label="Next days"
-                  disabled={safePage >= pageCount - 1}
-                  onClick={() => {
-                    playTouchSfx();
-                    scrollToPage(safePage + 1);
-                  }}
-                >
-                  <ChevronIcon dir="right" />
-                </button>
               </div>
 
               <p className="daily-checkin-days-scroll-hint">
