@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { claimShuffleRewardOnChain } from "@/lib/arcadex-rewards-spin";
@@ -111,6 +112,7 @@ export default function DailyXpLiveBoard({
   const [tipsOpen, setTipsOpen] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
   const [prompt, setPrompt] = useState<PromptKind>(null);
+  const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<DailyXpBoardResponse["me"]>(null);
   const [threshold, setThreshold] = useState(DAILY_XP_THRESHOLD);
   const [dayEndsAt, setDayEndsAt] = useState(0);
@@ -125,6 +127,10 @@ export default function DailyXpLiveBoard({
       (g) => gameIsLive(g) && g.active !== false && !gameIsTest(g)
     );
   });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -448,76 +454,84 @@ export default function DailyXpLiveBoard({
         </ul>
       </section>
 
-      {gamesOpen ? (
-        <div
-          className="daily-xp-board__tips-overlay daily-xp-board__tips-overlay--center"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Playable games"
-          onClick={() => setGamesOpen(false)}
-        >
+      {mounted &&
+        gamesOpen &&
+        createPortal(
           <div
-            className="daily-xp-board__tips-sheet daily-xp-board__games-sheet"
-            onClick={(e) => e.stopPropagation()}
+            className="daily-xp-board__tips-overlay daily-xp-board__tips-overlay--center"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Playable games"
+            onClick={() => setGamesOpen(false)}
           >
-            <div className="daily-xp-board__tips-head">
-              <h3>Play Games to earn XP</h3>
-              <button
-                type="button"
-                className="lb-close"
-                onClick={() => setGamesOpen(false)}
-                aria-label="Close games list"
-              >
-                ✕
-              </button>
-            </div>
-            <ul className="daily-xp-board__game-list daily-xp-board__game-list--full">
-              {games.map((game) => renderGameRow(game))}
-            </ul>
-          </div>
-        </div>
-      ) : null}
-
-      {tipsOpen ? (
-        <div
-          className="daily-xp-board__tips-overlay daily-xp-board__tips-overlay--center"
-          role="dialog"
-          aria-modal="true"
-          aria-label="How to earn XP"
-          onClick={() => setTipsOpen(false)}
-        >
-          <div
-            className="daily-xp-board__tips-sheet"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="daily-xp-board__tips-head">
-              <h3>How to Earn XP</h3>
-              <button
-                type="button"
-                className="lb-close"
-                onClick={() => setTipsOpen(false)}
-                aria-label="Close tips"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="daily-xp-board__tips-list">
-              {TIP_ROWS.map((row) => (
-                <div
-                  key={row.title}
-                  className={`daily-xp-board__earn-card daily-xp-board__earn-card--${row.tone} daily-xp-board__earn-card--tip`}
+            <div
+              className="daily-xp-board__tips-sheet daily-xp-board__games-sheet"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="daily-xp-board__tips-head">
+                <h3>Play Games to earn XP</h3>
+                <button
+                  type="button"
+                  className="lb-close"
+                  onClick={() => setGamesOpen(false)}
+                  aria-label="Close games list"
                 >
-                  <span className="daily-xp-board__earn-icon" aria-hidden>
-                    {row.icon}
-                  </span>
-                  <span className="daily-xp-board__earn-title">{row.title}</span>
-                  <span className="daily-xp-board__earn-xp">{row.xp}</span>
-                </div>
-              ))}
+                  ✕
+                </button>
+              </div>
+              <ul className="daily-xp-board__game-list daily-xp-board__game-list--full">
+                {games.map((game) => renderGameRow(game))}
+              </ul>
             </div>
-          </div>
-        </div>
-      ) : null}
+          </div>,
+          document.body
+        )}
+
+      {mounted &&
+        tipsOpen &&
+        createPortal(
+          <div
+            className="daily-xp-board__tips-overlay daily-xp-board__tips-overlay--center"
+            role="dialog"
+            aria-modal="true"
+            aria-label="How to earn XP"
+            onClick={() => setTipsOpen(false)}
+          >
+            <div
+              className="daily-xp-board__tips-sheet"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="daily-xp-board__tips-head">
+                <h3>How to Earn XP</h3>
+                <button
+                  type="button"
+                  className="lb-close"
+                  onClick={() => setTipsOpen(false)}
+                  aria-label="Close tips"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="daily-xp-board__tips-list">
+                {TIP_ROWS.map((row) => (
+                  <div
+                    key={row.title}
+                    className={`daily-xp-board__earn-card daily-xp-board__earn-card--${row.tone} daily-xp-board__earn-card--tip`}
+                  >
+                    <span className="daily-xp-board__earn-icon" aria-hidden>
+                      {row.icon}
+                    </span>
+                    <span className="daily-xp-board__earn-title">
+                      {row.title}
+                    </span>
+                    <span className="daily-xp-board__earn-xp">{row.xp}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
