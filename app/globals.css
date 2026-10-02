@@ -19105,10 +19105,18 @@ a { color: inherit; text-decoration: none; }
   display: block;
 }
 
+.daily-checkin-usdt-icon {
+  object-fit: contain;
+  object-position: center;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
 .daily-checkin-modal--ladder-v2 .daily-checkin-day--today .daily-checkin-day-glyph,
 .daily-checkin-modal--ladder-v2 .daily-checkin-day--milestone .daily-checkin-day-glyph,
 .daily-checkin-modal--ladder-v2 .daily-checkin-day--spark .daily-checkin-day-glyph,
-.daily-checkin-modal--ladder-v2 .daily-checkin-day--usdt .daily-checkin-day-glyph,
 .daily-checkin-modal--ladder-v2 .daily-checkin-day--xp .daily-checkin-day-glyph {
   filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.75));
   animation: daily-checkin-glow-pulse 2.2s ease-in-out infinite;
@@ -19120,7 +19128,8 @@ a { color: inherit; text-decoration: none; }
 }
 
 .daily-checkin-modal--ladder-v2 .daily-checkin-day--usdt .daily-checkin-day-glyph {
-  filter: drop-shadow(0 0 10px rgba(52, 211, 153, 0.7));
+  filter: drop-shadow(0 0 10px rgba(38, 161, 123, 0.75));
+  animation: daily-checkin-usdt-glow 2.2s ease-in-out infinite;
 }
 
 @keyframes daily-checkin-glow-pulse {
@@ -19130,6 +19139,17 @@ a { color: inherit; text-decoration: none; }
   }
   50% {
     filter: drop-shadow(0 0 16px rgba(251, 191, 36, 0.95));
+    transform: scale(1.05);
+  }
+}
+
+@keyframes daily-checkin-usdt-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px rgba(38, 161, 123, 0.55));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(38, 161, 123, 0.95));
     transform: scale(1.05);
   }
 }
@@ -19280,8 +19300,14 @@ a { color: inherit; text-decoration: none; }
   filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.55));
 }
 
+.daily-checkin-next-reward-icon .daily-checkin-usdt-icon {
+  filter: drop-shadow(0 0 10px rgba(38, 161, 123, 0.65));
+}
+
 .daily-checkin-next-reward-icon.daily-checkin-reward-icon--usdt {
-  box-shadow: 0 0 16px rgba(52, 211, 153, 0.4);
+  background: transparent;
+  border-color: rgba(38, 161, 123, 0.35);
+  box-shadow: 0 0 16px rgba(38, 161, 123, 0.4);
 }
 
 .daily-checkin-next-reward-icon.daily-checkin-reward-icon--gift {

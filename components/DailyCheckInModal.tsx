@@ -191,25 +191,14 @@ function SparkBoltIcon({ className }: { className?: string }) {
 
 function UsdtGlyphIcon({ className }: { className?: string }) {
   return (
-    <svg
+    // eslint-disable-next-line @next/next/no-img-element -- static public asset
+    <img
       className={`daily-checkin-usdt-icon ${className ?? ""}`.trim()}
-      viewBox="0 0 40 40"
+      src="/tether-usdt-logo.png"
+      alt=""
       aria-hidden
-    >
-      <circle cx="20" cy="20" r="18" fill="#26a17b" />
-      <circle
-        cx="20"
-        cy="20"
-        r="14.5"
-        fill="none"
-        stroke="rgba(255,255,255,0.35)"
-        strokeWidth="1.4"
-      />
-      <path
-        d="M20.2 11.2v2.4c3.3.1 5.8.8 5.8 1.7s-2.5 1.6-5.8 1.7v5.3c4.6-.2 8-1.5 8-3.2 0-1.8-3.6-3.2-8-3.4V11.2c5.2.2 9.2 2 9.2 4.3s-4 4.1-9.2 4.3v7.5h-1.6v-7.5c-5.2-.2-9.2-1.9-9.2-4.3s4-4.1 9.2-4.3v-2.5h1.6zm-1.6 7.5c-3.3-.1-5.8-.8-5.8-1.7s2.5-1.6 5.8-1.7v3.4z"
-        fill="#fff"
-      />
-    </svg>
+      draggable={false}
+    />
   );
 }
 
