@@ -14,9 +14,12 @@ import {
   type StreakUsdtPendingItem,
 } from "@/lib/streak-client";
 import {
+  formatDayColumnCaption,
+  formatNextRewardLine,
   formatStreakRewardDetail,
   formatUsdtAmount,
   getStreakDayReward,
+  getStreakRewardSpotlight,
   isStreakHighlightDay,
   isStreakLadderV2Enabled,
   STREAK_LADDER_REQUIRED_DAYS,
@@ -36,7 +39,8 @@ interface DailyCheckInModalProps {
   }) => void;
 }
 
-const CAROUSEL_PAGE_SIZE = 6;
+/** Show one week at a time (matches mock day-column strip). */
+const CAROUSEL_PAGE_SIZE = 7;
 
 function FlameIcon({ className }: { className?: string }) {
   return (
@@ -143,12 +147,11 @@ function dayNodeState(
 
 function rewardGlyph(
   reward: StreakDayReward | null
-): "usdt" | "spark" | "xp" | "chest" | null {
-  if (!reward || !isStreakHighlightDay(reward)) return null;
+): "usdt" | "spark" | "xp" {
+  if (!reward) return "xp";
   if (reward.usdt != null) return "usdt";
   if (reward.infiniteHours != null) return "spark";
-  if (reward.xpBonus > 0) return "xp";
-  return "chest";
+  return "xp";
 }
 
 export default function DailyCheckInModal({
@@ -325,6 +328,10 @@ export default function DailyCheckInModal({
 
   const pageCount = Math.max(1, Math.ceil(requiredDays / CAROUSEL_PAGE_SIZE));
   const safePage = Math.min(carouselPage, pageCount - 1);
+  const progressPct = Math.min(
+    100,
+    Math.round((displayStreak / requiredDays) * 100)
+  );
 
   const streakHint = wouldReset
     ? "Your previous run ended — check in to start day 1 again."
@@ -337,16 +344,20 @@ export default function DailyCheckInModal({
           ? "Final check-in unlocks the day 30 finale!"
           : "Final check-in unlocks Infinite Spark!"
         : displayStreak === 1
-          ? "Nice! Come back tomorrow 🔥"
-          : "Good start! Keep it going! 🔥";
+          ? "Nice! Come back tomorrow."
+          : "Good start! Keep it going!";
 
   const todayReward = ladderV2 ? getStreakDayReward(checkInDay) : null;
-  // Default (no day tapped): always show today's upcoming check-in reward.
   const peekedReward =
     ladderV2 && selectedDay != null ? getStreakDayReward(selectedDay) : null;
+  const spotlight =
+    ladderV2 && !peekedReward
+      ? getStreakRewardSpotlight(checkInDay)
+      : null;
   const cardReward =
     peekedReward ??
     todayReward ??
+    spotlight?.reward ??
     ({
       day: checkInDay,
       xp: 10,
@@ -356,15 +367,17 @@ export default function DailyCheckInModal({
     } satisfies StreakDayReward);
 
   const nextRewardTitle = ladderV2
-    ? isStreakHighlightDay(cardReward)
-      ? `Day ${cardReward.day} Milestone`
-      : `Day ${cardReward.day} Reward`
+    ? formatNextRewardLine(cardReward)
     : isFinalDay
       ? `Day ${requiredDays} Reward`
       : `Day ${requiredDays} Milestone`;
 
   const nextRewardBadge = ladderV2
-    ? `Day ${cardReward.day}`
+    ? selectedDay != null
+      ? `Day ${cardReward.day}`
+      : cardReward.day === checkInDay
+        ? "Today"
+        : `Day ${cardReward.day}`
     : isFinalDay
       ? "Today"
       : displayStreak > 0
@@ -372,7 +385,7 @@ export default function DailyCheckInModal({
         : `Day ${requiredDays}`;
 
   const rewardIconKind = ladderV2
-    ? rewardGlyph(cardReward) ?? "xp"
+    ? rewardGlyph(cardReward)
     : "spark";
 
   function scrollToPage(page: number) {
@@ -535,10 +548,16 @@ export default function DailyCheckInModal({
     const glyph = ladderV2
       ? rewardGlyph(reward)
       : day === requiredDays
-        ? "chest"
-        : null;
+        ? "spark"
+        : "xp";
     const isSelected = selectedDay === day;
     const tappable = ladderV2;
+    const caption =
+      ladderV2 && reward
+        ? state === "done"
+          ? "Claimed"
+          : formatDayColumnCaption(reward)
+        : null;
 
     const nodeInner = (
       <>
@@ -551,12 +570,15 @@ export default function DailyCheckInModal({
             <UsdtGlyphIcon className="daily-checkin-day-glyph" />
           ) : glyph === "spark" ? (
             <SparkBoltIcon className="daily-checkin-day-glyph" />
-          ) : glyph === "xp" || glyph === "chest" ? (
+          ) : ladderV2 ? (
             <XpIcon className="daily-checkin-day-glyph" />
           ) : (
             <span className="daily-checkin-day-num">{day}</span>
           )}
         </div>
+        {caption ? (
+          <span className="daily-checkin-day-caption">{caption}</span>
+        ) : null}
         {state === "today" ? (
           <span className="daily-checkin-day-today">Today</span>
         ) : (
@@ -569,7 +591,7 @@ export default function DailyCheckInModal({
       highlight ? " daily-checkin-day--milestone" : ""
     }${glyph === "usdt" ? " daily-checkin-day--usdt" : ""}${
       glyph === "spark" ? " daily-checkin-day--spark" : ""
-    }${glyph === "xp" || glyph === "chest" ? " daily-checkin-day--xp" : ""}${
+    }${glyph === "xp" && ladderV2 ? " daily-checkin-day--xp" : ""}${
       isSelected ? " daily-checkin-day--peeked" : ""
     }${tappable ? " daily-checkin-day--tappable" : ""}`;
 
@@ -615,25 +637,22 @@ export default function DailyCheckInModal({
             {ladderV2 ? null : (
               <FlameIcon className="daily-checkin-heading-flame" />
             )}
-            Daily Streak
+            {ladderV2 ? "30 Days Streak" : "Daily Streak"}
             {ladderV2 ? null : (
               <FlameIcon className="daily-checkin-heading-flame" />
             )}
           </h2>
           <p className="daily-checkin-sub">
-            Check in once every 24 hours to keep your streak alive
             {ladderV2 ? (
               <>
-                {" "}
-                and earn{" "}
+                Open ArcadeX daily to keep your streak alive and earn{" "}
                 <span className="daily-checkin-sub-accent">
-                  XP, Infinite Spark &amp; USDT.
+                  USDT, XP, Infinite game play
                 </span>
               </>
             ) : (
               <>
-                {" "}
-                and earn{" "}
+                Check in once every 24 hours to keep your streak alive and earn{" "}
                 <span className="daily-checkin-sub-accent">Infinite Spark.</span>
               </>
             )}
@@ -644,13 +663,24 @@ export default function DailyCheckInModal({
               className="daily-checkin-carousel"
               aria-label={`${requiredDays}-day streak progress`}
             >
-              <div
-                ref={daysScrollRef}
-                className="daily-checkin-days-scroll"
-                role="list"
-                onScroll={() => syncPageFromScroll()}
-              >
-                {days.map((day) => renderDayNode(day))}
+              <div className="daily-checkin-days-panel">
+                <div
+                  ref={daysScrollRef}
+                  className="daily-checkin-days-scroll"
+                  role="list"
+                  onScroll={() => syncPageFromScroll()}
+                >
+                  {days.map((day) => renderDayNode(day))}
+                </div>
+                <div
+                  className="daily-checkin-progress-rail"
+                  aria-label={`Streak progress ${displayStreak} of ${requiredDays}`}
+                >
+                  <div
+                    className="daily-checkin-progress-rail-fill"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
               </div>
 
               <div className="daily-checkin-carousel-nav">
@@ -711,6 +741,28 @@ export default function DailyCheckInModal({
             </section>
           )}
 
+          {ladderV2 ? (
+            <section className="daily-checkin-next-reward">
+              <div
+                className={`daily-checkin-next-reward-icon daily-checkin-reward-icon--${rewardIconKind}`}
+                aria-hidden
+              >
+                {rewardIconKind === "usdt" ? (
+                  <UsdtGlyphIcon />
+                ) : rewardIconKind === "spark" ? (
+                  <SparkBoltIcon />
+                ) : (
+                  <XpIcon />
+                )}
+              </div>
+              <div className="daily-checkin-next-reward-copy">
+                <p className="daily-checkin-section-label">Next Reward</p>
+                <p className="daily-checkin-next-reward-line">{nextRewardTitle}</p>
+              </div>
+              <span className="daily-checkin-reward-badge">{nextRewardBadge}</span>
+            </section>
+          ) : null}
+
           <section
             className={`daily-checkin-hero-card${
               ladderV2 ? " daily-checkin-hero-card--compact" : ""
@@ -743,57 +795,26 @@ export default function DailyCheckInModal({
             </div>
           </section>
 
-          <section className="daily-checkin-reward-card">
-            <div className="daily-checkin-reward-row">
-              <div
-                className={`daily-checkin-reward-icon daily-checkin-reward-icon--${rewardIconKind}`}
-                aria-hidden
-              >
-                {rewardIconKind === "usdt" ? (
-                  <UsdtGlyphIcon />
-                ) : rewardIconKind === "spark" ? (
+          {!ladderV2 ? (
+            <section className="daily-checkin-reward-card">
+              <div className="daily-checkin-reward-row">
+                <div
+                  className={`daily-checkin-reward-icon daily-checkin-reward-icon--${rewardIconKind}`}
+                  aria-hidden
+                >
                   <SparkBoltIcon />
-                ) : (
-                  <XpIcon />
-                )}
-              </div>
-              <div className="daily-checkin-reward-copy">
-                {ladderV2 ? null : (
+                </div>
+                <div className="daily-checkin-reward-copy">
                   <p className="daily-checkin-section-label">Next reward</p>
-                )}
-                <p className="daily-checkin-reward-title">{nextRewardTitle}</p>
-                {ladderV2 ? (
-                  <div className="daily-checkin-reward-chips">
-                    <span className="daily-checkin-reward-chip">
-                      <XpIcon />
-                      {cardReward.xpBonus > 0
-                        ? `${cardReward.xp} XP`
-                        : `+${cardReward.xp} XP`}
-                    </span>
-                    {cardReward.usdt != null ? (
-                      <span className="daily-checkin-reward-chip">
-                        <UsdtGlyphIcon />
-                        {cardReward.usdt >= 0.01
-                          ? `${cardReward.usdt} USDT`
-                          : `${cardReward.usdt.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")} USDT`}
-                      </span>
-                    ) : null}
-                    {cardReward.infiniteHours != null ? (
-                      <span className="daily-checkin-reward-chip">
-                        <SparkBoltIcon />
-                        Infinite Spark · {cardReward.infiniteHours}h
-                      </span>
-                    ) : null}
-                  </div>
-                ) : (
+                  <p className="daily-checkin-reward-title">{nextRewardTitle}</p>
                   <p className="daily-checkin-reward-detail">
                     Infinite Spark · 24 hours
                   </p>
-                )}
+                </div>
+                <span className="daily-checkin-reward-badge">{nextRewardBadge}</span>
               </div>
-              <span className="daily-checkin-reward-badge">{nextRewardBadge}</span>
-            </div>
-          </section>
+            </section>
+          ) : null}
 
           {error ? <p className="daily-checkin-error">{error}</p> : null}
 
@@ -876,7 +897,7 @@ export default function DailyCheckInModal({
                 className="spark-success-popup__btn"
                 onClick={() => finishSuccess()}
               >
-                Let's play
+                Let&apos;s play
               </button>
             )}
             {success.claimUsdt && usdtPayoutsEnabled ? (
@@ -886,7 +907,7 @@ export default function DailyCheckInModal({
                 onClick={() => finishSuccess()}
                 style={{ marginTop: 8, opacity: 0.85 }}
               >
-                Let's play
+                Let&apos;s play
               </button>
             ) : null}
           </div>

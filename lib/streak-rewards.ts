@@ -25,9 +25,9 @@ export function isStreakLadderV2Enabled(): boolean {
 
 export interface StreakDayReward {
   day: number;
-  /** Total activity XP granted that check-in (base + bonus). */
+  /** Total activity XP granted that check-in (always STREAK_BASE_XP). */
   xp: number;
-  /** Extra XP beyond STREAK_BASE_XP. */
+  /** Extra XP beyond STREAK_BASE_XP (always 0 — product table is flat 10 XP). */
   xpBonus: number;
   /** USDT human units, or null. */
   usdt: number | null;
@@ -36,32 +36,29 @@ export interface StreakDayReward {
 }
 
 type DayExtras = {
-  xpBonus?: number;
   usdt?: number;
   infiniteHours?: number;
 };
 
-/** Sparse extras keyed by day; every other day is base XP only. */
+/** Sparse extras keyed by day; every day also grants STREAK_BASE_XP. */
 const STREAK_DAY_EXTRAS: Readonly<Record<number, DayExtras>> = {
-  3: { xpBonus: 50 },
   5: { infiniteHours: 6 },
   7: { usdt: 0.001 },
   10: { infiniteHours: 12 },
   14: { usdt: 0.005 },
-  18: { xpBonus: 100, infiniteHours: 6 },
+  18: { infiniteHours: 6 },
   21: { usdt: 0.005, infiniteHours: 6 },
-  24: { xpBonus: 100, infiniteHours: 12 },
-  27: { xpBonus: 150, infiniteHours: 24 },
-  30: { xpBonus: 200, usdt: 0.05, infiniteHours: 24 },
+  24: { infiniteHours: 12 },
+  27: { infiniteHours: 24 },
+  30: { usdt: 0.05, infiniteHours: 24 },
 };
 
 function buildDayReward(day: number): StreakDayReward {
   const extras = STREAK_DAY_EXTRAS[day] ?? {};
-  const xpBonus = extras.xpBonus ?? 0;
   return {
     day,
-    xp: STREAK_BASE_XP + xpBonus,
-    xpBonus,
+    xp: STREAK_BASE_XP,
+    xpBonus: 0,
     usdt: extras.usdt ?? null,
     infiniteHours: extras.infiniteHours ?? null,
   };
@@ -85,11 +82,7 @@ export function getStreakDayReward(day: number): StreakDayReward | null {
 }
 
 export function isStreakHighlightDay(reward: StreakDayReward): boolean {
-  return (
-    reward.xpBonus > 0 ||
-    reward.usdt != null ||
-    reward.infiniteHours != null
-  );
+  return reward.usdt != null || reward.infiniteHours != null;
 }
 
 /** Four week rows for the check-in UI (last week has days 22–30). */
@@ -123,12 +116,7 @@ export function formatUsdtAmount(amount: number): string {
 }
 
 export function formatStreakRewardDetail(reward: StreakDayReward): string {
-  const parts: string[] = [];
-  if (reward.xpBonus > 0) {
-    parts.push(`${reward.xp} XP`);
-  } else {
-    parts.push(`+${reward.xp} XP`);
-  }
+  const parts: string[] = [`+${reward.xp} XP`];
   if (reward.usdt != null) {
     parts.push(formatUsdtAmount(reward.usdt));
   }
@@ -136,6 +124,22 @@ export function formatStreakRewardDetail(reward: StreakDayReward): string {
     parts.push(`Infinite Spark · ${reward.infiniteHours}h`);
   }
   return parts.join(" · ");
+}
+
+/** Next Reward strip: reward first, day second. */
+export function formatNextRewardLine(reward: StreakDayReward): string {
+  return `${formatStreakRewardDetail(reward)} · Day ${reward.day}`;
+}
+
+/** Short caption under a day column icon. */
+export function formatDayColumnCaption(reward: StreakDayReward): string {
+  if (reward.usdt != null) {
+    return formatUsdtAmount(reward.usdt);
+  }
+  if (reward.infiniteHours != null) {
+    return `${reward.infiniteHours}h Spark`;
+  }
+  return `${reward.xp} XP`;
 }
 
 /**
