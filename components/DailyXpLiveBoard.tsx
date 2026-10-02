@@ -109,6 +109,7 @@ export default function DailyXpLiveBoard({
   const [error, setError] = useState<string | null>(null);
   const [claimMsg, setClaimMsg] = useState<string | null>(null);
   const [tipsOpen, setTipsOpen] = useState(false);
+  const [gamesOpen, setGamesOpen] = useState(false);
   const [prompt, setPrompt] = useState<PromptKind>(null);
   const [me, setMe] = useState<DailyXpBoardResponse["me"]>(null);
   const [threshold, setThreshold] = useState(DAILY_XP_THRESHOLD);
@@ -271,26 +272,49 @@ export default function DailyXpLiveBoard({
   const xp = live ? me?.score ?? 0 : 0;
   const progressPct = Math.min(100, Math.round((xp / threshold) * 100));
   const rewardLabel = `$${DAILY_XP_REWARD_USDT.toFixed(2)} USDT`;
+  const previewGames = games.slice(0, 2);
+  const xpLabel = loading && live ? "…" : `${xp} / ${threshold} XP`;
+
+  function renderGameRow(game: Game) {
+    return (
+      <li key={game.id}>
+        <button
+          type="button"
+          className="daily-xp-board__game-row"
+          onClick={() => openGame(game.id)}
+        >
+          <span className="daily-xp-board__game-thumb">
+            <GameThumb game={game} />
+          </span>
+          <span className="daily-xp-board__game-meta">
+            <span className="daily-xp-board__game-name">{game.name}</span>
+          </span>
+          <span className="daily-xp-board__game-xp">+10 XP</span>
+          <span className="daily-xp-board__game-chevron" aria-hidden>
+            ›
+          </span>
+        </button>
+      </li>
+    );
+  }
 
   return (
     <div
       className={`daily-xp-board${compact ? " daily-xp-board--compact" : ""}`}
     >
       {!hideClose && onClose ? (
-        <div className="daily-xp-board__top">
-          <button
-            type="button"
-            className="lb-close"
-            onClick={onClose}
-            aria-label="Close Daily XP Board"
-          >
-            ✕
-          </button>
-        </div>
+        <button
+          type="button"
+          className="lb-close daily-xp-board__close"
+          onClick={onClose}
+          aria-label="Close Daily XP Board"
+        >
+          ✕
+        </button>
       ) : null}
 
       <section className="daily-xp-board__reward">
-        <p className="daily-xp-board__eyebrow">Daily reward</p>
+        <p className="daily-xp-board__eyebrow">Daily Reward</p>
         <div className="daily-xp-board__reward-row">
           <p className="daily-xp-board__reward-amount">{rewardLabel}</p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -309,13 +333,13 @@ export default function DailyXpLiveBoard({
       <section className="daily-xp-board__progress" aria-label="Today's progress">
         <div className="daily-xp-board__progress-head">
           <span>Today&apos;s Progress</span>
-          <span className="daily-xp-board__progress-mid">
-            {loading && live ? "…" : `${xp} / ${threshold} XP`}
-          </span>
-          <span className="daily-xp-board__progress-pct">{progressPct}%</span>
+          <span className="daily-xp-board__progress-xp">{xpLabel}</span>
         </div>
-        <div className="daily-xp-board__progress-bar" aria-hidden>
-          <span style={{ width: `${progressPct}%` }} />
+        <div className="daily-xp-board__progress-track">
+          <div className="daily-xp-board__progress-bar" aria-hidden>
+            <span style={{ width: `${progressPct}%` }} />
+          </div>
+          <span className="daily-xp-board__progress-pct">{progressPct}%</span>
         </div>
         {live && resetCountdown ? (
           <p className="daily-xp-board__reset">Resets in {resetCountdown}</p>
@@ -406,37 +430,57 @@ export default function DailyXpLiveBoard({
           <h3 className="daily-xp-board__section-title">
             Play Games to earn XP
           </h3>
+          {games.length > 0 ? (
+            <button
+              type="button"
+              className="daily-xp-board__see-more"
+              onClick={() => setGamesOpen(true)}
+            >
+              See more games ›
+            </button>
+          ) : null}
         </div>
-        <ul className="daily-xp-board__game-list">
-          {games.map((game) => (
-            <li key={game.id}>
-              <button
-                type="button"
-                className="daily-xp-board__game-row"
-                onClick={() => openGame(game.id)}
-              >
-                <span className="daily-xp-board__game-thumb">
-                  <GameThumb game={game} />
-                </span>
-                <span className="daily-xp-board__game-meta">
-                  <span className="daily-xp-board__game-name">{game.name}</span>
-                </span>
-                <span className="daily-xp-board__game-xp">+10 XP</span>
-                <span className="daily-xp-board__game-chevron" aria-hidden>
-                  ›
-                </span>
-              </button>
-            </li>
-          ))}
+        <ul className="daily-xp-board__game-list daily-xp-board__game-list--preview">
+          {previewGames.map((game) => renderGameRow(game))}
           {games.length === 0 ? (
             <li className="daily-xp-board__games-empty">No playable games yet.</li>
           ) : null}
         </ul>
       </section>
 
+      {gamesOpen ? (
+        <div
+          className="daily-xp-board__tips-overlay daily-xp-board__tips-overlay--center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Playable games"
+          onClick={() => setGamesOpen(false)}
+        >
+          <div
+            className="daily-xp-board__tips-sheet daily-xp-board__games-sheet"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="daily-xp-board__tips-head">
+              <h3>Play Games to earn XP</h3>
+              <button
+                type="button"
+                className="lb-close"
+                onClick={() => setGamesOpen(false)}
+                aria-label="Close games list"
+              >
+                ✕
+              </button>
+            </div>
+            <ul className="daily-xp-board__game-list daily-xp-board__game-list--full">
+              {games.map((game) => renderGameRow(game))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
+
       {tipsOpen ? (
         <div
-          className="daily-xp-board__tips-overlay"
+          className="daily-xp-board__tips-overlay daily-xp-board__tips-overlay--center"
           role="dialog"
           aria-modal="true"
           aria-label="How to earn XP"

@@ -734,41 +734,54 @@ a { color: inherit; text-decoration: none; }
 
 /* Daily XP Board — main mockup UI */
 .activity-lb-view--daily {
-  padding: 8px 12px 24px;
+  padding: 4px 12px 20px;
+}
+.activity-lb-sheet .daily-xp-board {
+  padding-top: 2px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  max-height: 100%;
 }
 .daily-xp-board {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   width: 100%;
   min-height: 0;
   flex: 1 1 auto;
   color: #0f172a;
 }
-.daily-xp-board__top {
-  display: flex;
-  justify-content: flex-end;
+.daily-xp-board__close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
 }
 .daily-xp-board__reward {
-  padding: 4px 2px 0;
+  padding: 0 36px 0 2px;
+  margin-top: 0;
 }
 .daily-xp-board__eyebrow {
   margin: 0;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #94a3b8;
+  font-family: var(--font-head);
+  font-size: clamp(18px, 5vw, 22px);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text);
+  line-height: 1.15;
 }
 .daily-xp-board__reward-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 .daily-xp-board__reward-amount {
   margin: 0;
+  font-family: var(--font-body);
   font-size: clamp(28px, 8vw, 34px);
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -776,14 +789,14 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.1;
 }
 .daily-xp-board__usdt {
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   object-fit: contain;
   flex-shrink: 0;
 }
 .daily-xp-board__reward-copy {
-  margin: 6px 0 0;
-  font-size: 14px;
+  margin: 4px 0 0;
+  font-size: 13px;
   font-weight: 600;
   color: #64748b;
 }
@@ -793,25 +806,34 @@ a { color: inherit; text-decoration: none; }
   background: #fff;
   border: 1px solid rgba(15, 23, 42, 0.06);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
 }
 .daily-xp-board__progress-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   font-size: 13px;
   font-weight: 700;
   color: #334155;
+  min-width: 0;
 }
-.daily-xp-board__progress-mid {
+.daily-xp-board__progress-xp {
   color: #0f172a;
-}
-.daily-xp-board__progress-pct {
-  color: #64748b;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.daily-xp-board__progress-track {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 .daily-xp-board__progress-bar {
-  margin-top: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
   height: 10px;
   border-radius: 999px;
   background: #e2e8f0;
@@ -822,6 +844,15 @@ a { color: inherit; text-decoration: none; }
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #22c55e, #16a34a);
+}
+.daily-xp-board__progress-pct {
+  flex-shrink: 0;
+  min-width: 2.75rem;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 800;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
 }
 .daily-xp-board__reset {
   margin: 8px 0 0;
@@ -835,13 +866,24 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .daily-xp-board__section-title {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   color: #0f172a;
+}
+.daily-xp-board__see-more {
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 0;
+  font-family: var(--font-body);
 }
 .daily-xp-board__tips-btn {
   width: 24px;
@@ -865,7 +907,7 @@ a { color: inherit; text-decoration: none; }
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
-  padding: 14px 12px;
+  padding: 12px 12px;
   border-radius: 16px;
   border: 1px solid rgba(15, 23, 42, 0.05);
 }
@@ -905,13 +947,13 @@ a { color: inherit; text-decoration: none; }
 .daily-xp-board__cta-wrap {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .daily-xp-board__cta {
   width: 100%;
   border: none;
   border-radius: 14px;
-  padding: 14px 16px;
+  padding: 13px 16px;
   font-size: 15px;
   font-weight: 800;
   color: #fff;
@@ -971,7 +1013,7 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 9px 12px;
   border-radius: 12px;
   background: #ecfdf5;
   color: #166534;
@@ -982,7 +1024,8 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  margin-top: 2px;
 }
 .daily-xp-board__game-list {
   list-style: none;
@@ -991,12 +1034,15 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: min(48vh, 420px);
-  overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
-.activity-lb-panel .daily-xp-board__game-list {
-  max-height: min(36vh, 320px);
+.daily-xp-board__game-list--preview {
+  max-height: none;
+  overflow: visible;
+}
+.daily-xp-board__game-list--full {
+  max-height: min(60vh, 480px);
+  overflow-y: auto;
 }
 .daily-xp-board__game-row {
   width: 100%;
@@ -1077,14 +1123,23 @@ a { color: inherit; text-decoration: none; }
   justify-content: center;
   padding: 16px;
 }
+.daily-xp-board__tips-overlay--center {
+  align-items: center;
+  padding: 20px 16px;
+}
 .daily-xp-board__tips-sheet {
   width: min(100%, 420px);
   max-height: min(80vh, 560px);
   overflow-y: auto;
   background: #fff;
-  border-radius: 20px 20px 16px 16px;
+  border-radius: 20px;
   padding: 16px;
   box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+}
+.daily-xp-board__games-sheet {
+  max-height: min(78vh, 620px);
+  display: flex;
+  flex-direction: column;
 }
 .daily-xp-board__tips-head {
   display: flex;
@@ -1131,9 +1186,9 @@ a { color: inherit; text-decoration: none; }
 .activity-lb-sheet {
   width: 100%;
   max-width: 400px;
-  max-height: min(85dvh, 640px);
+  max-height: min(88dvh, 680px);
   margin: 0 auto;
-  padding: 16px;
+  padding: 12px 14px 14px;
   gap: 8px;
   flex-shrink: 0;
   overflow: hidden;
@@ -1436,13 +1491,8 @@ a { color: inherit; text-decoration: none; }
 
 .spark-panel__title::before,
 .spark-panel__title::after {
-  content: "?";
-  display: inline-block;
-  margin: 0 12px;
-  color: #facc15;
-  font-size: 24px;
-  vertical-align: middle;
-  filter: drop-shadow(0 2px 4px rgba(245, 158, 11, 0.28));
+  content: none;
+  display: none;
 }
 
 .spark-panel__intro {
@@ -1472,8 +1522,11 @@ a { color: inherit; text-decoration: none; }
 
 .spark-panel__status-main {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 18px;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
 }
 
 .spark-panel__ring {
@@ -1526,12 +1579,12 @@ a { color: inherit; text-decoration: none; }
 }
 
 .spark-panel__count-block {
-  flex: 1;
-  min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
   gap: 2px;
+  text-align: center;
 }
 
 .spark-panel__count-line {
@@ -1585,7 +1638,7 @@ a { color: inherit; text-decoration: none; }
 .spark-panel__next-spark {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 6px;
   margin: 0;
   font-size: 13px;
@@ -1688,11 +1741,8 @@ a { color: inherit; text-decoration: none; }
 }
 
 .spark-shop-card__main::after {
-  content: "?";
-  flex-shrink: 0;
-  color: #a1a1aa;
-  font-size: 30px;
-  line-height: 1;
+  content: none;
+  display: none;
 }
 
 .spark-shop-card__icon {
@@ -13852,13 +13902,8 @@ a { color: inherit; text-decoration: none; }
 
 .spark-panel__title::before,
 .spark-panel__title::after {
-  content: "?";
-  display: inline-block;
-  margin: 0 12px;
-  color: #facc15;
-  font-size: 24px;
-  vertical-align: middle;
-  filter: drop-shadow(0 2px 4px rgba(245, 158, 11, 0.28));
+  content: none;
+  display: none;
 }
 
 .spark-panel__intro {
@@ -13888,8 +13933,11 @@ a { color: inherit; text-decoration: none; }
 
 .spark-panel__status-main {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 18px;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
 }
 
 .spark-panel__ring {
@@ -13942,12 +13990,12 @@ a { color: inherit; text-decoration: none; }
 }
 
 .spark-panel__count-block {
-  flex: 1;
-  min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
   gap: 2px;
+  text-align: center;
 }
 
 .spark-panel__count-line {
@@ -14001,7 +14049,7 @@ a { color: inherit; text-decoration: none; }
 .spark-panel__next-spark {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 6px;
   margin: 0;
   font-size: 13px;
@@ -14104,11 +14152,8 @@ a { color: inherit; text-decoration: none; }
 }
 
 .spark-shop-card__main::after {
-  content: "?";
-  flex-shrink: 0;
-  color: #a1a1aa;
-  font-size: 30px;
-  line-height: 1;
+  content: none;
+  display: none;
 }
 
 .spark-shop-card__icon {
