@@ -40,7 +40,7 @@ interface SparkContextValue {
   sparks: SparkSnapshot;
   loading: boolean;
   refresh: () => Promise<void>;
-  spendForGame: () => Promise<boolean>;
+  spendForGame: (gameId: string) => Promise<boolean>;
   purchaseInfiniteSpark: () => Promise<void>;
   purchaseSparkRefill: () => Promise<void>;
 }
@@ -82,15 +82,18 @@ export default function SparkProvider({
     setState(coerceSparkState(data.state));
   }, [walletAddress]);
 
-  const spendForGame = useCallback(async (): Promise<boolean> => {
-    if (!walletAddress) {
-      throw new Error("Connect your wallet in MiniPay to play.");
-    }
+  const spendForGame = useCallback(
+    async (gameId: string): Promise<boolean> => {
+      if (!walletAddress) {
+        throw new Error("Connect your wallet in MiniPay to play.");
+      }
 
-    const result = await spendSpark(walletAddress);
-    setState(coerceSparkState(result.state));
-    return result.spent;
-  }, [walletAddress]);
+      const result = await spendSpark(walletAddress, gameId);
+      setState(coerceSparkState(result.state));
+      return result.spent;
+    },
+    [walletAddress]
+  );
 
   const purchaseInfiniteSpark = useCallback(async (): Promise<void> => {
     if (!walletAddress) {

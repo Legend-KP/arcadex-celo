@@ -147,7 +147,7 @@ export default function PromoPopupModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={leaderboard ? undefined : "promo-popup-title"}
-        aria-label={leaderboard ? "XP Leaderboard" : undefined}
+        aria-label={leaderboard ? "Daily XP Board" : undefined}
         style={themedStyle}
         onClick={(e) => e.stopPropagation()}
       >

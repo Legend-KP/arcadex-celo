@@ -27,7 +27,7 @@ const NAV: { id: AppView | "sparks"; label: string }[] = [
   { id: "home", label: "Home" },
   { id: "games", label: "Games" },
   { id: "contests", label: "Contests" },
-  { id: "leaderboard", label: "XP Leaderboard" },
+  { id: "leaderboard", label: "Daily XP Board" },
   { id: "sparks", label: "Sparks" },
   { id: "achievements", label: "Achievements" },
 ];

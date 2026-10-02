@@ -75,6 +75,21 @@ import {
   type UserXpRecord,
   ACTIVITY_XP_PER_SPEND_UNIT,
 } from "@/lib/activity-week";
+import {
+  coerceDailyXpCounters,
+  compareDailyXpEntries,
+  computeDailyXp,
+  dailyXpEntryFromCounters,
+  DAILY_XP_CAMPAIGN_ID,
+  DAILY_XP_LEADERBOARD_MAX_ENTRIES,
+  DAILY_XP_PLAY_COOLDOWN_MS,
+  emptyDailyXpCounters,
+  getUtcDayWindow,
+  type DailyXpClaimRecord,
+  type DailyXpCounters,
+  type DailyXpEventKind,
+  type DailyXpLeaderboardEntry,
+} from "@/lib/daily-xp-board";
 
 type StoredUser = Omit<PlayerProfile, "id">;
 type LeaderboardMap = Record<string, LeaderboardEntry>;
@@ -680,6 +695,7 @@ export async function spendSparkOnServer(
 
   // Count every successful game-start (including Infinite Spark) toward weekly activity.
   recordActivityEventBestEffort(wallet, "play");
+  scheduleWorkerWork(recordDailyXpBoardEvent(wallet, "play"));
 
   return {
     state,
@@ -776,6 +792,7 @@ export async function activateInfiniteSparkOnServer(
   }
 
   recordActivityEventBestEffort(wallet, "spend", { spendUnits: 2 });
+  scheduleWorkerWork(recordDailyXpBoardEvent(wallet, "spend", { spendUnits: 2 }));
 
   return {
     state: nextState,
@@ -871,6 +888,7 @@ export async function activateSparkRefillOnServer(
   }
 
   recordActivityEventBestEffort(wallet, "spend", { spendUnits: 1 });
+  scheduleWorkerWork(recordDailyXpBoardEvent(wallet, "spend", { spendUnits: 1 }));
 
   return {
     state: nextState,
@@ -980,6 +998,10 @@ export async function recordCheckInTxOnServer(
       "This check-in was already used by another wallet.",
       "TX_ALREADY_USED"
     );
+  }
+
+  if (claim.status === "created" && campaignId !== DAILY_XP_CAMPAIGN_ID) {
+    scheduleWorkerWork(recordDailyXpBoardEvent(wallet, "check_in"));
   }
 
   return { reused: claim.status === "exists" };
@@ -3000,6 +3022,10 @@ export async function recordSpinTxOnServer(
     );
   }
 
+  if (claim.status === "created" && campaignId !== DAILY_XP_CAMPAIGN_ID) {
+    scheduleWorkerWork(recordDailyXpBoardEvent(wallet, "check_in"));
+  }
+
   return { reused: claim.status === "exists" };
 }
 
@@ -3478,4 +3504,277 @@ export function findActivityRank(
     (e) => normalizeWalletAddress(e.walletAddress) === wallet
   );
   return idx >= 0 ? idx + 1 : null;
+}
+
+// ─── Daily XP Board ──────────────────────────────────────────────────────────
+// users/{wallet}/dailyXp/{utcDay}
+// dailyXpLeaderboards/{utcDay}/entries/{wallet}
+// dailyXpClaims/{utcDay}/{wallet}
+// dailyXpBans/{wallet}
+
+function userDailyXpPath(wallet: string, utcDay: string): string {
+  return `users/${normalizeWalletAddress(wallet)}/dailyXp/${utcDay}`;
+}
+
+function dailyXpEntryPath(utcDay: string, wallet: string): string {
+  return `dailyXpLeaderboards/${utcDay}/entries/${normalizeWalletAddress(wallet)}`;
+}
+
+function dailyXpEntriesRoot(utcDay: string): string {
+  return `dailyXpLeaderboards/${utcDay}/entries`;
+}
+
+function dailyXpClaimPath(utcDay: string, wallet: string): string {
+  return `dailyXpClaims/${utcDay}/${normalizeWalletAddress(wallet)}`;
+}
+
+function dailyXpBanPath(wallet: string): string {
+  return `dailyXpBans/${normalizeWalletAddress(wallet)}`;
+}
+
+export async function recordDailyXpBoardEvent(
+  walletAddress: string,
+  kind: DailyXpEventKind,
+  opts?: { spendUnits?: number; name?: string }
+): Promise<void> {
+  try {
+    if (!isWalletAddress(walletAddress)) return;
+    const wallet = normalizeWalletAddress(walletAddress);
+    const now = Date.now();
+    const { dayKey } = getUtcDayWindow(now);
+    const spendUnits =
+      kind === "spend" &&
+      typeof opts?.spendUnits === "number" &&
+      Number.isFinite(opts.spendUnits)
+        ? Math.max(0, Math.floor(opts.spendUnits))
+        : 0;
+
+    const existing = coerceDailyXpCounters(
+      await readPath<DailyXpCounters>(userDailyXpPath(wallet, dayKey))
+    );
+    const next: DailyXpCounters = { ...existing };
+
+    if (kind === "play") {
+      if (
+        typeof next.lastPlayAt === "number" &&
+        now - next.lastPlayAt < DAILY_XP_PLAY_COOLDOWN_MS
+      ) {
+        return;
+      }
+      next.plays += 1;
+      next.lastPlayAt = now;
+    }
+
+    if (kind === "check_in") {
+      if (next.checkedIn) return;
+      next.checkedIn = true;
+    }
+
+    if (kind === "spend" && spendUnits > 0) {
+      next.spendUnits += spendUnits;
+    }
+
+    let profileName = opts?.name?.trim() || existing.name || "";
+    if (!profileName) {
+      const profile = await readPath<{ name?: string }>(profilePath(wallet));
+      profileName = profile?.name?.trim() || "";
+    }
+    if (profileName) next.name = profileName;
+    next.updatedAt = now;
+
+    await writePath(userDailyXpPath(wallet, dayKey), next);
+    const score = computeDailyXp(next);
+    if (score > 0) {
+      await writePath(
+        dailyXpEntryPath(dayKey, wallet),
+        dailyXpEntryFromCounters(wallet, next)
+      );
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[ArcadeX][daily-xp] recordDailyXpBoardEvent failed: ${scrubSecrets(message)}`
+    );
+  }
+}
+
+export async function fetchDailyXpBoardFromServer(
+  utcDay = utcDayKey(),
+  limit = DAILY_XP_LEADERBOARD_MAX_ENTRIES
+): Promise<DailyXpLeaderboardEntry[]> {
+  const map = await readPath<Record<string, DailyXpLeaderboardEntry>>(
+    dailyXpEntriesRoot(utcDay)
+  );
+  if (!map || typeof map !== "object") return [];
+  const out: DailyXpLeaderboardEntry[] = [];
+  for (const value of Object.values(map)) {
+    if (!value || typeof value !== "object") continue;
+    if (typeof value.score !== "number" || typeof value.name !== "string") {
+      continue;
+    }
+    const wallet = tryNormalizeWalletAddress(value.walletAddress);
+    if (!wallet || value.score <= 0) continue;
+    out.push({
+      name: value.name,
+      score: value.score,
+      walletAddress: wallet,
+      plays: typeof value.plays === "number" ? value.plays : undefined,
+      checkedIn: Boolean(value.checkedIn),
+      spendUnits:
+        typeof value.spendUnits === "number" ? value.spendUnits : undefined,
+      updatedAt:
+        typeof value.updatedAt === "number" ? value.updatedAt : undefined,
+    });
+  }
+  return out.sort(compareDailyXpEntries).slice(0, Math.max(1, limit));
+}
+
+export async function fetchUserDailyXpCounters(
+  walletAddress: string,
+  utcDay = utcDayKey()
+): Promise<DailyXpCounters> {
+  if (!isWalletAddress(walletAddress)) return emptyDailyXpCounters();
+  const wallet = normalizeWalletAddress(walletAddress);
+  return coerceDailyXpCounters(
+    await readPath<DailyXpCounters>(userDailyXpPath(wallet, utcDay))
+  );
+}
+
+export async function isDailyXpWalletBanned(
+  walletAddress: string
+): Promise<boolean> {
+  if (!isWalletAddress(walletAddress)) return false;
+  const wallet = normalizeWalletAddress(walletAddress);
+  const ban = await readPath<{ wallet?: string }>(dailyXpBanPath(wallet));
+  return Boolean(ban?.wallet);
+}
+
+export async function setDailyXpWalletBan(
+  walletAddress: string,
+  banned: boolean,
+  opts?: { reason?: string; bannedBy?: string }
+): Promise<void> {
+  if (!isWalletAddress(walletAddress)) return;
+  const wallet = normalizeWalletAddress(walletAddress);
+  if (!banned) {
+    await deletePath(dailyXpBanPath(wallet)).catch(() => {});
+    return;
+  }
+  await writePath(dailyXpBanPath(wallet), {
+    wallet,
+    reason: opts?.reason ?? null,
+    bannedAt: Date.now(),
+    bannedBy: opts?.bannedBy ?? null,
+  });
+}
+
+export async function getDailyXpClaimRecord(
+  walletAddress: string,
+  utcDay = utcDayKey()
+): Promise<DailyXpClaimRecord | null> {
+  if (!isWalletAddress(walletAddress)) return null;
+  const wallet = normalizeWalletAddress(walletAddress);
+  const raw = await readPath<DailyXpClaimRecord>(
+    dailyXpClaimPath(utcDay, wallet)
+  );
+  if (!raw || typeof raw !== "object") return null;
+  return {
+    wallet,
+    utcDay,
+    status:
+      raw.status === "claimed" || raw.status === "forfeited"
+        ? raw.status
+        : "pending",
+    campaignId: Number(raw.campaignId) || 0,
+    nonce: typeof raw.nonce === "number" ? raw.nonce : undefined,
+    rewardAmount:
+      typeof raw.rewardAmount === "string" ? raw.rewardAmount : undefined,
+    signature: typeof raw.signature === "string" ? raw.signature : undefined,
+    deadline: typeof raw.deadline === "number" ? raw.deadline : undefined,
+    txHash: typeof raw.txHash === "string" ? raw.txHash : undefined,
+    createdAt: typeof raw.createdAt === "number" ? raw.createdAt : Date.now(),
+    claimedAt: typeof raw.claimedAt === "number" ? raw.claimedAt : undefined,
+  };
+}
+
+export async function reserveDailyXpClaimRecord(opts: {
+  walletAddress: string;
+  utcDay: string;
+  campaignId: number;
+  nonce: number;
+  rewardAmount: string;
+  signature: string;
+  deadline: number;
+}): Promise<{ record: DailyXpClaimRecord; created: boolean }> {
+  const wallet = normalizeWalletAddress(opts.walletAddress);
+  const existing = await getDailyXpClaimRecord(wallet, opts.utcDay);
+  if (existing) return { record: existing, created: false };
+
+  const record: DailyXpClaimRecord = {
+    wallet,
+    utcDay: opts.utcDay,
+    status: "pending",
+    campaignId: opts.campaignId,
+    nonce: opts.nonce,
+    rewardAmount: opts.rewardAmount,
+    signature: opts.signature,
+    deadline: opts.deadline,
+    createdAt: Date.now(),
+  };
+
+  const path = dailyXpClaimPath(opts.utcDay, wallet);
+  const { data, etag } = await readPathWithEtag<DailyXpClaimRecord | null>(path);
+  if (data) {
+    return { record: await getDailyXpClaimRecord(wallet, opts.utcDay) ?? record, created: false };
+  }
+  const result = await writePathIfMatch(path, record, etag);
+  if (result === "conflict") {
+    const raced = await getDailyXpClaimRecord(wallet, opts.utcDay);
+    if (raced) return { record: raced, created: false };
+  }
+  return { record, created: true };
+}
+
+export async function updateDailyXpClaimPendingRecord(opts: {
+  walletAddress: string;
+  utcDay: string;
+  campaignId: number;
+  nonce: number;
+  rewardAmount: string;
+  signature: string;
+  deadline: number;
+}): Promise<DailyXpClaimRecord | null> {
+  const wallet = normalizeWalletAddress(opts.walletAddress);
+  const existing = await getDailyXpClaimRecord(wallet, opts.utcDay);
+  if (!existing || existing.status !== "pending") return existing;
+  const next: DailyXpClaimRecord = {
+    ...existing,
+    campaignId: opts.campaignId,
+    nonce: opts.nonce,
+    rewardAmount: opts.rewardAmount,
+    signature: opts.signature,
+    deadline: opts.deadline,
+    status: "pending",
+  };
+  await writePath(dailyXpClaimPath(opts.utcDay, wallet), next);
+  return next;
+}
+
+export async function markDailyXpClaimRecord(opts: {
+  walletAddress: string;
+  utcDay: string;
+  txHash: string;
+}): Promise<DailyXpClaimRecord | null> {
+  const wallet = normalizeWalletAddress(opts.walletAddress);
+  const existing = await getDailyXpClaimRecord(wallet, opts.utcDay);
+  if (!existing) return null;
+  if (existing.status === "claimed") return existing;
+  const next: DailyXpClaimRecord = {
+    ...existing,
+    status: "claimed",
+    txHash: opts.txHash.toLowerCase(),
+    claimedAt: Date.now(),
+  };
+  await writePath(dailyXpClaimPath(opts.utcDay, wallet), next);
+  return next;
 }

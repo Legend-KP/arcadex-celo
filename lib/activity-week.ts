@@ -1,7 +1,12 @@
 /** ISO week helpers + sparks-first ranking for the global activity board. */
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-export const ACTIVITY_PLAY_COOLDOWN_MS = 5_000;
+/**
+ * Min gap between play XP grants. Blocks Infinite Spark scripts from
+ * hammering /api/sparks/spend every few ms for leaderboard XP.
+ * Real game restarts are rarely faster than this.
+ */
+export const ACTIVITY_PLAY_COOLDOWN_MS = 30_000;
 export const ACTIVITY_LEADERBOARD_MAX_ENTRIES = 25;
 export const ACTIVITY_TOP_MIRROR_SIZE = 50;
 

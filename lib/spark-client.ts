@@ -38,12 +38,13 @@ export interface SparkSpendResponse extends SparkApiResponse {
 }
 
 async function spendSparkOnce(
-  walletAddress: string
+  walletAddress: string,
+  gameId: string
 ): Promise<{ ok: true; data: SparkSpendResponse } | { ok: false; error: string; status: number; code?: string }> {
   const res = await fetch("/api/sparks/spend", {
     method: "POST",
     headers: walletAuthHeaders(),
-    body: JSON.stringify({ walletAddress }),
+    body: JSON.stringify({ walletAddress, gameId }),
     cache: "no-store",
   });
 
@@ -65,9 +66,15 @@ async function spendSparkOnce(
 }
 
 export async function spendSpark(
-  walletAddress: string
+  walletAddress: string,
+  gameId: string
 ): Promise<SparkSpendResponse> {
-  let result = await spendSparkOnce(walletAddress);
+  const id = gameId.trim();
+  if (!id) {
+    throw new Error("gameId is required to start a game.");
+  }
+
+  let result = await spendSparkOnce(walletAddress, id);
 
   if (
     !result.ok &&
@@ -76,7 +83,7 @@ export async function spendSpark(
   ) {
     try {
       await refreshSessionFromCheckIn(walletAddress);
-      result = await spendSparkOnce(walletAddress);
+      result = await spendSparkOnce(walletAddress, id);
     } catch (err) {
       if (err instanceof SessionRefreshError && err.code === "NEED_CHECKIN") {
         throw new Error("Daily check-in required. Please check in to continue.");

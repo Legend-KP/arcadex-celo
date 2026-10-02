@@ -91,6 +91,8 @@ import {
   type ShufflePendingRecord,
 } from "@/lib/rtdb-server";
 import { scrubSecrets } from "@/lib/firebase-admin";
+import { recordDailyXpEventOnD1 } from "@/lib/d1-daily-xp";
+import { DAILY_XP_CAMPAIGN_ID } from "@/lib/daily-xp-board";
 
 type StoredUser = Omit<PlayerProfile, "id">;
 
@@ -110,6 +112,20 @@ type GuardClaimResult<T extends Record<string, unknown>> =
   | { status: "created"; record: T }
   | { status: "exists"; record: T }
   | { status: "conflict_other_wallet" };
+
+function recordDailyXpPlayBestEffort(wallet: string): void {
+  scheduleWorkerWork(recordDailyXpEventOnD1(wallet, "play"));
+}
+
+function recordDailyXpSpendBestEffort(wallet: string, spendUnits: number): void {
+  scheduleWorkerWork(
+    recordDailyXpEventOnD1(wallet, "spend", { spendUnits })
+  );
+}
+
+function recordDailyXpCheckInBestEffort(wallet: string): void {
+  scheduleWorkerWork(recordDailyXpEventOnD1(wallet, "check_in"));
+}
 
 type SparksRow = {
   wallet: string;
@@ -733,6 +749,7 @@ export async function spendSparkOnServer(
     if (state.infiniteUntil && state.infiniteUntil > now) {
       if (!row) await writeSparksState(db, wallet, state);
       recordActivityEventBestEffort(wallet, "play");
+      recordDailyXpPlayBestEffort(wallet);
       return {
         state,
         sparks: computeSparkSnapshot(state),
@@ -750,6 +767,7 @@ export async function spendSparkOnServer(
     if (!row) {
       await writeSparksState(db, wallet, next);
       recordActivityEventBestEffort(wallet, "play");
+      recordDailyXpPlayBestEffort(wallet);
       return {
         state: next,
         sparks: computeSparkSnapshot(next),
@@ -774,6 +792,7 @@ export async function spendSparkOnServer(
 
     if (update.meta?.changes === 1) {
       recordActivityEventBestEffort(wallet, "play");
+      recordDailyXpPlayBestEffort(wallet);
       return {
         state: next,
         sparks: computeSparkSnapshot(next),
@@ -874,6 +893,7 @@ export async function activateInfiniteSparkOnServer(
   }
 
   recordActivityEventBestEffort(wallet, "spend", { spendUnits: 2 });
+  recordDailyXpSpendBestEffort(wallet, 2);
 
   return {
     state: nextState,
@@ -972,6 +992,7 @@ export async function activateSparkRefillOnServer(
   }
 
   recordActivityEventBestEffort(wallet, "spend", { spendUnits: 1 });
+  recordDailyXpSpendBestEffort(wallet, 1);
 
   return {
     state: nextState,
@@ -1016,6 +1037,10 @@ export async function recordCheckInTxOnServer(
       "This check-in was already used by another wallet.",
       "TX_ALREADY_USED"
     );
+  }
+
+  if (claim.status === "created" && campaignId !== DAILY_XP_CAMPAIGN_ID) {
+    recordDailyXpCheckInBestEffort(wallet);
   }
 
   return { reused: claim.status === "exists" };
@@ -2862,6 +2887,10 @@ export async function recordSpinTxOnServer(
       "This spin was already used by another wallet.",
       "TX_ALREADY_USED"
     );
+  }
+
+  if (claim.status === "created" && campaignId !== DAILY_XP_CAMPAIGN_ID) {
+    recordDailyXpCheckInBestEffort(wallet);
   }
 
   return { reused: claim.status === "exists" };

@@ -210,10 +210,13 @@ export default function GamePageClient() {
 
     setStarting(true);
     try {
-      if (isArcadeXTxHubConfigured() && game?.id) {
+      if (!game?.id) {
+        throw new Error("Game not loaded.");
+      }
+      if (isArcadeXTxHubConfigured()) {
         await signInOnChain(playPurpose(game.id));
       }
-      await spendForGame();
+      await spendForGame(game.id);
       setStarted(true);
     } catch (err) {
       setSparkError(

@@ -103,7 +103,7 @@ export default function ActivityLeaderboardButton({
               className="lb-sheet activity-lb-sheet"
               role="dialog"
               aria-modal="true"
-              aria-label="XP Leaderboard"
+              aria-label="Daily XP Board"
               onClick={(e) => e.stopPropagation()}
             >
               <ActivityLeaderboardPanel
@@ -122,7 +122,7 @@ export default function ActivityLeaderboardButton({
         type="button"
         className="activity-lb-btn"
         onClick={() => setOpen(true)}
-        aria-label="Open weekly activity XP leaderboard"
+        aria-label="Open Daily XP Board"
       >
         <TrophyIcon />
         <span className="activity-lb-btn__label">XP</span>
