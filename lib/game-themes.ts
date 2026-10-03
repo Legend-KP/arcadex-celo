@@ -43,6 +43,8 @@ const GAME_THEMES: Record<string, GameTheme> = {
   "hungry-hole": { topbar: "#7c3aed", text: "#ffffff" },
   tower: { topbar: "#475569", text: "#ffffff" },
   "defend-tower": { topbar: "#475569", text: "#ffffff" },
+  "free-fall": { topbar: "#2563eb", text: "#ffffff" },
+  freefall: { topbar: "#2563eb", text: "#ffffff" },
 };
 
 export function getGameTheme(game: Pick<Game, "name" | "id">): GameTheme {
@@ -51,6 +53,13 @@ export function getGameTheme(game: Pick<Game, "name" | "id">): GameTheme {
 
   const id = game.id.trim().toLowerCase();
   if (id && GAME_THEMES[id]) return GAME_THEMES[id];
+
+  if (
+    (nameSlug.includes("free") && nameSlug.includes("fall")) ||
+    (id.includes("free") && id.includes("fall"))
+  ) {
+    return GAME_THEMES["free-fall"];
+  }
 
   return DEFAULT_THEME;
 }

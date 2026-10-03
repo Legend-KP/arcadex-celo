@@ -24,6 +24,7 @@ import { gameAssetCandidates } from "@/lib/game-assets";
 import { readCachedGamesList } from "@/lib/games-list-client-cache";
 import { fetchHomeShell } from "@/lib/home-client";
 import { Game, gameIsLive, gameIsTest } from "@/types";
+import { formatChainError } from "@/lib/celo-public-client";
 
 const DAILY_XP_SHARE_TEXT = [
   "I just won USDT reward on ArcadeX by @Trench_Verse",
@@ -261,7 +262,17 @@ export default function DailyXpLiveBoard({
       setSuccessOpen(true);
       await reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Claim failed.");
+      const raw = err instanceof Error ? err.message : String(err ?? "");
+      const formatted = formatChainError(err);
+      if (
+        /user rejected|user denied|rejected the request|request rejected|cancelled/i.test(
+          `${raw}\n${formatted}`
+        )
+      ) {
+        setError("Claim cancelled. Tap Claim now when you’re ready.");
+      } else {
+        setError(formatted || "Claim failed. Try again.");
+      }
     } finally {
       setClaiming(false);
     }

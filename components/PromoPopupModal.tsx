@@ -115,13 +115,20 @@ export default function PromoPopupModal({
     Boolean(item.endsAt);
 
   const rgb = accentColor ? hexToRgb(accentColor) : null;
+  const accentIsLight =
+    rgb != null && (rgb.r + rgb.g + rgb.b) / 3 > 210;
   const themedStyle: CSSProperties | undefined =
-    contest && rgb
+    contest && rgb && !accentIsLight
       ? ({
           ["--promo-accent" as string]: accentColor,
           ["--promo-accent-rgb" as string]: `${rgb.r}, ${rgb.g}, ${rgb.b}`,
         } as CSSProperties)
-      : undefined;
+      : contest
+        ? ({
+            ["--promo-accent" as string]: "#2563eb",
+            ["--promo-accent-rgb" as string]: "37, 99, 235",
+          } as CSSProperties)
+        : undefined;
 
   const socialHref =
     item.kind === "communityTelegram"

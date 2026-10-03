@@ -1099,8 +1099,13 @@ a { color: inherit; text-decoration: none; }
   margin: 0;
   font-size: 13px;
   font-weight: 700;
-  color: #dc2626;
+  color: #b45309;
   text-align: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fffbeb;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  line-height: 1.35;
 }
 .daily-xp-board__banner {
   margin: 0;
@@ -19450,22 +19455,26 @@ a { color: inherit; text-decoration: none; }
   filter: brightness(1.12);
 }
 .promo-popup__btn--glass {
-  color: #fff;
-  background: linear-gradient(
-    180deg,
-    rgba(var(--promo-accent-rgb, 74, 127, 212), 0.72),
-    rgba(var(--promo-accent-rgb, 74, 127, 212), 0.48)
-  );
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    0 10px 22px rgba(var(--promo-accent-rgb, 74, 127, 212), 0.28);
-  backdrop-filter: blur(16px) saturate(1.4);
-  -webkit-backdrop-filter: blur(16px) saturate(1.4);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  color: #ffffff;
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+  border: 1px solid rgba(37, 99, 235, 0.35);
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.28);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  text-shadow: none;
 }
 .promo-popup__btn--glass:hover {
   filter: brightness(1.08);
+}
+.promo-popup--contest .promo-popup__btn--glass {
+  background: linear-gradient(
+    180deg,
+    rgba(var(--promo-accent-rgb, 37, 99, 235), 1),
+    rgba(var(--promo-accent-rgb, 37, 99, 235), 0.88)
+  );
+  border-color: rgba(var(--promo-accent-rgb, 37, 99, 235), 0.45);
+  box-shadow: 0 10px 22px rgba(var(--promo-accent-rgb, 37, 99, 235), 0.3);
+  color: #ffffff;
 }
 .promo-popup__btn--telegram {
   background: #2AABEE;
