@@ -25,6 +25,21 @@ import { readCachedGamesList } from "@/lib/games-list-client-cache";
 import { fetchHomeShell } from "@/lib/home-client";
 import { Game, gameIsLive, gameIsTest } from "@/types";
 
+const DAILY_XP_SHARE_TEXT = [
+  "I just won USDT reward on ArcadeX by @Trench_Verse",
+  "",
+  "Join now and earn USDT rewards daily!",
+  "",
+  "https://link.minipay.xyz/miniapp?id=4f8ff9f8-7eee-4fc9-ba0e-aad06b094d39",
+].join("\n");
+
+function openDailyXpShareTweet() {
+  const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+    DAILY_XP_SHARE_TEXT
+  )}`;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 interface DailyXpLiveBoardProps {
   compact?: boolean;
   hideClose?: boolean;
@@ -108,7 +123,7 @@ export default function DailyXpLiveBoard({
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [claimMsg, setClaimMsg] = useState<string | null>(null);
+  const [successOpen, setSuccessOpen] = useState(false);
   const [tipsOpen, setTipsOpen] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
   const [prompt, setPrompt] = useState<PromptKind>(null);
@@ -235,7 +250,6 @@ export default function DailyXpLiveBoard({
   async function runClaim() {
     if (!walletAddress || claiming) return;
     setClaiming(true);
-    setClaimMsg(null);
     setError(null);
     try {
       if (me?.claimed) {
@@ -243,8 +257,8 @@ export default function DailyXpLiveBoard({
       } else {
         await performDailyXpClaim(walletAddress);
       }
-      setClaimMsg("0.02 USDT claimed!");
       setPrompt(null);
+      setSuccessOpen(true);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Claim failed.");
@@ -256,7 +270,6 @@ export default function DailyXpLiveBoard({
   function handlePrimaryClick() {
     if (!live) return;
     setError(null);
-    setClaimMsg(null);
 
     if (me?.claimed) {
       void runClaim();
@@ -421,9 +434,6 @@ export default function DailyXpLiveBoard({
           </div>
         ) : null}
 
-        {claimMsg ? (
-          <p className="daily-xp-board__ok">{claimMsg}</p>
-        ) : null}
         {error ? <p className="daily-xp-board__err">{error}</p> : null}
 
         <p className="daily-xp-board__banner">
@@ -528,6 +538,51 @@ export default function DailyXpLiveBoard({
                   </div>
                 ))}
               </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {mounted &&
+        successOpen &&
+        createPortal(
+          <div
+            className="daily-xp-board__tips-overlay daily-xp-board__tips-overlay--center"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Reward claimed"
+            onClick={() => setSuccessOpen(false)}
+          >
+            <div
+              className="daily-xp-board__success-sheet"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="lb-close daily-xp-board__success-close"
+                onClick={() => setSuccessOpen(false)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="daily-xp-board__success-usdt"
+                src="/tether-usdt-logo.png"
+                alt=""
+                draggable={false}
+              />
+              <h3 className="daily-xp-board__success-title">Reward claimed!</h3>
+              <p className="daily-xp-board__success-copy">
+                You claimed ${DAILY_XP_REWARD_USDT.toFixed(2)} USDT
+              </p>
+              <button
+                type="button"
+                className="daily-xp-board__cta daily-xp-board__success-share"
+                onClick={openDailyXpShareTweet}
+              >
+                Share
+              </button>
             </div>
           </div>,
           document.body
