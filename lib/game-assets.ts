@@ -142,6 +142,7 @@ const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
   "line-link",
   "basedrop",
   "free-fall",
+  "burger-game",
 ]);
 
 /** Name/id aliases that map onto a preview-video folder slug. */
@@ -162,6 +163,12 @@ const PREVIEW_VIDEO_FOLDER_ALIASES: Record<string, string> = {
   linelink: "line-link",
   "base-drop": "basedrop",
   freefall: "free-fall",
+  burger: "burger-game",
+  restaurant: "burger-game",
+  resturant: "burger-game",
+  "restaurant-game": "burger-game",
+  "resturant-game": "burger-game",
+  pizza: "burger-game",
 };
 
 export type GameVideoSources = {
@@ -225,6 +232,15 @@ function resolvePreviewVideoFolder(game: Game): string | null {
       LOCAL_PREVIEW_VIDEO_FOLDERS.has("free-fall")
     ) {
       return "free-fall";
+    }
+    if (
+      (raw.includes("burger") ||
+        raw.includes("restaurant") ||
+        raw.includes("resturant") ||
+        raw.includes("pizza")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("burger-game")
+    ) {
+      return "burger-game";
     }
   }
 
