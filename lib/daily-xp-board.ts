@@ -1,5 +1,5 @@
 /**
- * Daily XP Board — UTC-day XP, eligibility, and campaign 5 claim constants.
+ * Daily XP Board — UTC-day XP, eligibility, and campaign 6 claim constants.
  * Transition ends Saturday 3 Oct 2026 00:00 UTC, then live board + Claim.
  */
 
@@ -9,9 +9,9 @@ import { utcDayKey } from "@/lib/activity-week";
 export const DAILY_XP_GO_LIVE_AT_MS = Date.UTC(2026, 9, 3, 0, 0, 0, 0);
 
 export const DAILY_XP_THRESHOLD = 100;
-export const DAILY_XP_REWARD_USDT = 0.02;
+export const DAILY_XP_REWARD_USDT = 0.05;
 /** On-chain amount (USDT, 6 decimals). */
-export const DAILY_XP_REWARD_AMOUNT = BigInt(20_000);
+export const DAILY_XP_REWARD_AMOUNT = BigInt(50_000);
 
 export const DAILY_XP_PER_PLAY = 10;
 export const DAILY_XP_PER_CHECK_IN = 10;
@@ -29,7 +29,7 @@ export { ACTIVITY_PLAY_COOLDOWN_MS as DAILY_XP_PLAY_COOLDOWN_MS } from "@/lib/ac
 export const DAILY_XP_CAMPAIGN_ID = Number(
   process.env.DAILY_XP_CAMPAIGN_ID?.trim() ||
     process.env.NEXT_PUBLIC_DAILY_XP_CAMPAIGN_ID?.trim() ||
-    "5"
+    "6"
 );
 
 export type DailyXpEventKind = "play" | "check_in" | "spend";

@@ -193,7 +193,7 @@ export async function POST(request: Request) {
       wallet,
       campaignId,
       nonce,
-      outcomeId: "daily-xp-0.02",
+      outcomeId: "daily-xp-0.05",
       outcomeType: "usdt",
       displayAmount: DAILY_XP_REWARD_USDT,
       rewardMode,

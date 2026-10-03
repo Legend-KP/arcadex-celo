@@ -1,5 +1,5 @@
 /**
- * Read ArcadeXRewards campaigns 4 & 5 + spinResultSigner (Celo mainnet).
+ * Read ArcadeXRewards campaigns 4–6 + spinResultSigner (Celo mainnet).
  * Usage: node --import tsx scripts/check-daily-xp-campaign.mts
  * or: npx tsx scripts/check-daily-xp-campaign.mts
  */
@@ -92,11 +92,11 @@ async function main() {
   });
   console.log("spinResultSigner:", signer);
 
-  for (const id of [4, 5]) {
+  for (const id of [4, 5, 6]) {
     try {
       const c = await readCampaign(id);
       console.log(`\nCampaign ${id}:`, JSON.stringify(c, null, 2));
-      if (id === 5) {
+      if (id === 6) {
         const ok =
           c.active &&
           !c.cancelled &&
@@ -105,14 +105,14 @@ async function main() {
           c.maxClaims === 0 &&
           c.resetAfterMilestone === true &&
           c.requireEligibility === false &&
-          c.maxSinglePayout === "20000";
+          c.maxSinglePayout === "50000";
         console.log(
           ok
-            ? "\n✅ Campaign 5 matches Daily XP params."
-            : "\n❌ Campaign 5 does NOT match expected Daily XP params."
+            ? "\n✅ Campaign 6 matches Daily XP params."
+            : "\n❌ Campaign 6 does NOT match expected Daily XP params."
         );
         if (!ok) {
-          console.log("Expected: SHUFFLE(1), active, minInterval=86400, maxClaims=0, resetAfterMilestone=true, requireEligibility=false, maxSinglePayout=20000");
+          console.log("Expected: SHUFFLE(1), active, minInterval=86400, maxClaims=0, resetAfterMilestone=true, requireEligibility=false, maxSinglePayout=50000");
         }
         if (
           !signer ||

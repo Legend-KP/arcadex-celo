@@ -31,7 +31,9 @@
 		"preview": {
 			"name": "arcadex-celo-preview",
 			"vars": {
-				"PLAYER_DATA_BACKEND": "d1"
+				"PLAYER_DATA_BACKEND": "d1",
+				"DAILY_XP_CAMPAIGN_ID": "6",
+				"NEXT_PUBLIC_DAILY_XP_CAMPAIGN_ID": "6"
 			},
 			"services": [
 				{
@@ -103,7 +105,9 @@
 				"STREAK_CAMPAIGN_ID": "4",
 				"NEXT_PUBLIC_STREAK_CAMPAIGN_ID": "4",
 				"NEXT_PUBLIC_STREAK_LADDER_V2": "1",
-				"STREAK_LADDER_GRANTS_ENABLED": "1"
+				"STREAK_LADDER_GRANTS_ENABLED": "1",
+				"DAILY_XP_CAMPAIGN_ID": "6",
+				"NEXT_PUBLIC_DAILY_XP_CAMPAIGN_ID": "6"
 			},
 			"services": [
 				{

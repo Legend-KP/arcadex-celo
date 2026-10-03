@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  DAILY_XP_REWARD_USDT,
+  DAILY_XP_THRESHOLD,
+} from "@/lib/daily-xp-board";
+
 interface DailyXpHomeBannerProps {
   onOpenBoard?: () => void;
 }
@@ -11,13 +16,16 @@ interface DailyXpHomeBannerProps {
 export default function DailyXpHomeBanner({
   onOpenBoard,
 }: DailyXpHomeBannerProps) {
+  const rewardLabel = `$${DAILY_XP_REWARD_USDT.toFixed(2)} USDT`;
   return (
     <section className="daily-xp-home-banner" aria-label="Earn Daily XP reward">
       <div className="daily-xp-home-banner__card">
         <div className="daily-xp-home-banner__copy">
           <p className="daily-xp-home-banner__eyebrow">Earn Daily</p>
           <p className="daily-xp-home-banner__amount">
-            <span className="daily-xp-home-banner__amount-text">$0.02 USDT</span>
+            <span className="daily-xp-home-banner__amount-text">
+              {rewardLabel}
+            </span>
             <img
               className="daily-xp-home-banner__usdt"
               src="/tether-usdt-logo.png"
@@ -27,7 +35,9 @@ export default function DailyXpHomeBanner({
               decoding="async"
             />
           </p>
-          <p className="daily-xp-home-banner__hint">Reach 100 XP today</p>
+          <p className="daily-xp-home-banner__hint">
+            Reach {DAILY_XP_THRESHOLD} XP today
+          </p>
         </div>
         <button
           type="button"
