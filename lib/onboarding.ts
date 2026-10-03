@@ -3,6 +3,7 @@ import { injectImagePreload, preloadImage } from "@/lib/preload-image";
 export const ONBOARDING_SEEN_KEY = "arcadex_onboarding_seen";
 
 export const ONBOARDING_SLIDES = [
+  "/onboarding/TUTORIAL-5.webp",
   "/onboarding/TUTORIAL-1.webp",
   "/onboarding/TUTORIAL-2.webp",
   "/onboarding/TUTORIAL-3.webp",
@@ -25,7 +26,7 @@ export function preloadOnboardingSlides(): void {
   if (hasSeenOnboarding()) return;
 
   ONBOARDING_SLIDES.forEach((src, index) => {
-    // Last slide is large — wait until the user advances before fetching it.
+    // Warm the first few slides; later ones load as the user advances.
     if (index >= 3) return;
     const priority = index === 0 ? "high" : "low";
     if (index === 0) injectImagePreload(src, "high");
