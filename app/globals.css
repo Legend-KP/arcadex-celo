@@ -2191,7 +2191,7 @@ a { color: inherit; text-decoration: none; }
 /* ?? Game grid ?????????????????????????????????????????? */
 .games-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px 12px;
   padding: 10px 16px 12px;
 }
@@ -2228,6 +2228,8 @@ a { color: inherit; text-decoration: none; }
 .game-card {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  width: 100%;
   text-decoration: none;
   color: inherit;
   cursor: pointer;
@@ -2257,6 +2259,8 @@ a { color: inherit; text-decoration: none; }
   position: relative;
   aspect-ratio: 2 / 3;
   width: 100%;
+  /* Keep frame height locked to aspect-ratio; media is painted absolutely. */
+  height: auto;
   overflow: hidden;
   border-radius: 16px;
   border: 2.5px solid transparent;
@@ -2287,6 +2291,8 @@ a { color: inherit; text-decoration: none; }
 }
 
 .thumb-img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   display: block;
@@ -2303,6 +2309,8 @@ a { color: inherit; text-decoration: none; }
   object-position: center center;
 }
 .thumb-placeholder {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   background: linear-gradient(160deg, #e8eaf0 0%, #f4f5f8 55%, #eceef3 100%);
@@ -6864,7 +6872,7 @@ a { color: inherit; text-decoration: none; }
   height: 100%;
   display: block;
   object-fit: cover;
-  object-position: center top;
+  object-position: center center;
   pointer-events: none;
   transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -6873,6 +6881,8 @@ a { color: inherit; text-decoration: none; }
   transform: scale(1.04);
 }
 .thumb-placeholder {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   background: linear-gradient(160deg, #e8eaf0 0%, #f4f5f8 55%, #eceef3 100%);
@@ -14631,7 +14641,7 @@ a { color: inherit; text-decoration: none; }
 /* ?? Game grid ?????????????????????????????????????????? */
 .games-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px 12px;
   padding: 10px 16px 12px;
 }
@@ -14668,6 +14678,8 @@ a { color: inherit; text-decoration: none; }
 .game-card {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  width: 100%;
   text-decoration: none;
   color: inherit;
   cursor: pointer;
@@ -14697,6 +14709,8 @@ a { color: inherit; text-decoration: none; }
   position: relative;
   aspect-ratio: 2 / 3;
   width: 100%;
+  /* Keep frame height locked to aspect-ratio; media is painted absolutely. */
+  height: auto;
   overflow: hidden;
   border-radius: 16px;
   border: 2.5px solid transparent;
@@ -14727,11 +14741,13 @@ a { color: inherit; text-decoration: none; }
 }
 
 .thumb-img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   display: block;
   object-fit: cover;
-  object-position: center top;
+  object-position: center center;
   transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .thumb-video {
@@ -14742,7 +14758,7 @@ a { color: inherit; text-decoration: none; }
   height: 100%;
   display: block;
   object-fit: cover;
-  object-position: center top;
+  object-position: center center;
   pointer-events: none;
   transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -14751,6 +14767,8 @@ a { color: inherit; text-decoration: none; }
   transform: scale(1.04);
 }
 .thumb-placeholder {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   background: linear-gradient(160deg, #e8eaf0 0%, #f4f5f8 55%, #eceef3 100%);
