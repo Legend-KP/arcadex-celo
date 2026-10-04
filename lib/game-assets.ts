@@ -143,6 +143,7 @@ const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
   "basedrop",
   "free-fall",
   "burger-game",
+  "goe",
 ]);
 
 /** Name/id aliases that map onto a preview-video folder slug. */
@@ -169,6 +170,10 @@ const PREVIEW_VIDEO_FOLDER_ALIASES: Record<string, string> = {
   "restaurant-game": "burger-game",
   "resturant-game": "burger-game",
   pizza: "burger-game",
+  "guardian-of-earth": "goe",
+  "guardian-of-eath": "goe",
+  guardianofearth: "goe",
+  guardian: "goe",
 };
 
 export type GameVideoSources = {
@@ -241,6 +246,14 @@ function resolvePreviewVideoFolder(game: Game): string | null {
       LOCAL_PREVIEW_VIDEO_FOLDERS.has("burger-game")
     ) {
       return "burger-game";
+    }
+    if (
+      (raw === "goe" ||
+        raw.includes("guardian") ||
+        (raw.includes("earth") && raw.includes("guard"))) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("goe")
+    ) {
+      return "goe";
     }
   }
 
@@ -585,6 +598,11 @@ const GAME_TUTORIAL_BY_FOLDER: Record<string, string> = {
   fruit: "/tutorials/fruite-swipe.webp",
   "free-fall": "/tutorials/free-fall.webp",
   freefall: "/tutorials/free-fall.webp",
+  goe: "/tutorials/GOE.webp",
+  "guardian-of-earth": "/tutorials/GOE.webp",
+  "guardian-of-eath": "/tutorials/GOE.webp",
+  guardianofearth: "/tutorials/GOE.webp",
+  guardian: "/tutorials/GOE.webp",
 };
 
 function resolveTutorialKey(game: Game): string {
@@ -626,6 +644,15 @@ export function getGameTutorialCandidates(game: Game): string[] {
   ) {
     push(GAME_TUTORIAL_BY_FOLDER["free-fall"]);
   }
+  if (
+    nameSlug === "goe" ||
+    nameSlug.includes("guardian") ||
+    (nameSlug.includes("earth") && nameSlug.includes("guard")) ||
+    id === "goe" ||
+    (!isFirestoreAutoId(id) && id.includes("guardian"))
+  ) {
+    push(GAME_TUTORIAL_BY_FOLDER.goe);
+  }
   const hyphen = key.toUpperCase();
   const spaced = key.replace(/-/g, " ").toUpperCase();
   push(`/tutorials/${hyphen}.webp`);
@@ -646,6 +673,14 @@ export function getGameTutorialCandidates(game: Game): string[] {
   ) {
     push("/tutorials/free-fall.webp");
     push("/tutorials/free fall.webp");
+  }
+  if (
+    nameSlug === "goe" ||
+    key === "goe" ||
+    nameSlug.includes("guardian") ||
+    key.includes("guardian")
+  ) {
+    push("/tutorials/GOE.webp");
   }
 
   return out;
