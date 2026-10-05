@@ -499,8 +499,10 @@ export async function reorderGamesOnServer(orderedIds: string[]): Promise<void> 
     throw new Error("Order must include every game exactly once.");
   }
 
+  // Keep undefined distinct from 0 — `?? 0` previously skipped writing sortOrder: 0
+  // for games that never had a field, so refresh looked like the order "reset".
   const currentOrder = new Map(
-    games.map((game) => [game.id, game.sortOrder ?? 0])
+    games.map((game) => [game.id, game.sortOrder])
   );
 
   const updates = orderedIds

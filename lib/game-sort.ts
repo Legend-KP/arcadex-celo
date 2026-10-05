@@ -1,8 +1,16 @@
 import { Game, gameIsNewArrival } from "@/types";
 
+/** Catalog order only — ignores New Arrival pinning (admin reorder / true sortOrder). */
+export function compareGamesBySortOrder(a: Game, b: Game): number {
+  const orderA = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
+  const orderB = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
+  if (orderA !== orderB) return orderA - orderB;
+  return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+}
+
 /** Lower sortOrder appears first; missing sortOrder falls back to createdAt (newest first). */
 export function compareGames(a: Game, b: Game): number {
-  // Active new arrivals stay at the front for their 4-day window.
+  // Active new arrivals stay at the front for their 4-day window (home / public).
   const aNew = gameIsNewArrival(a);
   const bNew = gameIsNewArrival(b);
   if (aNew !== bNew) return aNew ? -1 : 1;
@@ -12,14 +20,16 @@ export function compareGames(a: Game, b: Game): number {
     if (aAt !== bAt) return bAt - aAt;
   }
 
-  const orderA = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
-  const orderB = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
-  if (orderA !== orderB) return orderA - orderB;
-  return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+  return compareGamesBySortOrder(a, b);
 }
 
 export function sortGames(games: Game[]): Game[] {
   return [...games].sort(compareGames);
+}
+
+/** Admin list order — matches persisted sortOrder, not New Arrival pin. */
+export function sortGamesBySortOrder(games: Game[]): Game[] {
+  return [...games].sort(compareGamesBySortOrder);
 }
 
 /** Append after the current last game (legacy / explicit reorder). */

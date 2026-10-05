@@ -13,7 +13,7 @@ import {
   saveAdminSession,
   updateAdminGame,
 } from "@/lib/admin-api";
-import { sortGames } from "@/lib/game-sort";
+import { sortGamesBySortOrder } from "@/lib/game-sort";
 import { normalizeImageAssetUrl } from "@/lib/game-assets";
 import { getContestStatus } from "@/lib/contest";
 import {
@@ -101,7 +101,7 @@ export default function AdminPortal() {
     setLoading(true);
     try {
       const g = await fetchAdminGames();
-      setGames(sortGames(g));
+      setGames(sortGamesBySortOrder(g));
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : "Could not load games."
