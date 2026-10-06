@@ -6,14 +6,12 @@ interface ExitGameModalProps {
   open: boolean;
   onCancel: () => void;
   onExit: () => void;
-  onPlayMore: () => void;
 }
 
 export default function ExitGameModal({
   open,
   onCancel,
   onExit,
-  onPlayMore,
 }: ExitGameModalProps) {
   if (!open) return null;
 
@@ -30,8 +28,7 @@ export default function ExitGameModal({
           Exit game?
         </h2>
         <p className="exit-modal-body">
-          Are you sure that you want to exit the game?           
-          .
+          Are you sure that you want to exit the game?
         </p>
         <div className="exit-modal-actions">
           <button

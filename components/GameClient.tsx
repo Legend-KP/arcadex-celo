@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import ExitGameModal from "@/components/ExitGameModal";
 import LoadingScreen from "@/components/LoadingScreen";
 import LeaderboardSubmitToast, {
   type LeaderboardSubmitToastState,
@@ -41,7 +43,6 @@ import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
 interface GameClientProps {
   game: Game;
   onScoreSubmitted?: () => void;
-  onBackToMenu?: () => void;
 }
 
 const GAME_LOAD_FALLBACK_MS = 12000;
@@ -50,10 +51,13 @@ const PROGRESS_RETRY_DELAYS_MS = [0, 600, 1500, 3000] as const;
 export default function GameClient({
   game,
   onScoreSubmitted,
-  onBackToMenu,
 }: GameClientProps) {
+  const router = useRouter();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const loadFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [exitOpen, setExitOpen] = useState(false);
+  const exitOpenRef = useRef(false);
+  const allowLeaveRef = useRef(false);
   const [gameReady, setGameReady] = useState(false);
   const [submitToast, setSubmitToast] = useState<LeaderboardSubmitToastState | null>(
     null
@@ -841,6 +845,46 @@ export default function GameClient({
     return () => window.removeEventListener("message", handleMessage);
   }, [handleMessage]);
 
+  exitOpenRef.current = exitOpen;
+
+  const requestExit = useCallback(() => {
+    setExitOpen(true);
+  }, []);
+
+  const cancelExit = useCallback(() => {
+    setExitOpen(false);
+  }, []);
+
+  const confirmExit = useCallback(() => {
+    allowLeaveRef.current = true;
+    setExitOpen(false);
+    router.push("/");
+  }, [router]);
+
+  // Intercept Android / browser back while the game is open.
+  useEffect(() => {
+    allowLeaveRef.current = false;
+    window.history.pushState({ arcadeExitGuard: true }, "");
+
+    const onPopState = () => {
+      if (allowLeaveRef.current) return;
+
+      // Stay on the game URL and ask before leaving.
+      window.history.pushState({ arcadeExitGuard: true }, "");
+
+      if (exitOpenRef.current) {
+        setExitOpen(false);
+      } else {
+        setExitOpen(true);
+      }
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, []);
+
   return (
     <div className="game-page">
       {!gameReady && (
@@ -852,8 +896,8 @@ export default function GameClient({
       <button
         type="button"
         className="game-close-btn"
-        aria-label="Back to menu"
-        onClick={() => onBackToMenu?.()}
+        aria-label="Go home"
+        onClick={requestExit}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/home-button.png" alt="" className="game-home-btn-icon" />
@@ -940,6 +984,12 @@ export default function GameClient({
           </div>
         )}
       </div>
+
+      <ExitGameModal
+        open={exitOpen}
+        onCancel={cancelExit}
+        onExit={confirmExit}
+      />
     </div>
   );
 }

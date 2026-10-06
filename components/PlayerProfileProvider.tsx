@@ -55,11 +55,14 @@ import {
 } from "@/lib/wallet-address";
 import { isArcadeXRewardsConfigured } from "@/lib/arcadex-rewards";
 import {
+  fetchPendingStreakUsdt,
   fetchStreakStatus,
   refreshSessionFromCheckIn,
   SessionRefreshError,
   type StreakStatus,
 } from "@/lib/streak-client";
+import { hasDeferredStreakUsdtClaimPrompt } from "@/lib/streak-usdt-claim-defer";
+import { isStreakLadderV2Enabled } from "@/lib/streak-rewards";
 import {
   clearWalletSessionToken,
   hasValidWalletSession,
@@ -276,6 +279,31 @@ export default function PlayerProfileProvider({
             setShowCheckIn(true);
             setIsReady(true);
             return;
+          }
+
+          // Already checked in, but D7/D14/… USDT is still claimable — reopen streak UI.
+          if (
+            !config.shuffle &&
+            !status.canCheckIn &&
+            isStreakLadderV2Enabled() &&
+            !hasDeferredStreakUsdtClaimPrompt(wallet)
+          ) {
+            try {
+              if (!hasValidWalletSession(wallet)) {
+                await refreshSessionFromCheckIn(wallet, config.campaignId);
+              }
+              const pending = await fetchPendingStreakUsdt(wallet);
+              if (
+                pending.payoutsEnabled &&
+                pending.pending.length > 0
+              ) {
+                setShowCheckIn(true);
+                setIsReady(true);
+                return;
+              }
+            } catch {
+              // Fall through to normal session/profile load
+            }
           }
 
           if (!hasValidWalletSession(wallet)) {
