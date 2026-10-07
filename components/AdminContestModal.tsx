@@ -13,6 +13,7 @@ import {
   computeContestEndsAt,
   durationDaysFromRange,
   formatContestCountdown,
+  formatContestDateTime,
   getContestStatus,
   isContestDurationDays,
   parseDatetimeLocalValue,
@@ -266,7 +267,12 @@ export default function AdminContestModal({
 
         {isEnded && (
           <div className="admin-contest-ended-banner">
-            Contest ended — review final standings or start a new one.
+            Contest ended
+            {typeof game.contestEndsAt === "number"
+              ? ` ${formatContestDateTime(game.contestEndsAt)}`
+              : ""}
+            {" — "}
+            review final standings or start a new one.
           </div>
         )}
 

@@ -74,6 +74,18 @@ export function formatContestCountdown(remainingMs: number): string {
   return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
 }
 
+/** Local date/time for admin contest banners (e.g. "6 Oct 2026, 12:34 am"). */
+export function formatContestDateTime(ms: number): string {
+  if (!Number.isFinite(ms)) return "";
+  return new Date(ms).toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 /** Local `YYYY-MM-DDTHH:mm` for `<input type="datetime-local">`. */
 export function toDatetimeLocalValue(ms: number): string {
   const d = new Date(ms);
