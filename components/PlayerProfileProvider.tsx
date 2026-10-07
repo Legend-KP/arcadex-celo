@@ -14,6 +14,7 @@ import DailyShuffleModal from "@/components/DailyShuffleModal";
 import DailyStreakBrokenModal from "@/components/DailyStreakBrokenModal";
 import OnboardingModal from "@/components/OnboardingModal";
 import PlayerNameModal from "@/components/PlayerNameModal";
+import StreakUsdtClaimPopup from "@/components/StreakUsdtClaimPopup";
 import { fetchDailyPlayConfig } from "@/lib/daily-play-config-client";
 import type { DailyPlayMode } from "@/lib/daily-play-mode";
 import {
@@ -60,8 +61,12 @@ import {
   refreshSessionFromCheckIn,
   SessionRefreshError,
   type StreakStatus,
+  type StreakUsdtPendingItem,
 } from "@/lib/streak-client";
-import { hasDeferredStreakUsdtClaimPrompt } from "@/lib/streak-usdt-claim-defer";
+import {
+  deferStreakUsdtClaimPrompt,
+  hasDeferredStreakUsdtClaimPrompt,
+} from "@/lib/streak-usdt-claim-defer";
 import { isStreakLadderV2Enabled } from "@/lib/streak-rewards";
 import {
   clearWalletSessionToken,
@@ -125,6 +130,9 @@ export default function PlayerProfileProvider({
   const [isReady, setIsReady] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showCheckIn, setShowCheckIn] = useState(false);
+  /** Standalone USDT claim popup (D7/D14/…) — not part of the streak sheet. */
+  const [usdtClaimItem, setUsdtClaimItem] =
+    useState<StreakUsdtPendingItem | null>(null);
   /** After the broken-streak animation, skip it for this session break. */
   const [streakBrokenDismissed, setStreakBrokenDismissed] = useState(false);
   /** null = resolving localStorage (blocks streak/name so they don't flash first) */
@@ -281,10 +289,11 @@ export default function PlayerProfileProvider({
             return;
           }
 
-          // Already checked in, but D7/D14/… USDT is still claimable — reopen streak UI.
+          // Already checked in on a USDT day with pending entitlement — claim popup only.
           if (
             !config.shuffle &&
             !status.canCheckIn &&
+            status.currentDay > 0 &&
             isStreakLadderV2Enabled() &&
             !hasDeferredStreakUsdtClaimPrompt(wallet)
           ) {
@@ -293,13 +302,14 @@ export default function PlayerProfileProvider({
                 await refreshSessionFromCheckIn(wallet, config.campaignId);
               }
               const pending = await fetchPendingStreakUsdt(wallet);
-              if (
-                pending.payoutsEnabled &&
-                pending.pending.length > 0
-              ) {
-                setShowCheckIn(true);
-                setIsReady(true);
-                return;
+              const forToday =
+                pending.payoutsEnabled
+                  ? pending.pending.find(
+                      (row) => row.day === status.currentDay
+                    ) ?? null
+                  : null;
+              if (forToday) {
+                setUsdtClaimItem(forToday);
               }
             } catch {
               // Fall through to normal session/profile load
@@ -383,6 +393,7 @@ export default function PlayerProfileProvider({
       day: number;
       milestone: boolean;
       infiniteSparkGranted: boolean;
+      claimUsdt?: StreakUsdtPendingItem | null;
     }) => {
       const wallet = pendingWalletRef.current || walletAddress;
       if (!wallet) {
@@ -392,6 +403,11 @@ export default function PlayerProfileProvider({
 
       if (dailyPlayMode === "shuffle") {
         markShuffleDoneToday(wallet, dailyCampaignId);
+      }
+
+      // Open claim popup after streak closes — only for today's claim day.
+      if (result.claimUsdt && result.claimUsdt.day === result.day) {
+        setUsdtClaimItem(result.claimUsdt);
       }
 
       try {
@@ -549,6 +565,8 @@ export default function PlayerProfileProvider({
     !onboardingVisible &&
     !hasPlayerName(profile);
 
+  const usdtClaimVisible = Boolean(usdtClaimItem && walletAddress);
+
   const criticalModalsBlocking =
     !isReady ||
     !onboardingResolved ||
@@ -556,6 +574,7 @@ export default function PlayerProfileProvider({
     checkInVisible ||
     nameModalVisible ||
     streakBrokenVisible ||
+    usdtClaimVisible ||
     awaitingPlayerName;
 
   useClaimUiOverlay("onboarding", onboardingVisible);
@@ -563,6 +582,7 @@ export default function PlayerProfileProvider({
   useClaimUiOverlay("daily-check-in", dailyCheckInVisible);
   useClaimUiOverlay("daily-shuffle", shuffleVisible);
   useClaimUiOverlay("player-name", nameModalVisible);
+  useClaimUiOverlay("streak-usdt-claim", usdtClaimVisible);
 
   const value = useMemo(
     () => ({
@@ -618,6 +638,19 @@ export default function PlayerProfileProvider({
         status={streakStatus}
         onComplete={handleCheckInComplete}
       />
+      {usdtClaimItem && walletAddress ? (
+        <StreakUsdtClaimPopup
+          open={usdtClaimVisible}
+          walletAddress={walletAddress}
+          item={usdtClaimItem}
+          onClose={(result) => {
+            if (!result?.claimed) {
+              deferStreakUsdtClaimPrompt(walletAddress);
+            }
+            setUsdtClaimItem(null);
+          }}
+        />
+      ) : null}
       <PlayerNameModal
         open={nameModalVisible}
         saving={saving}

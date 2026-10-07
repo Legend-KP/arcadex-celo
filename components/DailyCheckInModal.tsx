@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import { formatChainError } from "@/lib/celo-public-client";
 import { playSuccessSfx, playTouchSfx } from "@/lib/sfx";
 import {
-  claimStreakUsdt,
   fetchPendingStreakUsdt,
   fetchStreakStatus,
   performDailyCheckIn,
@@ -17,7 +16,6 @@ import {
   formatDayColumnCaption,
   formatNextRewardLine,
   formatStreakRewardDetail,
-  formatUsdtAmount,
   getStreakDayReward,
   getStreakRewardSpotlight,
   isStreakHighlightDay,
@@ -25,10 +23,14 @@ import {
   STREAK_LADDER_REQUIRED_DAYS,
   type StreakDayReward,
 } from "@/lib/streak-rewards";
-import {
-  clearDeferredStreakUsdtClaimPrompt,
-  deferStreakUsdtClaimPrompt,
-} from "@/lib/streak-usdt-claim-defer";
+
+export type DailyCheckInCompleteResult = {
+  day: number;
+  milestone: boolean;
+  infiniteSparkGranted: boolean;
+  /** Present only when today's check-in day earned claimable USDT. */
+  claimUsdt?: StreakUsdtPendingItem | null;
+};
 
 interface DailyCheckInModalProps {
   open: boolean;
@@ -36,11 +38,7 @@ interface DailyCheckInModalProps {
   /** Runtime campaign from /api/daily-play-config — never trust build-time alone. */
   campaignId: number;
   status: StreakStatus | null;
-  onComplete: (result: {
-    day: number;
-    milestone: boolean;
-    infiniteSparkGranted: boolean;
-  }) => void;
+  onComplete: (result: DailyCheckInCompleteResult) => void;
 }
 
 /** Show one week at a time (matches mock day-column strip). */
@@ -239,27 +237,17 @@ export default function DailyCheckInModal({
   onComplete,
 }: DailyCheckInModalProps) {
   const [loading, setLoading] = useState(false);
-  const [claimingUsdt, setClaimingUsdt] = useState(false);
   const [error, setError] = useState("");
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [carouselPage, setCarouselPage] = useState(0);
-  const [pendingUsdt, setPendingUsdt] = useState<StreakUsdtPendingItem[]>([]);
-  const [usdtPayoutsEnabled, setUsdtPayoutsEnabled] = useState(false);
   const [success, setSuccess] = useState<{
     title: string;
     body: string;
-    claimUsdt?: StreakUsdtPendingItem | null;
   } | null>(null);
-  const pendingCompleteRef = useRef<{
-    day: number;
-    milestone: boolean;
-    infiniteSparkGranted: boolean;
-  } | null>(null);
-  const pendingUsdtRef = useRef<StreakUsdtPendingItem[]>([]);
+  const pendingCompleteRef = useRef<DailyCheckInCompleteResult | null>(null);
   const usdtPayoutsEnabledRef = useRef(false);
   const recoverAttemptedRef = useRef(false);
   const daysScrollRef = useRef<HTMLDivElement | null>(null);
-  const [holdingForUsdtClaim, setHoldingForUsdtClaim] = useState(false);
   const ladderV2 = isStreakLadderV2Enabled();
   const activeCampaignId =
     Number.isFinite(campaignId) && campaignId >= 1
@@ -268,25 +256,18 @@ export default function DailyCheckInModal({
         ? status.campaignId
         : 4;
 
-  useEffect(() => {
-    pendingUsdtRef.current = pendingUsdt;
-  }, [pendingUsdt]);
-
-  useEffect(() => {
-    usdtPayoutsEnabledRef.current = usdtPayoutsEnabled;
-  }, [usdtPayoutsEnabled]);
-
-  async function refreshPendingUsdt(): Promise<StreakUsdtPendingItem[]> {
-    if (!walletAddress || !ladderV2) return [];
+  async function resolveClaimForDay(
+    day: number
+  ): Promise<StreakUsdtPendingItem | null> {
+    if (!walletAddress || !ladderV2 || day < 1) return null;
     try {
       const result = await fetchPendingStreakUsdt(walletAddress);
-      setUsdtPayoutsEnabled(result.payoutsEnabled);
       usdtPayoutsEnabledRef.current = result.payoutsEnabled;
-      setPendingUsdt(result.pending);
-      pendingUsdtRef.current = result.pending;
-      return result.pending;
+      if (!result.payoutsEnabled) return null;
+      // Only the completed claim-day entitlement — never a stale D7 on a D1 run.
+      return result.pending.find((row) => row.day === day) ?? null;
     } catch {
-      return pendingUsdtRef.current;
+      return null;
     }
   }
 
@@ -309,26 +290,22 @@ export default function DailyCheckInModal({
         await refreshSessionFromCheckIn(walletAddress, activeCampaignId);
         if (cancelled) return;
 
-        const pending = ladderV2 ? await refreshPendingUsdt() : [];
+        const day = Math.max(1, fresh.currentDay);
+        const claimUsdt = await resolveClaimForDay(day);
         if (cancelled) return;
 
-        const claimRow = pending[0] ?? null;
-        const day = Math.max(1, fresh.currentDay || claimRow?.day || 1);
         pendingCompleteRef.current = {
-          day: fresh.currentDay > 0 ? fresh.currentDay : day,
+          day: fresh.currentDay,
           milestone: fresh.milestoneReached,
           infiniteSparkGranted: false,
+          claimUsdt,
         };
 
-        // Pending USDT (e.g. D7): stay on the claim surface — do not flash-and-close.
-        if (claimRow && usdtPayoutsEnabledRef.current) {
-          setHoldingForUsdtClaim(true);
-          setSuccess({
-            title: "USDT ready to claim",
-            body: `Day ${claimRow.day} is locked in — ${formatUsdtAmount(claimRow.amountUsdt)} is waiting. Claim it now or continue and claim from this screen.`,
-            claimUsdt: claimRow,
-          });
-          playSuccessSfx();
+        // Hand claim off to the standalone popup — close streak immediately.
+        if (claimUsdt) {
+          const pending = pendingCompleteRef.current;
+          pendingCompleteRef.current = null;
+          onComplete(pending);
           return;
         }
 
@@ -336,7 +313,6 @@ export default function DailyCheckInModal({
         setSuccess({
           title: "You're signed in!",
           body: `Welcome back. Day ${day} is already locked in for today — enjoy ArcadeX!`,
-          claimUsdt: null,
         });
       } catch {
         // Still need a check-in / user action
@@ -348,7 +324,7 @@ export default function DailyCheckInModal({
     return () => {
       cancelled = true;
     };
-  }, [open, walletAddress, activeCampaignId, status?.canCheckIn, ladderV2]);
+  }, [open, walletAddress, activeCampaignId, status?.canCheckIn, ladderV2, onComplete]);
 
   useEffect(() => {
     if (!open) {
@@ -356,64 +332,23 @@ export default function DailyCheckInModal({
       setSuccess(null);
       setSelectedDay(null);
       setCarouselPage(0);
-      setPendingUsdt([]);
       setError("");
-      setHoldingForUsdtClaim(false);
       pendingCompleteRef.current = null;
     }
   }, [open]);
 
-  useEffect(() => {
-    if (!open || !walletAddress || !ladderV2) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const result = await fetchPendingStreakUsdt(walletAddress);
-        if (cancelled) return;
-        setUsdtPayoutsEnabled(result.payoutsEnabled);
-        usdtPayoutsEnabledRef.current = result.payoutsEnabled;
-        setPendingUsdt(result.pending);
-        pendingUsdtRef.current = result.pending;
-      } catch {
-        if (!cancelled) setPendingUsdt([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, walletAddress, ladderV2]);
-
-  const finishSuccess = useCallback(
-    (opts?: { force?: boolean }) => {
-      const hasClaimable =
-        usdtPayoutsEnabledRef.current && pendingUsdtRef.current.length > 0;
-
-      setSuccess(null);
-
-      // Keep the streak modal open so D7/D14/D21/D30 Claim stays reachable.
-      if (!opts?.force && hasClaimable) {
-        setHoldingForUsdtClaim(true);
-        return;
-      }
-
-      setHoldingForUsdtClaim(false);
-      const pending = pendingCompleteRef.current;
-      pendingCompleteRef.current = null;
-      if (opts?.force && walletAddress) {
-        deferStreakUsdtClaimPrompt(walletAddress);
-      }
-      if (pending) onComplete(pending);
-    },
-    [onComplete, walletAddress]
-  );
+  const finishSuccess = useCallback(() => {
+    const pending = pendingCompleteRef.current;
+    pendingCompleteRef.current = null;
+    setSuccess(null);
+    if (pending) onComplete(pending);
+  }, [onComplete]);
 
   useEffect(() => {
     if (!success) return;
-    // Never auto-dismiss while a claimable USDT entitlement is on the popup.
-    if (success.claimUsdt && usdtPayoutsEnabled) return;
     const id = window.setTimeout(() => finishSuccess(), 5500);
     return () => window.clearTimeout(id);
-  }, [success, finishSuccess, usdtPayoutsEnabled]);
+  }, [success, finishSuccess]);
 
   // Scroll carousel to the active check-in day when opening.
   useEffect(() => {
@@ -580,41 +515,42 @@ export default function DailyCheckInModal({
         milestone: result.milestone,
         infiniteSparkGranted: sparkGranted,
       };
-      pendingCompleteRef.current = complete;
-      const dayReward = ladderV2 ? getStreakDayReward(complete.day) : null;
-
-      let claimUsdt: StreakUsdtPendingItem | null =
+      // Claim only for *this* check-in day (D7/D14/…) — never stale pending from another day.
+      let claimUsdt: StreakUsdtPendingItem | null = null;
+      if (
+        ladderV2 &&
         result.ladder?.needsUsdtClaim &&
         result.ladder.usdtPending != null &&
         result.ladder.usdtPending > 0
-          ? {
-              day: result.day,
-              campaignId: result.campaignId,
-              checkInTx: "",
-              amountUsdt: result.ladder.usdtPending,
-              createdAt: Date.now(),
-            }
-          : null;
-
-      // Always refresh pending (covers already-signed-in recovery with no ladder payload).
-      if (ladderV2) {
-        try {
-          const pending = await refreshPendingUsdt();
-          const match =
-            pending.find((row) => row.day === result.day) ??
-            pending[0] ??
-            null;
-          if (match) {
-            claimUsdt = match;
-          } else if (claimUsdt && !claimUsdt.checkInTx) {
-            // Entitlement not indexed yet — keep ladder hint only if sync said so.
-            claimUsdt = result.ladder?.needsUsdtClaim ? claimUsdt : null;
-          }
-        } catch {
-          // Keep ladder-based claim hint when sync reported needsUsdtClaim.
+      ) {
+        claimUsdt = await resolveClaimForDay(result.day);
+        if (!claimUsdt && usdtPayoutsEnabledRef.current) {
+          claimUsdt = {
+            day: result.day,
+            campaignId: result.campaignId,
+            checkInTx: "",
+            amountUsdt: result.ladder.usdtPending,
+            createdAt: Date.now(),
+          };
         }
+      } else if (ladderV2 && result.alreadySignedIn) {
+        claimUsdt = await resolveClaimForDay(result.day);
       }
 
+      pendingCompleteRef.current = {
+        ...complete,
+        claimUsdt,
+      };
+
+      // USDT claim is a separate popup — close streak and hand off immediately.
+      if (claimUsdt) {
+        const pending = pendingCompleteRef.current;
+        pendingCompleteRef.current = null;
+        onComplete(pending);
+        return;
+      }
+
+      const dayReward = ladderV2 ? getStreakDayReward(complete.day) : null;
       const hours = result.ladder?.infiniteHoursGranted;
       const isFinale =
         complete.day >= STREAK_LADDER_REQUIRED_DAYS ||
@@ -627,11 +563,7 @@ export default function DailyCheckInModal({
       let title = "You're signed in!";
       let body = `Day ${complete.day} is locked in. Come back in 24 hours to keep your streak going!`;
 
-      if (claimUsdt && usdtPayoutsEnabledRef.current) {
-        title = "USDT ready to claim";
-        body = `Day ${claimUsdt.day} locked in — ${formatUsdtAmount(claimUsdt.amountUsdt)} is ready. Claim it now to send USDT to this wallet.`;
-        setHoldingForUsdtClaim(true);
-      } else if (result.alreadySignedIn) {
+      if (result.alreadySignedIn) {
         title = "You're signed in!";
         body =
           complete.day > 0
@@ -647,66 +579,16 @@ export default function DailyCheckInModal({
         body = hours
           ? `Day ${complete.day} locked in. Infinite Spark is on for ${hours}h — come back later for Day ${nextDay}!`
           : `Day ${complete.day} locked in. Infinite Spark is on for 24h — come back later for Day ${nextDay}!`;
-      } else if (claimUsdt) {
-        title = "You're signed in!";
-        body = `Day ${complete.day} locked in — ${formatUsdtAmount(claimUsdt.amountUsdt)} ready to claim. Come back later for Day ${nextDay}!`;
       } else if (rewardLine) {
         title = "You're signed in!";
         body = `Day ${complete.day} locked in — ${rewardLine}. Come back in 24 hours for Day ${nextDay}!`;
       }
 
-      setSuccess({
-        title,
-        body,
-        claimUsdt,
-      });
+      setSuccess({ title, body });
     } catch (err) {
       setError(formatChainError(err) || "Check-in failed. Try again.");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleClaimUsdt(item: StreakUsdtPendingItem) {
-    playTouchSfx();
-    setClaimingUsdt(true);
-    setError("");
-    try {
-      let checkInTx = item.checkInTx?.trim() || "";
-      if (!/^0x[a-fA-F0-9]{64}$/.test(checkInTx)) {
-        const pending = await refreshPendingUsdt();
-        const match =
-          pending.find((row) => row.day === item.day) ?? pending[0] ?? null;
-        if (!match?.checkInTx) {
-          throw new Error("No pending streak USDT to claim.");
-        }
-        checkInTx = match.checkInTx;
-      }
-
-      const result = await claimStreakUsdt({
-        walletAddress,
-        checkInTx,
-      });
-      playSuccessSfx();
-      clearDeferredStreakUsdtClaimPrompt(walletAddress);
-      const remaining = pendingUsdtRef.current.filter(
-        (row) => row.checkInTx.toLowerCase() !== checkInTx.toLowerCase()
-      );
-      pendingUsdtRef.current = remaining;
-      setPendingUsdt(remaining);
-      setHoldingForUsdtClaim(remaining.length > 0 && usdtPayoutsEnabledRef.current);
-      setSuccess({
-        title: "USDT claimed!",
-        body:
-          remaining.length > 0
-            ? `${formatUsdtAmount(result.amountUsdt)} is on its way. You still have more USDT ready to claim.`
-            : `${formatUsdtAmount(result.amountUsdt)} is on its way. Come back tomorrow to keep your streak going!`,
-        claimUsdt: remaining[0] ?? null,
-      });
-    } catch (err) {
-      setError(formatChainError(err) || "USDT claim failed. Try again.");
-    } finally {
-      setClaimingUsdt(false);
     }
   }
 
@@ -1011,66 +893,15 @@ export default function DailyCheckInModal({
 
           {error ? <p className="daily-checkin-error">{error}</p> : null}
 
-          {ladderV2 && pendingUsdt.length > 0 ? (
-            <button
-              type="button"
-              className="daily-checkin-btn daily-checkin-btn--claim"
-              disabled={claimingUsdt || loading || !usdtPayoutsEnabled}
-              onClick={() => {
-                if (!usdtPayoutsEnabled) return;
-                void handleClaimUsdt(pendingUsdt[0]!);
-              }}
-            >
-              <span className="daily-checkin-btn-main">
-                {claimingUsdt
-                  ? "Claiming USDT…"
-                  : usdtPayoutsEnabled
-                    ? `Claim ${formatUsdtAmount(pendingUsdt[0]!.amountUsdt)}`
-                    : `USDT ready · Day ${pendingUsdt[0]!.day}`}
-              </span>
-              <span className="daily-checkin-btn-sub">
-                {usdtPayoutsEnabled
-                  ? `Day ${pendingUsdt[0]!.day} reward · No cost · sent to this wallet`
-                  : "Payouts turn on at go-live"}
-              </span>
-            </button>
-          ) : null}
-
-          {holdingForUsdtClaim &&
-          usdtPayoutsEnabled &&
-          pendingUsdt.length > 0 &&
-          !success ? (
-            <button
-              type="button"
-              className="daily-checkin-btn daily-checkin-btn--ghost"
-              disabled={claimingUsdt || loading}
-              onClick={() => finishSuccess({ force: true })}
-            >
-              <span className="daily-checkin-btn-main">Continue to ArcadeX</span>
-              <span className="daily-checkin-btn-sub">
-                Skip for now — reopen ArcadeX later to claim
-              </span>
-            </button>
-          ) : null}
-
           <button
             type="button"
             className="daily-checkin-btn"
-            disabled={
-              loading ||
-              !walletAddress ||
-              Boolean(success) ||
-              (holdingForUsdtClaim && status?.canCheckIn === false)
-            }
+            disabled={loading || !walletAddress || Boolean(success)}
             onClick={() => void handleCheckIn()}
           >
             <span className="daily-checkin-btn-main">
               <ShieldCheckIcon />
-              {loading
-                ? "Unlocking…"
-                : holdingForUsdtClaim && status?.canCheckIn === false
-                  ? "Checked in today"
-                  : "Daily Check In (No cost)"}
+              {loading ? "Unlocking…" : "Daily Check In (No cost)"}
             </span>
             <span className="daily-checkin-btn-sub">No cost transaction</span>
           </button>
@@ -1099,36 +930,13 @@ export default function DailyCheckInModal({
               {success.title}
             </h3>
             <p className="spark-success-popup__body">{success.body}</p>
-            {success.claimUsdt && usdtPayoutsEnabled ? (
-              <button
-                type="button"
-                className="spark-success-popup__btn"
-                disabled={claimingUsdt}
-                onClick={() => void handleClaimUsdt(success.claimUsdt!)}
-              >
-                {claimingUsdt
-                  ? "Claiming…"
-                  : `Claim ${formatUsdtAmount(success.claimUsdt.amountUsdt)}`}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="spark-success-popup__btn"
-                onClick={() => finishSuccess()}
-              >
-                Let&apos;s play
-              </button>
-            )}
-            {success.claimUsdt && usdtPayoutsEnabled ? (
-              <button
-                type="button"
-                className="spark-success-popup__btn spark-success-popup__btn--ghost"
-                onClick={() => finishSuccess()}
-                style={{ marginTop: 8, opacity: 0.85 }}
-              >
-                Claim later
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="spark-success-popup__btn"
+              onClick={() => finishSuccess()}
+            >
+              Let&apos;s play
+            </button>
           </div>
         </div>
       ) : null}
