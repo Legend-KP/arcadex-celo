@@ -124,7 +124,10 @@ export default function DailyXpLiveBoard({
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successOpen, setSuccessOpen] = useState(false);
+  /** Pre-claim share nudge, then post-claim confirmation. */
+  const [claimModal, setClaimModal] = useState<"share" | "success" | null>(
+    null
+  );
   const [tipsOpen, setTipsOpen] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
   const [prompt, setPrompt] = useState<PromptKind>(null);
@@ -259,17 +262,24 @@ export default function DailyXpLiveBoard({
         await performDailyXpClaim(walletAddress);
       }
       setPrompt(null);
-      setSuccessOpen(true);
+      setClaimModal("success");
       await reload();
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err ?? "");
       const formatted = formatChainError(err);
+      const combined = `${raw}\n${formatted}`;
       if (
         /user rejected|user denied|rejected the request|request rejected|cancelled/i.test(
-          `${raw}\n${formatted}`
+          combined
         )
       ) {
         setError("Claim cancelled. Tap Claim now when you’re ready.");
+      } else if (
+        /already claimed|come back tomorrow|nowonreward|alreadyclaimed/i.test(
+          combined
+        )
+      ) {
+        setError("You already claimed today's reward. Come back tomorrow!");
       } else {
         setError(formatted || "Claim failed. Try again.");
       }
@@ -282,6 +292,7 @@ export default function DailyXpLiveBoard({
     if (!live) return;
     setError(null);
 
+    // Recover path: spin already synced, finish on-chain USDT claim().
     if (me?.claimed) {
       void runClaim();
       return;
@@ -296,7 +307,7 @@ export default function DailyXpLiveBoard({
       setPrompt("no_check_in");
       return;
     }
-    void runClaim();
+    setClaimModal("share");
   }
 
   const xp = live ? me?.score ?? 0 : 0;
@@ -555,14 +566,20 @@ export default function DailyXpLiveBoard({
         )}
 
       {mounted &&
-        successOpen &&
+        claimModal &&
         createPortal(
           <div
             className="daily-xp-board__tips-overlay daily-xp-board__tips-overlay--center"
             role="dialog"
             aria-modal="true"
-            aria-label="Reward claimed"
-            onClick={() => setSuccessOpen(false)}
+            aria-label={
+              claimModal === "share"
+                ? "Share on X to claim"
+                : "Reward claimed"
+            }
+            onClick={() => {
+              if (!claiming) setClaimModal(null);
+            }}
           >
             <div
               className="daily-xp-board__success-sheet"
@@ -571,7 +588,9 @@ export default function DailyXpLiveBoard({
               <button
                 type="button"
                 className="lb-close daily-xp-board__success-close"
-                onClick={() => setSuccessOpen(false)}
+                onClick={() => {
+                  if (!claiming) setClaimModal(null);
+                }}
                 aria-label="Close"
               >
                 ✕
@@ -583,17 +602,40 @@ export default function DailyXpLiveBoard({
                 alt=""
                 draggable={false}
               />
-              <h3 className="daily-xp-board__success-title">Reward claimed!</h3>
-              <p className="daily-xp-board__success-copy">
-                You claimed ${DAILY_XP_REWARD_USDT.toFixed(2)} USDT
-              </p>
-              <button
-                type="button"
-                className="daily-xp-board__cta daily-xp-board__success-share"
-                onClick={openDailyXpShareTweet}
-              >
-                Share
-              </button>
+              {claimModal === "share" ? (
+                <>
+                  <h3 className="daily-xp-board__success-title">
+                    Share on X to claim
+                  </h3>
+                  <p className="daily-xp-board__success-copy daily-xp-board__success-copy--nudge">
+                    Share about ArcadeX on X to claim your {rewardLabel} reward
+                  </p>
+                  <button
+                    type="button"
+                    className="daily-xp-board__cta daily-xp-board__success-share"
+                    onClick={openDailyXpShareTweet}
+                  >
+                    Share
+                  </button>
+                  <button
+                    type="button"
+                    className="daily-xp-board__cta daily-xp-board__cta--secondary daily-xp-board__success-claim"
+                    disabled={claiming}
+                    onClick={() => void runClaim()}
+                  >
+                    {claiming ? "Claiming…" : "Claim"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <h3 className="daily-xp-board__success-title">
+                    Reward claimed!
+                  </h3>
+                  <p className="daily-xp-board__success-copy">
+                    You claimed ${DAILY_XP_REWARD_USDT.toFixed(2)} USDT
+                  </p>
+                </>
+              )}
             </div>
           </div>,
           document.body

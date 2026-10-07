@@ -151,6 +151,34 @@ function isTransactionFailureError(error: unknown): boolean {
   );
 }
 
+/** Known ArcadeXRewards custom-error selectors (4-byte). */
+const REWARD_ERROR_SELECTORS: Record<string, string> = {
+  "0xa4086d4b": "NoWonReward",
+  "0x646cf558": "AlreadyClaimed",
+  "0xc2c442ab": "SpinTooSoon",
+  "0x6fed7d85": "TooSoon",
+  "0x3e93d9d8": "ClaimPending",
+  "0xc6efb6e1": "MaxClaimsReached",
+  "0x900bb2c9": "SignatureAlreadyUsed",
+  "0x4e0b9039": "InvalidSpinSignature",
+  "0xad89743e": "SpinExpired",
+  "0x84c3e19d": "InvalidSpinNonce",
+  "0x40794358": "ExceedsMaxPayout",
+  "0x10162d2d": "InsufficientTreasury",
+  "0xeced32bc": "PausedError",
+  "0xe72b39f9": "CampaignInactive",
+  "0xdbcfd673": "CampaignIsCancelled",
+  "0x33f44d61": "CampaignNotStarted",
+  "0x553ae054": "CampaignEnded",
+};
+
+function readRevertSelectorName(text: string): string | null {
+  const match = text.match(/0x([a-fA-F0-9]{8})\b/);
+  if (!match) return null;
+  const selector = `0x${match[1].toLowerCase()}`;
+  return REWARD_ERROR_SELECTORS[selector] ?? null;
+}
+
 /** Pull the revert name/string viem puts on the line under its header. */
 function readContractRevertDetail(error: unknown): string | null {
   const raw = collectErrorText(error);
@@ -170,6 +198,9 @@ function readContractRevertDetail(error: unknown): string | null {
   const custom = raw.match(/Error:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
   if (custom?.[1] && custom[1] !== "Error") return custom[1];
 
+  const fromSelector = readRevertSelectorName(raw);
+  if (fromSelector) return fromSelector;
+
   let current: unknown = error;
   for (let depth = 0; depth < 6 && current && typeof current === "object"; depth++) {
     const record = current as Record<string, unknown>;
@@ -181,10 +212,19 @@ function readContractRevertDetail(error: unknown): string | null {
       return record.reason.trim();
     }
     const data = record.data;
+    if (typeof data === "string") {
+      const named = readRevertSelectorName(data);
+      if (named) return named;
+    }
     if (data && typeof data === "object") {
       const errorName = (data as { errorName?: unknown }).errorName;
       if (typeof errorName === "string" && errorName && errorName !== "Error") {
         return errorName;
+      }
+      const nestedData = (data as { data?: unknown }).data;
+      if (typeof nestedData === "string") {
+        const named = readRevertSelectorName(nestedData);
+        if (named) return named;
       }
     }
     current = record.cause;
@@ -197,6 +237,13 @@ function friendlyContractRevert(detail: string): string {
   const key = detail.replace(/\(\)$/, "").trim();
   const lower = key.toLowerCase();
 
+  if (
+    lower === "nowonreward" ||
+    lower === "alreadyclaimed" ||
+    lower === "offchainnoclaim"
+  ) {
+    return "You already claimed today's reward. Come back tomorrow!";
+  }
   if (lower === "spintoosoon" || lower === "toosoon") {
     return "Already shuffled today. Come back after 00:00 UTC.";
   }

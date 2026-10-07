@@ -1296,8 +1296,16 @@ a { color: inherit; text-decoration: none; }
   font-weight: 700;
   color: #16a34a;
 }
+.daily-xp-board__success-copy--nudge {
+  color: #475569;
+  font-weight: 600;
+  line-height: 1.35;
+}
 .daily-xp-board__success-share {
   margin-top: 18px;
+}
+.daily-xp-board__success-claim {
+  margin-top: 10px;
 }
 
 .activity-lb-week-id {
