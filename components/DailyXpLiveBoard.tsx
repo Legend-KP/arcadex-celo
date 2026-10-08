@@ -20,6 +20,7 @@ import {
   isDailyXpLive,
   isDailyXpTransition,
 } from "@/lib/daily-xp-board";
+import { utcDayKey } from "@/lib/activity-week";
 import { gameAssetCandidates } from "@/lib/game-assets";
 import { readCachedGamesList } from "@/lib/games-list-client-cache";
 import { fetchHomeShell } from "@/lib/home-client";
@@ -33,6 +34,36 @@ const DAILY_XP_SHARE_TEXT = [
   "",
   "https://link.minipay.xyz/miniapp?id=4f8ff9f8-7eee-4fc9-ba0e-aad06b094d39",
 ].join("\n");
+
+function dailyXpShareStorageKey(wallet: string): string {
+  return `arcadex:daily-xp-shared:${wallet.toLowerCase()}:${utcDayKey()}`;
+}
+
+function readDailyXpShareTapped(wallet: string | null | undefined): boolean {
+  if (!wallet || typeof window === "undefined") return false;
+  try {
+    return sessionStorage.getItem(dailyXpShareStorageKey(wallet)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeDailyXpShareTapped(wallet: string): void {
+  try {
+    sessionStorage.setItem(dailyXpShareStorageKey(wallet), "1");
+  } catch {
+    // Ignore storage failures (private mode / MiniPay quirks).
+  }
+}
+
+function clearDailyXpShareTapped(wallet: string | null | undefined): void {
+  if (!wallet) return;
+  try {
+    sessionStorage.removeItem(dailyXpShareStorageKey(wallet));
+  } catch {
+    // ignore
+  }
+}
 
 function openDailyXpShareTweet() {
   const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
@@ -129,7 +160,9 @@ export default function DailyXpLiveBoard({
     null
   );
   /** Soft gate: Claim only after Share is tapped (no share verification). */
-  const [shareTapped, setShareTapped] = useState(false);
+  const [shareTapped, setShareTapped] = useState(() =>
+    readDailyXpShareTapped(walletAddress)
+  );
   const [tipsOpen, setTipsOpen] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
   const [prompt, setPrompt] = useState<PromptKind>(null);
@@ -152,6 +185,10 @@ export default function DailyXpLiveBoard({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    setShareTapped(readDailyXpShareTapped(walletAddress));
+  }, [walletAddress]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -264,6 +301,8 @@ export default function DailyXpLiveBoard({
         await performDailyXpClaim(walletAddress);
       }
       setPrompt(null);
+      clearDailyXpShareTapped(walletAddress);
+      setShareTapped(false);
       setClaimModal("success");
       await reload();
     } catch (err) {
@@ -309,7 +348,8 @@ export default function DailyXpLiveBoard({
       setPrompt("no_check_in");
       return;
     }
-    setShareTapped(false);
+    // Keep claim step if they already tapped Share today (survives X redirect).
+    setShareTapped(readDailyXpShareTapped(walletAddress));
     setClaimModal("share");
   }
 
@@ -629,8 +669,9 @@ export default function DailyXpLiveBoard({
                     type="button"
                     className="daily-xp-board__cta daily-xp-board__success-share"
                     onClick={() => {
-                      openDailyXpShareTweet();
+                      if (walletAddress) writeDailyXpShareTapped(walletAddress);
                       setShareTapped(true);
+                      openDailyXpShareTweet();
                     }}
                   >
                     Share
