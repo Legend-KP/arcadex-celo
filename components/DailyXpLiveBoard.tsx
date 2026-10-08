@@ -576,9 +576,11 @@ export default function DailyXpLiveBoard({
             role="dialog"
             aria-modal="true"
             aria-label={
-              claimModal === "share"
-                ? "Share on X to claim"
-                : "Reward claimed"
+              claimModal === "success"
+                ? "Reward claimed"
+                : shareTapped
+                  ? "Claim your reward"
+                  : "Share on X to claim"
             }
             onClick={() => {
               if (!claiming) {
@@ -588,7 +590,11 @@ export default function DailyXpLiveBoard({
             }}
           >
             <div
-              className="daily-xp-board__success-sheet"
+              className={
+                claimModal === "share" && shareTapped
+                  ? "daily-xp-board__success-sheet daily-xp-board__success-sheet--claim"
+                  : "daily-xp-board__success-sheet"
+              }
               onClick={(e) => e.stopPropagation()}
             >
               <button
@@ -604,45 +610,71 @@ export default function DailyXpLiveBoard({
               >
                 ✕
               </button>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                className="daily-xp-board__success-usdt"
-                src="/tether-usdt-logo.png"
-                alt=""
-                draggable={false}
-              />
-              {claimModal === "share" ? (
+              {claimModal === "share" && !shareTapped ? (
                 <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    className="daily-xp-board__success-usdt"
+                    src="/tether-usdt-logo.png"
+                    alt=""
+                    draggable={false}
+                  />
                   <h3 className="daily-xp-board__success-title">
                     Share on X to claim
                   </h3>
                   <p className="daily-xp-board__success-copy daily-xp-board__success-copy--nudge">
                     Share about ArcadeX on X to claim your {rewardLabel} reward
                   </p>
-                  {!shareTapped ? (
-                    <button
-                      type="button"
-                      className="daily-xp-board__cta daily-xp-board__success-share"
-                      onClick={() => {
-                        openDailyXpShareTweet();
-                        setShareTapped(true);
-                      }}
-                    >
-                      Share
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="daily-xp-board__cta daily-xp-board__success-share"
-                      disabled={claiming}
-                      onClick={() => void runClaim()}
-                    >
-                      {claiming ? "Claiming…" : "Claim"}
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="daily-xp-board__cta daily-xp-board__success-share"
+                    onClick={() => {
+                      openDailyXpShareTweet();
+                      setShareTapped(true);
+                    }}
+                  >
+                    Share
+                  </button>
+                </>
+              ) : claimModal === "share" && shareTapped ? (
+                <>
+                  <p className="daily-xp-board__claim-ready-eyebrow">
+                    Ready to claim
+                  </p>
+                  <p className="daily-xp-board__claim-ready-amount">
+                    {rewardLabel}
+                  </p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    className="daily-xp-board__success-usdt daily-xp-board__claim-ready-usdt"
+                    src="/tether-usdt-logo.png"
+                    alt=""
+                    draggable={false}
+                  />
+                  <h3 className="daily-xp-board__success-title daily-xp-board__claim-ready-title">
+                    Claim your reward
+                  </h3>
+                  <p className="daily-xp-board__success-copy daily-xp-board__success-copy--nudge">
+                    Thanks for sharing. Tap below to receive today&apos;s USDT.
+                  </p>
+                  <button
+                    type="button"
+                    className="daily-xp-board__cta daily-xp-board__cta--claim-ready"
+                    disabled={claiming}
+                    onClick={() => void runClaim()}
+                  >
+                    {claiming ? "Claiming…" : `Claim ${rewardLabel}`}
+                  </button>
                 </>
               ) : (
                 <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    className="daily-xp-board__success-usdt"
+                    src="/tether-usdt-logo.png"
+                    alt=""
+                    draggable={false}
+                  />
                   <h3 className="daily-xp-board__success-title">
                     Reward claimed!
                   </h3>
