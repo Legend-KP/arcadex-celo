@@ -128,6 +128,8 @@ export default function DailyXpLiveBoard({
   const [claimModal, setClaimModal] = useState<"share" | "success" | null>(
     null
   );
+  /** Soft gate: Claim only after Share is tapped (no share verification). */
+  const [shareTapped, setShareTapped] = useState(false);
   const [tipsOpen, setTipsOpen] = useState(false);
   const [gamesOpen, setGamesOpen] = useState(false);
   const [prompt, setPrompt] = useState<PromptKind>(null);
@@ -307,6 +309,7 @@ export default function DailyXpLiveBoard({
       setPrompt("no_check_in");
       return;
     }
+    setShareTapped(false);
     setClaimModal("share");
   }
 
@@ -578,7 +581,10 @@ export default function DailyXpLiveBoard({
                 : "Reward claimed"
             }
             onClick={() => {
-              if (!claiming) setClaimModal(null);
+              if (!claiming) {
+                setClaimModal(null);
+                setShareTapped(false);
+              }
             }}
           >
             <div
@@ -589,7 +595,10 @@ export default function DailyXpLiveBoard({
                 type="button"
                 className="lb-close daily-xp-board__success-close"
                 onClick={() => {
-                  if (!claiming) setClaimModal(null);
+                  if (!claiming) {
+                    setClaimModal(null);
+                    setShareTapped(false);
+                  }
                 }}
                 aria-label="Close"
               >
@@ -610,21 +619,27 @@ export default function DailyXpLiveBoard({
                   <p className="daily-xp-board__success-copy daily-xp-board__success-copy--nudge">
                     Share about ArcadeX on X to claim your {rewardLabel} reward
                   </p>
-                  <button
-                    type="button"
-                    className="daily-xp-board__cta daily-xp-board__success-share"
-                    onClick={openDailyXpShareTweet}
-                  >
-                    Share
-                  </button>
-                  <button
-                    type="button"
-                    className="daily-xp-board__cta daily-xp-board__cta--secondary daily-xp-board__success-claim"
-                    disabled={claiming}
-                    onClick={() => void runClaim()}
-                  >
-                    {claiming ? "Claiming…" : "Claim"}
-                  </button>
+                  {!shareTapped ? (
+                    <button
+                      type="button"
+                      className="daily-xp-board__cta daily-xp-board__success-share"
+                      onClick={() => {
+                        openDailyXpShareTweet();
+                        setShareTapped(true);
+                      }}
+                    >
+                      Share
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="daily-xp-board__cta daily-xp-board__success-share"
+                      disabled={claiming}
+                      onClick={() => void runClaim()}
+                    >
+                      {claiming ? "Claiming…" : "Claim"}
+                    </button>
+                  )}
                 </>
               ) : (
                 <>
