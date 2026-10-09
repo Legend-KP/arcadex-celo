@@ -27,6 +27,8 @@ public class ArcadeXBridge : MonoBehaviour
     public event Action<bool> OnScoreSubmitComplete;
 
     private const string DefaultPlayerName = "Player";
+    /// <summary>Best score observed while ContestLive — used for contest submits.</summary>
+    private int contestSessionBest;
 
 #if UNITY_WEBGL && !UNITY_EDITOR
     [DllImport("__Internal")]
@@ -76,6 +78,7 @@ public class ArcadeXBridge : MonoBehaviour
     /// <summary>
     /// Saves personal best only (RTDB users/{wallet}/games/{gameId}.s).
     /// Does not post to the public leaderboard or charge a fee.
+    /// While a contest is live, every run is also reported for the contest board.
     /// </summary>
     public void SaveProgress(int score)
     {
@@ -83,6 +86,8 @@ public class ArcadeXBridge : MonoBehaviour
         {
             return;
         }
+
+        NoteContestRunScore(score);
 
         SendMessageToParent(new ArcadeXBridgeMessage
         {
@@ -96,13 +101,44 @@ public class ArcadeXBridge : MonoBehaviour
     }
 
     /// <summary>
+    /// Report this run during a live contest without requiring a new lifetime PB.
+    /// </summary>
+    public void ReportContestRunScore(int score) => NoteContestRunScore(score);
+
+    private void NoteContestRunScore(int score)
+    {
+        if (!ContestLive || score <= 0 || score <= contestSessionBest)
+        {
+            return;
+        }
+
+        contestSessionBest = score;
+        SendMessageToParent(new ArcadeXBridgeMessage
+        {
+            type = "GAME_CONTEST_RUN_SCORE",
+            payload = new ArcadeXScorePayload
+            {
+                score = score,
+                walletAddress = WalletAddress
+            }
+        });
+    }
+
+    /// <summary>
     /// Paid leaderboard submit. Shell opens the wallet, verifies payment,
     /// then posts the score to the public leaderboard.
+    /// While a contest is live, prefers contest-session best over lifetime HighScore.
     /// Personal best in RTDB is not modified.
     /// </summary>
     public void SubmitToLeaderboard(int score)
     {
-        if (score <= 0)
+        int toSubmit = score;
+        if (ContestLive && contestSessionBest > 0)
+        {
+            toSubmit = contestSessionBest;
+        }
+
+        if (toSubmit <= 0)
         {
             return;
         }
@@ -112,7 +148,7 @@ public class ArcadeXBridge : MonoBehaviour
             type = "GAME_LEADERBOARD_SUBMIT",
             payload = new ArcadeXScorePayload
             {
-                score = score,
+                score = toSubmit,
                 walletAddress = WalletAddress
             }
         });
@@ -158,7 +194,12 @@ public class ArcadeXBridge : MonoBehaviour
         HighScore = data.highScore > 0 ? data.highScore : data.score;
         Level = data.level;
         HasLeaderboard = data.hasLeaderboard;
+        bool wasContestLive = ContestLive;
         ContestLive = data.contestLive;
+        if (!ContestLive || !wasContestLive)
+        {
+            contestSessionBest = 0;
+        }
         OnBootstrapReady?.Invoke(data);
     }
 

@@ -38,6 +38,11 @@ import {
   getLeaderboardSubmitResult,
   setPendingLeaderboardSubmit,
 } from "@/lib/leaderboard-submit-result";
+import {
+  getContestSessionBest,
+  noteContestSessionScore,
+  resolveContestSubmitScore,
+} from "@/lib/contest-session-score";
 import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
 
 interface GameClientProps {
@@ -69,10 +74,39 @@ export default function GameClient({
   );
   const [payingSubmit, setPayingSubmit] = useState(false);
   const personalBestRef = useRef(0);
+  /** Best run observed during this contest (not lifetime PB). */
+  const contestSessionBestRef = useRef(0);
   const leaderboardEnabled = gameHasLeaderboard(game);
   const contestLive = gameHasContestLive(game);
+  const contestStartedAt =
+    typeof game.contestStartedAt === "number" ? game.contestStartedAt : null;
   const shellOrigin = getShellOrigin();
   const progressRetryRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    contestSessionBestRef.current = contestLive
+      ? getContestSessionBest(game.id, contestStartedAt)
+      : 0;
+  }, [game.id, contestLive, contestStartedAt]);
+
+  const noteContestRun = useCallback(
+    (score: number) => {
+      if (!contestLive || !leaderboardEnabled) return 0;
+      const next = noteContestSessionScore(game.id, contestStartedAt, score);
+      contestSessionBestRef.current = next;
+      return next;
+    },
+    [contestLive, leaderboardEnabled, game.id, contestStartedAt]
+  );
+
+  /** High score shown to Unity while contest is live = contest-session best only. */
+  const unityHighScore = useCallback(
+    (lifetimeHighScore: number) => {
+      if (!contestLive || !leaderboardEnabled) return lifetimeHighScore;
+      return Math.max(0, contestSessionBestRef.current);
+    },
+    [contestLive, leaderboardEnabled]
+  );
   const {
     playerName,
     profile,
@@ -126,14 +160,17 @@ export default function GameClient({
         includeBootstrap?: boolean;
       }
     ) => {
+      const displayHighScore = payload.hasLeaderboard
+        ? unityHighScore(payload.highScore)
+        : payload.highScore;
       const storedValue = payload.hasLeaderboard
-        ? payload.highScore
+        ? displayHighScore
         : payload.level;
       const lineLink = lineLinkFieldsFromModes(payload.modes);
       const progressMessage = {
         success: true,
-        highScore: payload.highScore,
-        score: payload.highScore,
+        highScore: displayHighScore,
+        score: displayHighScore,
         level: payload.level,
         value: storedValue,
         modes: payload.modes ?? null,
@@ -151,7 +188,8 @@ export default function GameClient({
           playerName: opts?.playerName ?? resolvedName,
           contestLive,
           ...payload,
-          score: payload.highScore,
+          highScore: displayHighScore,
+          score: displayHighScore,
           value: storedValue,
           modes: payload.modes ?? null,
           ...lineLink,
@@ -170,6 +208,7 @@ export default function GameClient({
       resolvedWallet,
       resolvedName,
       contestLive,
+      unityHighScore,
     ]
   );
 
@@ -301,7 +340,6 @@ export default function GameClient({
   const confirmPendingSubmit = useCallback(async () => {
     if (pendingSubmitScore == null || payingSubmit) return;
 
-    const score = pendingSubmitScore;
     const wallet = walletAddress || profile?.walletAddress || "";
     if (!wallet) {
       setPendingSubmitScore(null);
@@ -323,6 +361,30 @@ export default function GameClient({
       return;
     }
 
+    const score = contestLive
+      ? resolveContestSubmitScore({
+          submittedScore: pendingSubmitScore,
+          contestSessionBest: Math.max(
+            contestSessionBestRef.current,
+            getContestSessionBest(game.id, contestStartedAt)
+          ),
+          personalBest: personalBestRef.current,
+        })
+      : pendingSubmitScore;
+
+    if (contestLive && (score == null || score <= 0)) {
+      setPendingSubmitScore(null);
+      deliverLeaderboardSubmitResult({
+        success: false,
+        highScore: personalBestRef.current,
+        error:
+          "Play a round during the contest before submitting. Contest scores must come from this contest, not your all-time best.",
+      });
+      return;
+    }
+
+    const submitScore = score!;
+
     // Release Unity pointer lock so MiniPay can show the wallet sheet.
     try {
       document.exitPointerLock?.();
@@ -338,13 +400,17 @@ export default function GameClient({
         ? "Submitting score… Confirm the $0.05 payment in MiniPay."
         : "Submitting score… Confirm once in MiniPay (gas only).",
     });
-    setPendingLeaderboardSubmit(game.id, score);
+    setPendingLeaderboardSubmit(game.id, submitScore);
 
     try {
       // Sync personal best first when this run is a new high, so contest
       // validation (run ≤ saved PB) accepts a new best score.
-      if (contestLive && score > personalBestRef.current) {
-        await persistProgress(score, playerName || profile?.name || "", wallet);
+      if (contestLive && submitScore > personalBestRef.current) {
+        await persistProgress(
+          submitScore,
+          playerName || profile?.name || "",
+          wallet
+        );
       }
       const { txHash } = contestLive
         ? await purchaseScoreSubmitOnChain()
@@ -352,7 +418,7 @@ export default function GameClient({
       const result = await submitScoreToLeaderboard(game.id, {
         walletAddress: wallet,
         txHash,
-        score,
+        score: submitScore,
       });
       clearPendingLeaderboardSubmit(game.id);
       deliverLeaderboardSubmitResult({
@@ -379,6 +445,7 @@ export default function GameClient({
     playerName,
     game.id,
     contestLive,
+    contestStartedAt,
     persistProgress,
     deliverLeaderboardSubmitResult,
   ]);
@@ -592,6 +659,9 @@ export default function GameClient({
                 : modes
                   ? Math.max(0, ...Object.values(modes))
                   : 0;
+            if (leaderboardEnabled && typeof progressValue === "number") {
+              noteContestRun(progressValue);
+            }
             const saved = await persistProgress(
               valueToSave,
               playerName || payload.name || "",
@@ -603,12 +673,15 @@ export default function GameClient({
                 extras,
               }
             );
+            const displayHighScore = leaderboardEnabled
+              ? unityHighScore(saved.highScore)
+              : saved.highScore;
             sendToUnity(iframeRef, saveCallback, {
               success: true,
-              highScore: saved.highScore,
-              score: saved.highScore,
+              highScore: displayHighScore,
+              score: displayHighScore,
               level: saved.level,
-              value: leaderboardEnabled ? saved.highScore : saved.level,
+              value: leaderboardEnabled ? displayHighScore : saved.level,
               modes: saved.modes,
               ...lineLinkFieldsFromModes(saved.modes),
             });
@@ -620,6 +693,14 @@ export default function GameClient({
                   ? err.message
                   : "Could not save progress.",
             });
+          }
+          break;
+        }
+
+        case "GAME_CONTEST_RUN_SCORE": {
+          const { score } = (msg.payload ?? {}) as { score?: number };
+          if (typeof score === "number" && score > 0) {
+            noteContestRun(score);
           }
           break;
         }
@@ -692,13 +773,37 @@ export default function GameClient({
             break;
           }
 
+          let scoreForConfirm = score;
+          if (contestLive) {
+            // Track clear contest runs; ignore lifetime-PB-shaped submits.
+            if (
+              score < personalBestRef.current ||
+              score > personalBestRef.current ||
+              personalBestRef.current <= 0
+            ) {
+              noteContestRun(score);
+            }
+            const resolved = resolveContestSubmitScore({
+              submittedScore: score,
+              contestSessionBest: contestSessionBestRef.current,
+              personalBest: personalBestRef.current,
+            });
+            if (resolved == null || resolved <= 0) {
+              notifyFailure(
+                "Play a round during the contest before submitting. Contest scores must come from this contest, not your all-time best."
+              );
+              break;
+            }
+            scoreForConfirm = resolved;
+          }
+
           // Don't open MiniPay from postMessage — wait for a user tap on the shell.
           try {
             document.exitPointerLock?.();
           } catch {
             /* ignore */
           }
-          setPendingSubmitScore(score);
+          setPendingSubmitScore(scoreForConfirm);
           setSubmitToast(null);
           break;
         }
@@ -837,6 +942,8 @@ export default function GameClient({
       persistProgress,
       deliverLeaderboardSubmitResult,
       replayStoredSubmitResult,
+      noteContestRun,
+      unityHighScore,
     ]
   );
 

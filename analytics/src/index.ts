@@ -1,6 +1,6 @@
 import { getSyncMeta, listDailyMetrics } from "./db";
 import type { Env } from "./env";
-import { runIncrementalSync } from "./indexer";
+import { resetAnalyticsIndex, runIncrementalSync } from "./indexer";
 import { renderAnalyticsHtml } from "./ui";
 
 function json(data: unknown, status = 200): Response {
@@ -46,6 +46,22 @@ async function handleSync(request: Request, env: Env): Promise<Response> {
   }
 }
 
+async function handleReset(request: Request, env: Env): Promise<Response> {
+  if (!checkSyncAuth(request, env)) return unauthorized();
+  try {
+    await resetAnalyticsIndex(env);
+    const meta = await getSyncMeta(env.ANALYTICS_DB);
+    return json({
+      ok: true,
+      message: "Index cleared. Click Sync (or run backfill) until status is idle.",
+      meta,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return json({ error: message }, 500);
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -70,8 +86,11 @@ export default {
     }
 
     if (request.method === "POST" && pathname === "/api/sync") {
-      // Keep sync off the critical path of the response if needed; await so UI can show progress.
       return handleSync(request, env);
+    }
+
+    if (request.method === "POST" && pathname === "/api/reset") {
+      return handleReset(request, env);
     }
 
     if (request.method === "GET" && pathname === "/api/health") {

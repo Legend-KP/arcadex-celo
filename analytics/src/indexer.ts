@@ -1,9 +1,9 @@
 import {
+  type AbiEvent,
   type Address,
   type Log,
   decodeEventLog,
   getAddress,
-  toEventSelector,
 } from "viem";
 import {
   ARCADEX_REWARDS,
@@ -47,34 +47,94 @@ function envStartBlock(env: Env): number | null {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
 }
 
-const ARCADE_CONTRACTS = [
-  ARCADEX_TX_HUB,
-  ARCADEX_REWARDS,
-  SPARK_REFILL,
-  SCORE_SUBMIT,
-  INFINITE_SPARK,
-] as const;
-
 const PAYMENT_TOS = [SPARK_REFILL, SCORE_SUBMIT, INFINITE_SPARK] as const;
+const STABLES = [CELO_USDT, CELO_USDC] as const;
 
-const TOPIC = {
-  signedIn: toEventSelector(TX_HUB_EVENTS_ABI[0]),
-  entryPaidHub: toEventSelector(TX_HUB_EVENTS_ABI[1]),
-  checkedIn: toEventSelector(REWARDS_EVENTS_ABI[0]),
-  spinGranted: toEventSelector(REWARDS_EVENTS_ABI[1]),
-  rewardClaimed: toEventSelector(REWARDS_EVENTS_ABI[2]),
-  entryPaidPayment: toEventSelector(ENTRY_PAID_ABI[0]),
-  transfer: toEventSelector(ERC20_TRANSFER_ABI[0]),
-} as const;
+/** If a single getLogs returns this many rows, bisect — public RPCs often truncate. */
+const LOG_BISECT_THRESHOLD = 2_000;
 
-const WANTED_ARCADE_TOPICS = new Set<string>([
-  TOPIC.signedIn,
-  TOPIC.entryPaidHub,
-  TOPIC.checkedIn,
-  TOPIC.spinGranted,
-  TOPIC.rewardClaimed,
-  TOPIC.entryPaidPayment,
-]);
+type EventQuery = {
+  address: Address;
+  event: AbiEvent;
+  args?: { to?: Address };
+  label: ContractLabel;
+  /** How to read the player address from decoded args. */
+  playerFrom: "player" | "from";
+};
+
+/**
+ * One query per Dune source (topic-filtered). Avoids multi-address
+ * unfiltered getLogs that Forno truncates silently.
+ */
+function buildEventQueries(): EventQuery[] {
+  const queries: EventQuery[] = [
+    {
+      address: ARCADEX_TX_HUB,
+      event: TX_HUB_EVENTS_ABI[0] as AbiEvent,
+      label: "ArcadeXTxHub",
+      playerFrom: "player",
+    },
+    {
+      address: ARCADEX_TX_HUB,
+      event: TX_HUB_EVENTS_ABI[1] as AbiEvent,
+      label: "ArcadeXTxHub",
+      playerFrom: "player",
+    },
+    {
+      address: ARCADEX_REWARDS,
+      event: REWARDS_EVENTS_ABI[0] as AbiEvent,
+      label: "ArcadeXRewards",
+      playerFrom: "player",
+    },
+    {
+      address: ARCADEX_REWARDS,
+      event: REWARDS_EVENTS_ABI[1] as AbiEvent,
+      label: "ArcadeXRewards",
+      playerFrom: "player",
+    },
+    {
+      address: ARCADEX_REWARDS,
+      event: REWARDS_EVENTS_ABI[2] as AbiEvent,
+      label: "ArcadeXRewards",
+      playerFrom: "player",
+    },
+    {
+      address: SPARK_REFILL,
+      event: ENTRY_PAID_ABI[0] as AbiEvent,
+      label: "SparkRefill",
+      playerFrom: "player",
+    },
+    {
+      address: SCORE_SUBMIT,
+      event: ENTRY_PAID_ABI[0] as AbiEvent,
+      label: "ScoreSubmit",
+      playerFrom: "player",
+    },
+    {
+      address: INFINITE_SPARK,
+      event: ENTRY_PAID_ABI[0] as AbiEvent,
+      label: "InfiniteSpark",
+      playerFrom: "player",
+    },
+  ];
+
+  // USDT/USDC Transfer INTO each payment contract (one query each — no multi-`to` filter).
+  for (const token of STABLES) {
+    for (const to of PAYMENT_TOS) {
+      queries.push({
+        address: token,
+        event: ERC20_TRANSFER_ABI[0] as AbiEvent,
+        args: { to },
+        label: PAYMENT_CONTRACTS[to.toLowerCase()]!,
+        playerFrom: "from",
+      });
+    }
+  }
+
+  return queries;
+}
+
+const EVENT_QUERIES = buildEventQueries();
 
 async function resolveStartBlock(client: CeloClient): Promise<bigint> {
   let min = BigInt(Number.MAX_SAFE_INTEGER);
@@ -100,8 +160,8 @@ async function blockTimesForLogs(
   }
   const map = new Map<string, number>();
   const list = [...blocks];
-  for (let i = 0; i < list.length; i += 25) {
-    const chunk = list.slice(i, i + 25);
+  for (let i = 0; i < list.length; i += 40) {
+    const chunk = list.slice(i, i + 40);
     const headers = await Promise.all(
       chunk.map((bn) => client.getBlock({ blockNumber: bn }))
     );
@@ -112,122 +172,43 @@ async function blockTimesForLogs(
   return map;
 }
 
-function contractLabelForAddress(address: Address): ContractLabel | null {
-  const a = address.toLowerCase();
-  if (a === ARCADEX_TX_HUB.toLowerCase()) return "ArcadeXTxHub";
-  if (a === ARCADEX_REWARDS.toLowerCase()) return "ArcadeXRewards";
-  if (a === SPARK_REFILL.toLowerCase()) return "SparkRefill";
-  if (a === SCORE_SUBMIT.toLowerCase()) return "ScoreSubmit";
-  if (a === INFINITE_SPARK.toLowerCase()) return "InfiniteSpark";
-  return null;
-}
-
-function decodeArcadeLog(log: Log): ActivityRow | null {
-  const topic0 = log.topics[0];
-  if (!topic0 || !WANTED_ARCADE_TOPICS.has(topic0)) return null;
-  if (!log.address || log.blockNumber == null || !log.transactionHash) return null;
-
-  const label = contractLabelForAddress(log.address);
-  if (!label) return null;
-
-  try {
-    if (topic0 === TOPIC.signedIn || topic0 === TOPIC.entryPaidHub) {
-      if (label !== "ArcadeXTxHub") return null;
-      const decoded = decodeEventLog({
-        abi: TX_HUB_EVENTS_ABI,
-        data: log.data,
-        topics: log.topics,
-      });
-      const player = (decoded.args as { player?: Address }).player;
-      if (!player) return null;
-      return {
-        tx_hash: log.transactionHash,
-        log_index: Number(log.logIndex ?? 0),
-        player: getAddress(player).toLowerCase(),
-        contract: label,
-        block_number: Number(log.blockNumber),
-        block_time: 0,
-        day: "",
-      };
-    }
-
-    if (
-      topic0 === TOPIC.checkedIn ||
-      topic0 === TOPIC.spinGranted ||
-      topic0 === TOPIC.rewardClaimed
-    ) {
-      if (label !== "ArcadeXRewards") return null;
-      const decoded = decodeEventLog({
-        abi: REWARDS_EVENTS_ABI,
-        data: log.data,
-        topics: log.topics,
-      });
-      const player = (decoded.args as { player?: Address }).player;
-      if (!player) return null;
-      return {
-        tx_hash: log.transactionHash,
-        log_index: Number(log.logIndex ?? 0),
-        player: getAddress(player).toLowerCase(),
-        contract: label,
-        block_number: Number(log.blockNumber),
-        block_time: 0,
-        day: "",
-      };
-    }
-
-    if (topic0 === TOPIC.entryPaidPayment) {
-      if (
-        label !== "SparkRefill" &&
-        label !== "ScoreSubmit" &&
-        label !== "InfiniteSpark"
-      ) {
-        return null;
-      }
-      const decoded = decodeEventLog({
-        abi: ENTRY_PAID_ABI,
-        data: log.data,
-        topics: log.topics,
-      });
-      const player = (decoded.args as { player?: Address }).player;
-      if (!player) return null;
-      return {
-        tx_hash: log.transactionHash,
-        log_index: Number(log.logIndex ?? 0),
-        player: getAddress(player).toLowerCase(),
-        contract: label,
-        block_number: Number(log.blockNumber),
-        block_time: 0,
-        day: "",
-      };
-    }
-  } catch {
+function rowFromLog(log: Log, q: EventQuery): ActivityRow | null {
+  if (!log.transactionHash || log.blockNumber == null || log.logIndex == null) {
     return null;
   }
-  return null;
-}
-
-function decodeTransferLog(log: Log): ActivityRow | null {
-  if (!log.transactionHash || log.blockNumber == null) return null;
   try {
     const decoded = decodeEventLog({
-      abi: ERC20_TRANSFER_ABI,
+      abi: [q.event],
       data: log.data,
       topics: log.topics,
     });
-    const args = decoded.args as {
-      from?: Address;
-      to?: Address;
-      value?: bigint;
-    };
-    if (!args.from || !args.to || args.value == null) return null;
-    if (args.value < MIN_TRANSFER_VALUE) return null;
-    const label = PAYMENT_CONTRACTS[args.to.toLowerCase()];
-    if (!label) return null;
+    const args = decoded.args as Record<string, unknown>;
+
+    if (q.playerFrom === "from") {
+      const value = args.value as bigint | undefined;
+      const to = args.to as Address | undefined;
+      const from = args.from as Address | undefined;
+      if (from == null || to == null || value == null) return null;
+      if (value < MIN_TRANSFER_VALUE) return null;
+      if (PAYMENT_CONTRACTS[to.toLowerCase()] !== q.label) return null;
+      return {
+        tx_hash: log.transactionHash,
+        log_index: Number(log.logIndex),
+        player: getAddress(from).toLowerCase(),
+        contract: q.label,
+        block_number: Number(log.blockNumber),
+        block_time: 0,
+        day: "",
+      };
+    }
+
+    const player = args.player as Address | undefined;
+    if (!player) return null;
     return {
       tx_hash: log.transactionHash,
-      log_index: Number(log.logIndex ?? 0),
-      player: getAddress(args.from).toLowerCase(),
-      contract: label,
+      log_index: Number(log.logIndex),
+      player: getAddress(player).toLowerCase(),
+      contract: q.label,
       block_number: Number(log.blockNumber),
       block_time: 0,
       day: "",
@@ -237,44 +218,81 @@ function decodeTransferLog(log: Log): ActivityRow | null {
   }
 }
 
+async function getLogsSafe(
+  client: CeloClient,
+  q: EventQuery,
+  fromBlock: bigint,
+  toBlock: bigint
+): Promise<Log[]> {
+  try {
+    // AbiEvent typing is loose across event shapes; runtime filters are correct.
+    return await client.getLogs({
+      address: q.address,
+      event: q.event,
+      ...(q.args?.to ? { args: { to: q.args.to } } : {}),
+      fromBlock,
+      toBlock,
+    } as Parameters<CeloClient["getLogs"]>[0]);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Range too large or response too big → bisect.
+    if (
+      fromBlock < toBlock &&
+      /range|limit|exceed|too many|response size|query exceeds/i.test(message)
+    ) {
+      const mid = fromBlock + (toBlock - fromBlock) / 2n;
+      const left = await getLogsSafe(client, q, fromBlock, mid);
+      const right = await getLogsSafe(client, q, mid + 1n, toBlock);
+      return [...left, ...right];
+    }
+    throw err;
+  }
+}
+
+/**
+ * Fetch logs for one query, bisecting when the result set is huge
+ * (silent truncation risk on public RPCs).
+ */
+async function getLogsComplete(
+  client: CeloClient,
+  q: EventQuery,
+  fromBlock: bigint,
+  toBlock: bigint
+): Promise<Log[]> {
+  const logs = await getLogsSafe(client, q, fromBlock, toBlock);
+  if (logs.length < LOG_BISECT_THRESHOLD || fromBlock >= toBlock) {
+    return logs;
+  }
+  const mid = fromBlock + (toBlock - fromBlock) / 2n;
+  const left = await getLogsComplete(client, q, fromBlock, mid);
+  const right = await getLogsComplete(client, q, mid + 1n, toBlock);
+  return [...left, ...right];
+}
+
 async function fetchChunkLogs(
   client: CeloClient,
   fromBlock: bigint,
   toBlock: bigint
 ): Promise<ActivityRow[]> {
-  // 3 RPC calls per chunk instead of 10: arcade contracts + USDT + USDC transfers.
-  const [arcadeLogs, usdtLogs, usdcLogs] = await Promise.all([
-    client.getLogs({
-      address: [...ARCADE_CONTRACTS],
-      fromBlock,
-      toBlock,
-    }),
-    client.getLogs({
-      address: CELO_USDT,
-      event: ERC20_TRANSFER_ABI[0],
-      args: { to: [...PAYMENT_TOS] },
-      fromBlock,
-      toBlock,
-    }),
-    client.getLogs({
-      address: CELO_USDC,
-      event: ERC20_TRANSFER_ABI[0],
-      args: { to: [...PAYMENT_TOS] },
-      fromBlock,
-      toBlock,
-    }),
-  ]);
+  // Sequential batches of parallel queries to stay within Worker subrequest limits.
+  const allLogs: Array<{ log: Log; q: EventQuery }> = [];
+  const batchSize = 4;
+  for (let i = 0; i < EVENT_QUERIES.length; i += batchSize) {
+    const batch = EVENT_QUERIES.slice(i, i + batchSize);
+    const results = await Promise.all(
+      batch.map(async (q) => {
+        const logs = await getLogsComplete(client, q, fromBlock, toBlock);
+        return logs.map((log) => ({ log, q }));
+      })
+    );
+    for (const part of results) allLogs.push(...part);
+  }
 
   const pending: Array<{ log: Log; row: ActivityRow }> = [];
-  for (const log of arcadeLogs) {
-    const row = decodeArcadeLog(log);
+  for (const { log, q } of allLogs) {
+    const row = rowFromLog(log, q);
     if (row) pending.push({ log, row });
   }
-  for (const log of [...usdtLogs, ...usdcLogs]) {
-    const row = decodeTransferLog(log);
-    if (row) pending.push({ log, row });
-  }
-
   if (pending.length === 0) return [];
 
   const times = await blockTimesForLogs(
@@ -303,6 +321,19 @@ export interface SyncResult {
   done: boolean;
   activityRows: number;
   chunks: number;
+}
+
+export async function resetAnalyticsIndex(env: Env): Promise<void> {
+  const db = env.ANALYTICS_DB;
+  await db.batch([
+    db.prepare("DELETE FROM chain_activity"),
+    db.prepare("DELETE FROM daily_metrics"),
+    db.prepare("DELETE FROM sync_cursor"),
+    db.prepare(
+      `UPDATE sync_meta SET last_synced_at = NULL, last_block = NULL,
+       status = 'idle', last_error = NULL, activity_rows = 0 WHERE id = 1`
+    ),
+  ]);
 }
 
 export async function runIncrementalSync(env: Env): Promise<SyncResult> {
@@ -347,15 +378,15 @@ export async function runIncrementalSync(env: Env): Promise<SyncResult> {
     let chunks = 0;
     let endBlock = fromBlock - 1n;
 
+    // Smaller effective progress when each chunk does more RPC work.
+    const chunkBlocks = LOG_CHUNK_BLOCKS;
     for (
       let start = fromBlock;
       start <= latest && Date.now() - started < SYNC_TIME_BUDGET_MS;
-      start += LOG_CHUNK_BLOCKS
+      start += chunkBlocks
     ) {
       const end =
-        start + LOG_CHUNK_BLOCKS - 1n > latest
-          ? latest
-          : start + LOG_CHUNK_BLOCKS - 1n;
+        start + chunkBlocks - 1n > latest ? latest : start + chunkBlocks - 1n;
       const rows = await fetchChunkLogs(client, start, end);
       inserted += await upsertActivity(db, rows);
       endBlock = end;

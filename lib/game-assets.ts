@@ -144,6 +144,7 @@ const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
   "free-fall",
   "burger-game",
   "goe",
+  "infinite-spiral",
 ]);
 
 /** Name/id aliases that map onto a preview-video folder slug. */
@@ -174,6 +175,8 @@ const PREVIEW_VIDEO_FOLDER_ALIASES: Record<string, string> = {
   "guardian-of-eath": "goe",
   guardianofearth: "goe",
   guardian: "goe",
+  infinitespiral: "infinite-spiral",
+  spiral: "infinite-spiral",
 };
 
 export type GameVideoSources = {
@@ -254,6 +257,15 @@ function resolvePreviewVideoFolder(game: Game): string | null {
       LOCAL_PREVIEW_VIDEO_FOLDERS.has("goe")
     ) {
       return "goe";
+    }
+    if (
+      (raw.includes("infinite-spiral") ||
+        raw.includes("infinitespiral") ||
+        (raw.includes("infinite") && raw.includes("spiral")) ||
+        raw.includes("spiral")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("infinite-spiral")
+    ) {
+      return "infinite-spiral";
     }
   }
 
@@ -603,6 +615,9 @@ const GAME_TUTORIAL_BY_FOLDER: Record<string, string> = {
   "guardian-of-eath": "/tutorials/GOE.webp",
   guardianofearth: "/tutorials/GOE.webp",
   guardian: "/tutorials/GOE.webp",
+  "infinite-spiral": "/tutorials/INFINITE-SPIRAL.webp",
+  infinitespiral: "/tutorials/INFINITE-SPIRAL.webp",
+  infinite: "/tutorials/INFINITE-SPIRAL.webp",
 };
 
 function resolveTutorialKey(game: Game): string {
@@ -653,6 +668,14 @@ export function getGameTutorialCandidates(game: Game): string[] {
   ) {
     push(GAME_TUTORIAL_BY_FOLDER.goe);
   }
+  if (
+    nameSlug.includes("infinite-spiral") ||
+    nameSlug.includes("infinitespiral") ||
+    (nameSlug.includes("infinite") && nameSlug.includes("spiral")) ||
+    (!isFirestoreAutoId(id) && id.includes("infinite") && id.includes("spiral"))
+  ) {
+    push(GAME_TUTORIAL_BY_FOLDER["infinite-spiral"]);
+  }
   const hyphen = key.toUpperCase();
   const spaced = key.replace(/-/g, " ").toUpperCase();
   push(`/tutorials/${hyphen}.webp`);
@@ -681,6 +704,14 @@ export function getGameTutorialCandidates(game: Game): string[] {
     key.includes("guardian")
   ) {
     push("/tutorials/GOE.webp");
+  }
+  if (
+    nameSlug.includes("infinite-spiral") ||
+    nameSlug.includes("infinitespiral") ||
+    key.includes("infinite-spiral") ||
+    (nameSlug.includes("infinite") && nameSlug.includes("spiral"))
+  ) {
+    push("/tutorials/INFINITE-SPIRAL.webp");
   }
 
   return out;

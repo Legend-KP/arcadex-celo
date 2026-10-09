@@ -201,6 +201,7 @@ export function renderAnalyticsHtml(): string {
       </div>
       <div class="actions">
         <button type="button" id="shareBtn">Share</button>
+        <button type="button" id="rebuildBtn" title="Clear index and re-sync from chain">Rebuild</button>
         <button type="button" id="syncBtn">Sync</button>
         <button type="button" class="primary" id="runBtn">Run</button>
       </div>
@@ -404,8 +405,27 @@ export function renderAnalyticsHtml(): string {
       }
     }
 
+    async function triggerRebuild() {
+      if (!confirm("Clear all indexed data and rebuild from chain? This takes a while.")) return;
+      setError("");
+      const btn = document.getElementById("rebuildBtn");
+      btn.disabled = true;
+      try {
+        const res = await fetch("/api/reset", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Reset failed");
+        setError("Index cleared. Syncing with fixed indexer…");
+        await triggerSync();
+      } catch (e) {
+        setError(e.message || String(e));
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     document.getElementById("runBtn").onclick = () => loadMetrics();
     document.getElementById("syncBtn").onclick = () => triggerSync();
+    document.getElementById("rebuildBtn").onclick = () => triggerRebuild();
     document.getElementById("search").oninput = () => applyFilter();
     document.getElementById("shareBtn").onclick = async () => {
       try {
