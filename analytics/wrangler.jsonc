@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "arcadex-analytics",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "CELO_RPC_URL": "https://forno.celo.org"
+  },
+  /**
+   * Create the DB once, then paste the id here:
+   *   npm run db:create
+   *   npm run db:migrate:remote
+   */
+  "d1_databases": [
+    {
+      "binding": "ANALYTICS_DB",
+      "database_name": "arcadex-analytics",
+      "database_id": "e57860e6-6e05-4898-9cfe-2b49be38d07c",
+      "migrations_dir": "migrations",
+      "preview_database_id": "arcadex-analytics-local"
+    }
+  ],
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  }
+}
