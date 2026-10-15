@@ -70,7 +70,7 @@ export default function GameCard({
     game.contestEndsAt,
     showContestTimer && contestLive
   );
-  const claimLabel = `Claim ${GAME_OPEN_CLAIM_USDT}`;
+  const claimLabel = `Claim $${GAME_OPEN_CLAIM_USDT}`;
 
   const thumbCandidates = useMemo(
     () => gameAssetCandidates(game, "thumbnail"),
@@ -222,11 +222,18 @@ export default function GameCard({
             <source src={videoSources.mp4} type="video/mp4" />
           </video>
         )}
-        {isNewArrival && (
+        {(isNewArrival || contestLive) && (
           <div className="game-card-badges">
-            <span className="game-card-new-badge" aria-label="New arrival">
-              NEW ARRIVAL
-            </span>
+            {contestLive && (
+              <span className="game-card-contest-badge" aria-label="Contest live">
+                CONTEST LIVE
+              </span>
+            )}
+            {isNewArrival && (
+              <span className="game-card-new-badge" aria-label="New arrival">
+                NEW ARRIVAL
+              </span>
+            )}
           </div>
         )}
         {isLive && showClaimCta && (
