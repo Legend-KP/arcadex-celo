@@ -10,6 +10,7 @@ import {
 } from "@/lib/game-assets";
 import { formatContestCountdown } from "@/lib/contest";
 import { formatPlayCount } from "@/lib/format-play-count";
+import { GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
 import {
   Game,
   gameHasContestLive,
@@ -29,6 +30,8 @@ interface GameCardProps {
   /** Optional last-played label for Continue Playing. */
   subtitle?: string;
   showContestTimer?: boolean;
+  /** Show Claim CTA on thumbnail when still unclaimed today. */
+  showClaimCta?: boolean;
 }
 
 function useContestRemaining(endsAt: number | undefined, enabled: boolean) {
@@ -57,6 +60,7 @@ export default function GameCard({
   variant = "catalog",
   subtitle,
   showContestTimer = false,
+  showClaimCta = false,
 }: GameCardProps) {
   const isLive = gameIsLive(game);
   const contestLive = gameHasContestLive(game);
@@ -66,6 +70,7 @@ export default function GameCard({
     game.contestEndsAt,
     showContestTimer && contestLive
   );
+  const claimLabel = `Claim ${GAME_OPEN_CLAIM_USDT}`;
 
   const thumbCandidates = useMemo(
     () => gameAssetCandidates(game, "thumbnail"),
@@ -217,19 +222,18 @@ export default function GameCard({
             <source src={videoSources.mp4} type="video/mp4" />
           </video>
         )}
-        {(isNewArrival || contestLive) && (
+        {isNewArrival && (
           <div className="game-card-badges">
-            {contestLive && (
-              <span className="game-card-contest-badge" aria-label="Contest live">
-                CONTEST LIVE
-              </span>
-            )}
-            {isNewArrival && (
-              <span className="game-card-new-badge" aria-label="New arrival">
-                NEW ARRIVAL
-              </span>
-            )}
+            <span className="game-card-new-badge" aria-label="New arrival">
+              NEW ARRIVAL
+            </span>
           </div>
+        )}
+        {isLive && showClaimCta && (
+          <span className="game-card-claim-cta" aria-label={claimLabel}>
+            <span className="game-card-claim-cta__shine" aria-hidden />
+            <span className="game-card-claim-cta__label">{claimLabel}</span>
+          </span>
         )}
         {!isLive && (
           <div className="coming-soon-overlay" aria-hidden>

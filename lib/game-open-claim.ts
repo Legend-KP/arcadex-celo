@@ -6,6 +6,8 @@
 import { utcDayKey } from "@/lib/activity-week";
 
 export const GAME_OPEN_CLAIM_USDT = 0.005;
+/** Marketing amount on home banner / popup CTA (not the on-chain payout). */
+export const GAME_OPEN_CLAIM_BANNER_USDT = 0.05;
 /** On-chain amount (USDT, 6 decimals). */
 export const GAME_OPEN_CLAIM_AMOUNT_MICRO = 5_000;
 export const GAME_OPEN_CLAIM_REWARD_AMOUNT = BigInt(5_000);

@@ -29,6 +29,7 @@ import {
 import { fetchHomeShell } from "@/lib/home-client";
 import { getCachedWallet } from "@/lib/player-id";
 import { getRecentPlayedMap } from "@/lib/recent-played";
+import { useGameOpenClaimMap } from "@/lib/use-game-open-claim-map";
 
 function applyHomeBrowse(
   games: Game[],
@@ -38,6 +39,10 @@ function applyHomeBrowse(
   recentMap: Record<string, number>
 ): Game[] {
   let next = games;
+
+  if (sort === "contest") {
+    next = next.filter((game) => gameHasContestLive(game));
+  }
 
   if (continueOnly) {
     next = next.filter((game) => recentMap[game.id] !== undefined);
@@ -62,6 +67,11 @@ function applyHomeBrowse(
     );
   } else if (sort === "latest") {
     next = [...next].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+  } else if (sort === "contest") {
+    next = [...next].sort(
+      (a, b) => (a.contestEndsAt ?? Number.MAX_SAFE_INTEGER) -
+        (b.contestEndsAt ?? Number.MAX_SAFE_INTEGER)
+    );
   }
 
   return next;
@@ -82,6 +92,9 @@ function emptyMessage(
   }
   if (sort === "recent") {
     return "No recently played games yet. Open a game to see it here.";
+  }
+  if (sort === "contest") {
+    return "No live contests right now. Check back soon!";
   }
   return "No games yet. Check back soon!";
 }
@@ -112,6 +125,8 @@ function GamesCatalog({
   error,
   empty,
   priorityCount = 4,
+  claimableByGameId,
+  showContestTimer = false,
 }: {
   games: Game[];
   playCounts: Record<string, number>;
@@ -119,6 +134,8 @@ function GamesCatalog({
   error: string;
   empty: string;
   priorityCount?: number;
+  claimableByGameId?: Record<string, boolean>;
+  showContestTimer?: boolean;
 }) {
   if (error) return <p className="no-games">{error}</p>;
   if (loading) {
@@ -143,6 +160,8 @@ function GamesCatalog({
           game={game}
           playCount={playCounts[game.id] ?? 0}
           priority={index < priorityCount}
+          showClaimCta={Boolean(claimableByGameId?.[game.id])}
+          showContestTimer={showContestTimer}
         />
       ))}
     </div>
@@ -156,6 +175,7 @@ function HorizontalGameRow({
   playCounts,
   recentMap,
   showContestTimer,
+  claimableByGameId,
   empty,
 }: {
   title: string;
@@ -164,6 +184,7 @@ function HorizontalGameRow({
   playCounts: Record<string, number>;
   recentMap?: Record<string, number>;
   showContestTimer?: boolean;
+  claimableByGameId?: Record<string, boolean>;
   empty?: string;
 }) {
   if (games.length === 0) {
@@ -196,6 +217,7 @@ function HorizontalGameRow({
               playCount={playCounts[game.id] ?? 0}
               priority={index < 3}
               showContestTimer={showContestTimer}
+              showClaimCta={Boolean(claimableByGameId?.[game.id])}
               subtitle={
                 recentMap?.[game.id]
                   ? formatRelativePlayed(recentMap[game.id])
@@ -356,6 +378,10 @@ export default function HomePage() {
     () => games.filter((g) => !gameIsLive(g)),
     [games]
   );
+  const claimableByGameId = useGameOpenClaimMap(
+    walletAddress ?? "",
+    liveGames
+  );
 
   const catalogGames = useMemo(() => {
     const source =
@@ -474,14 +500,6 @@ export default function HomePage() {
                 />
               ) : null}
 
-              <HorizontalGameRow
-                title="Live contests"
-                badge={contestGames.length || undefined}
-                games={contestGames}
-                playCounts={playCounts}
-                showContestTimer
-              />
-
               <section className="home-section home-section--catalog">
                 <div className="home-section__head">
                   <h2 className="home-section__title">All games</h2>
@@ -513,6 +531,8 @@ export default function HomePage() {
                     searchOpen ? searchQuery : "",
                     liveGames.length > 0
                   )}
+                  claimableByGameId={claimableByGameId}
+                  showContestTimer={sort === "contest"}
                 />
               </section>
 
@@ -536,6 +556,8 @@ export default function HomePage() {
                 searchOpen ? searchQuery : "",
                 (view === "contests" ? contestGames : liveGames).length > 0
               )}
+              claimableByGameId={claimableByGameId}
+              showContestTimer={view === "contests" || sort === "contest"}
             />
           )}
 

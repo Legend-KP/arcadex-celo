@@ -3,10 +3,17 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
-export type HomeSort = "default" | "recent" | "az" | "za" | "latest";
+export type HomeSort =
+  | "default"
+  | "contest"
+  | "recent"
+  | "az"
+  | "za"
+  | "latest";
 
 const SORT_OPTIONS: { id: HomeSort; label: string }[] = [
   { id: "default", label: "Default" },
+  { id: "contest", label: "Live contests" },
   { id: "recent", label: "Recently played" },
   { id: "az", label: "A to Z" },
   { id: "za", label: "Z to A" },

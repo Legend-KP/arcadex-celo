@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
+import { GAME_OPEN_CLAIM_BANNER_USDT } from "@/lib/game-open-claim";
 import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
 
 export const EARN_NOW_POPUP_IMAGE = "/earn-now-popup.jpg";
@@ -37,7 +37,7 @@ export default function EarnNowModal({
 
   if (!open || typeof document === "undefined") return null;
 
-  const amountLabel = `$${GAME_OPEN_CLAIM_USDT.toFixed(3)}`;
+  const amountLabel = `$${GAME_OPEN_CLAIM_BANNER_USDT.toFixed(2)}`;
 
   return createPortal(
     <div
