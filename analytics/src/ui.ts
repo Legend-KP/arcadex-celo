@@ -182,6 +182,36 @@ export function renderAnalyticsHtml(): string {
       color: #9b1c1c;
       font-size: 13px;
     }
+    .sources {
+      margin-top: 16px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px 12px;
+    }
+    .sources h3 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .sources ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+    }
+    .sources li {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 11.5px;
+      background: var(--header);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 4px 8px;
+      color: var(--ink);
+    }
     @media (max-width: 720px) {
       header.top { flex-direction: column; }
       .brand h1 { font-size: 24px; }
@@ -201,7 +231,7 @@ export function renderAnalyticsHtml(): string {
       </div>
       <div class="actions">
         <button type="button" id="shareBtn">Share</button>
-        <button type="button" id="rebuildBtn" title="Clear index and re-sync from chain">Rebuild</button>
+        <button type="button" id="repairBtn" title="Re-scan history and fill missing days (keeps current data)">Fill gaps</button>
         <button type="button" id="syncBtn">Sync</button>
         <button type="button" class="primary" id="runBtn">Run</button>
       </div>
@@ -224,6 +254,20 @@ export function renderAnalyticsHtml(): string {
       </div>
     </section>
     <div class="error" id="error" hidden></div>
+    <section class="sources">
+      <h3>Data sources</h3>
+      <ul>
+        <li>arcadex_celo.arcadextxhub_evt_signedin</li>
+        <li>arcadex_celo.arcadextxhub_evt_entrypaid</li>
+        <li>arcadex_celo.arcadexrewards_evt_checkedin</li>
+        <li>arcadex_celo.arcadexrewards_evt_spinresultgranted</li>
+        <li>arcadex_celo.arcadexrewards_evt_onchainrewardclaimed</li>
+        <li>arcadex_celo.sparkrefill_evt_entrypaid</li>
+        <li>arcadex_celo.scoresubmit_evt_entrypaid</li>
+        <li>arcadex_celo.infinitespark_evt_entrypaid</li>
+        <li>erc20_celo.evt_transfer</li>
+      </ul>
+    </section>
   </div>
 
   <script>
@@ -234,9 +278,6 @@ export function renderAnalyticsHtml(): string {
       "wau",
       "mau",
       "transactions_last_7_days",
-      "transactions_last_30_days",
-      "transactions_last_60_days",
-      "transactions_last_90_days",
       "total_transactions_to_date",
       "txhub_transactions",
       "rewards_transactions",
@@ -395,7 +436,12 @@ export function renderAnalyticsHtml(): string {
         if (!res.ok) throw new Error(data.error || "Sync failed");
         await loadMetrics();
         if (data.result && data.result.done === false) {
-          setError("Catch-up in progress (indexed through block " + data.result.toBlock + "). Click Sync again until done.");
+          const r = data.result;
+          if (r.repairDone === false && r.repairTo != null) {
+            setError("Filling gaps… history through block " + r.repairTo + ". Keep clicking Sync (or run backfill) until idle.");
+          } else {
+            setError("Catch-up in progress (tip through block " + data.result.toBlock + "). Click Sync again until done.");
+          }
         }
       } catch (e) {
         setError(e.message || String(e));
@@ -405,17 +451,17 @@ export function renderAnalyticsHtml(): string {
       }
     }
 
-    async function triggerRebuild() {
-      if (!confirm("Clear all indexed data and rebuild from chain? This takes a while.")) return;
+    async function triggerRepair() {
+      if (!confirm("Re-scan all history to fill missing days? Today's data stays; this can take a while.")) return;
       setError("");
-      const btn = document.getElementById("rebuildBtn");
+      const btn = document.getElementById("repairBtn");
       btn.disabled = true;
       try {
-        const res = await fetch("/api/reset", { method: "POST" });
+        const res = await fetch("/api/repair", { method: "POST" });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Reset failed");
-        setError("Index cleared. Syncing with fixed indexer…");
-        await triggerSync();
+        if (!res.ok) throw new Error(data.error || "Repair failed");
+        await loadMetrics();
+        setError("Gap repair started. Keep Sync/backfill running until status is idle, then Run.");
       } catch (e) {
         setError(e.message || String(e));
       } finally {
@@ -425,7 +471,7 @@ export function renderAnalyticsHtml(): string {
 
     document.getElementById("runBtn").onclick = () => loadMetrics();
     document.getElementById("syncBtn").onclick = () => triggerSync();
-    document.getElementById("rebuildBtn").onclick = () => triggerRebuild();
+    document.getElementById("repairBtn").onclick = () => triggerRepair();
     document.getElementById("search").oninput = () => applyFilter();
     document.getElementById("shareBtn").onclick = async () => {
       try {

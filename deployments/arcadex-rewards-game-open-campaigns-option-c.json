@@ -1,0 +1,25 @@
+{
+  "contract": "ArcadeXRewards",
+  "address": "0xc5BE4773D5B4a8e3C6f3E7a4C5f7cfBC38986ccF",
+  "campaigns": {
+    "7": "Reflector",
+    "8": "Guardian of Earth",
+    "9": "Free Fall",
+    "10": "Infinite",
+    "11": "Dot Connect",
+    "12": "Coin",
+    "13": "BaseDrop",
+    "14": "Orbit flow",
+    "15": "Jelly Jumble",
+    "16": "Hungry Hole",
+    "17": "Fruit Swipe",
+    "18": "Block Blast",
+    "19": "Line Link"
+  },
+  "maxSinglePayout": 5000,
+  "amountUsdt": 0.005,
+  "envOptional": {
+    "GAME_OPEN_CAMPAIGN_MAP": "{\"reflector\":7,\"guardian-of-earth\":8,\"free-fall\":9,\"infinite\":10,\"dot-connect\":11,\"coin\":12,\"basedrop\":13,\"orbit-flow\":14,\"jelly-jumble\":15,\"hungry-hole\":16,\"fruit-swipe\":17,\"block-blast\":18,\"line-link\":19}"
+  },
+  "note": "Slug map is also baked into lib/game-open-campaigns.ts. ENV overrides or adds Firestore gameId keys if needed."
+}

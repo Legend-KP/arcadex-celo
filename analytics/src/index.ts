@@ -1,6 +1,11 @@
-import { getSyncMeta, listDailyMetrics } from "./db";
+import { DUNE_DATA_SOURCES } from "./contracts";
+import { getRepairCursor, getSyncMeta, listDailyMetrics } from "./db";
 import type { Env } from "./env";
-import { resetAnalyticsIndex, runIncrementalSync } from "./indexer";
+import {
+  resetAnalyticsIndex,
+  runIncrementalSync,
+  startGapRepair,
+} from "./indexer";
 import { renderAnalyticsHtml } from "./ui";
 
 function json(data: unknown, status = 200): Response {
@@ -31,7 +36,7 @@ async function handleMetrics(env: Env): Promise<Response> {
     listDailyMetrics(env.ANALYTICS_DB),
     getSyncMeta(env.ANALYTICS_DB),
   ]);
-  return json({ rows, meta });
+  return json({ rows, meta, sources: DUNE_DATA_SOURCES });
 }
 
 async function handleSync(request: Request, env: Env): Promise<Response> {
@@ -55,6 +60,29 @@ async function handleReset(request: Request, env: Env): Promise<Response> {
       ok: true,
       message: "Index cleared. Click Sync (or run backfill) until status is idle.",
       meta,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return json({ error: message }, 500);
+  }
+}
+
+async function handleRepair(request: Request, env: Env): Promise<Response> {
+  if (!checkSyncAuth(request, env)) return unauthorized();
+  try {
+    const repair = await startGapRepair(env);
+    // Kick first repair slice immediately.
+    const result = await runIncrementalSync(env);
+    const meta = await getSyncMeta(env.ANALYTICS_DB);
+    const repairCursor = await getRepairCursor(env.ANALYTICS_DB);
+    return json({
+      ok: true,
+      message:
+        "Gap repair started. Keeps today's tip in sync while re-scanning history. Run Sync/backfill until status is idle.",
+      repair,
+      result,
+      meta,
+      repairCursor,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -93,9 +121,16 @@ export default {
       return handleReset(request, env);
     }
 
+    if (request.method === "POST" && pathname === "/api/repair") {
+      return handleRepair(request, env);
+    }
+
     if (request.method === "GET" && pathname === "/api/health") {
       const meta = await getSyncMeta(env.ANALYTICS_DB).catch(() => null);
-      return json({ ok: true, meta });
+      const repairCursor = await getRepairCursor(env.ANALYTICS_DB).catch(
+        () => null
+      );
+      return json({ ok: true, meta, repairCursor });
     }
 
     return json({ error: "Not found" }, 404);

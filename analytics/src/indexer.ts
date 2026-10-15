@@ -24,9 +24,12 @@ import {
 } from "./contracts";
 import {
   type ActivityRow,
+  clearRepairCursor,
   countActivity,
   dayFromUnix,
+  getRepairCursor,
   getSyncCursor,
+  setRepairCursor,
   setSyncCursor,
   setSyncMeta,
   upsertActivity,
@@ -35,6 +38,7 @@ import type { Env } from "./env";
 import {
   LOG_CHUNK_BLOCKS,
   SYNC_TIME_BUDGET_MS,
+  TIP_SYNC_MAX_BLOCKS,
   createCeloClient,
   type CeloClient,
 } from "./rpc";
@@ -51,7 +55,7 @@ const PAYMENT_TOS = [SPARK_REFILL, SCORE_SUBMIT, INFINITE_SPARK] as const;
 const STABLES = [CELO_USDT, CELO_USDC] as const;
 
 /** If a single getLogs returns this many rows, bisect — public RPCs often truncate. */
-const LOG_BISECT_THRESHOLD = 2_000;
+const LOG_BISECT_THRESHOLD = 100;
 
 type EventQuery = {
   address: Address;
@@ -321,6 +325,19 @@ export interface SyncResult {
   done: boolean;
   activityRows: number;
   chunks: number;
+  repairInserted?: number;
+  repairFrom?: number;
+  repairTo?: number;
+  repairDone?: boolean;
+}
+
+async function resolveStartBlockNumber(
+  env: Env,
+  client: CeloClient
+): Promise<number> {
+  const override = envStartBlock(env);
+  if (override != null) return override;
+  return Number(await resolveStartBlock(client));
 }
 
 export async function resetAnalyticsIndex(env: Env): Promise<void> {
@@ -329,11 +346,56 @@ export async function resetAnalyticsIndex(env: Env): Promise<void> {
     db.prepare("DELETE FROM chain_activity"),
     db.prepare("DELETE FROM daily_metrics"),
     db.prepare("DELETE FROM sync_cursor"),
+    db.prepare("DELETE FROM repair_cursor"),
     db.prepare(
       `UPDATE sync_meta SET last_synced_at = NULL, last_block = NULL,
        status = 'idle', last_error = NULL, activity_rows = 0 WHERE id = 1`
     ),
   ]);
+}
+
+/** Rewind history scan without wiping rows — INSERT OR IGNORE fills gaps. */
+export async function startGapRepair(env: Env): Promise<{
+  fromBlock: number;
+  targetBlock: number;
+}> {
+  const client = createCeloClient(env);
+  const latest = await client.getBlockNumber();
+  const fromBlock = await resolveStartBlockNumber(env, client);
+  await setRepairCursor(env.ANALYTICS_DB, fromBlock, Number(latest));
+  await setSyncMeta(env.ANALYTICS_DB, {
+    status: "repairing",
+    last_error: null,
+  });
+  return { fromBlock, targetBlock: Number(latest) };
+}
+
+async function indexBlockRange(
+  client: CeloClient,
+  db: D1Database,
+  fromBlock: bigint,
+  toBlock: bigint,
+  started: number,
+  budgetMs: number
+): Promise<{ inserted: number; chunks: number; endBlock: bigint }> {
+  let inserted = 0;
+  let chunks = 0;
+  let endBlock = fromBlock - 1n;
+  for (
+    let start = fromBlock;
+    start <= toBlock && Date.now() - started < budgetMs;
+    start += LOG_CHUNK_BLOCKS
+  ) {
+    const end =
+      start + LOG_CHUNK_BLOCKS - 1n > toBlock
+        ? toBlock
+        : start + LOG_CHUNK_BLOCKS - 1n;
+    const rows = await fetchChunkLogs(client, start, end);
+    inserted += await upsertActivity(db, rows);
+    endBlock = end;
+    chunks += 1;
+  }
+  return { inserted, chunks, endBlock };
 }
 
 export async function runIncrementalSync(env: Env): Promise<SyncResult> {
@@ -347,72 +409,101 @@ export async function runIncrementalSync(env: Env): Promise<SyncResult> {
 
     let cursor = await getSyncCursor(db);
     if (cursor == null) {
-      const override = envStartBlock(env);
-      const start =
-        override != null ? BigInt(override) : await resolveStartBlock(client);
-      cursor = Number(start);
+      cursor = await resolveStartBlockNumber(env, client);
       await setSyncCursor(db, cursor);
     }
 
-    const fromBlock = BigInt(cursor);
-    if (fromBlock > latest) {
-      const rows = await countActivity(db);
-      await setSyncMeta(db, {
-        status: "idle",
-        last_synced_at: new Date().toISOString(),
-        last_block: Number(latest),
-        activity_rows: rows,
-        last_error: null,
-      });
-      return {
-        fromBlock: Number(fromBlock),
-        toBlock: Number(latest),
-        inserted: 0,
-        done: true,
-        activityRows: rows,
-        chunks: 0,
-      };
+    let tipInserted = 0;
+    let tipChunks = 0;
+    let tipFrom = cursor;
+    let tipEnd = cursor - 1;
+
+    // 1) Keep tip fresh (today's data) — never rewind this cursor during repair.
+    if (BigInt(cursor) <= latest) {
+      const tipCap =
+        BigInt(cursor) + TIP_SYNC_MAX_BLOCKS - 1n > latest
+          ? latest
+          : BigInt(cursor) + TIP_SYNC_MAX_BLOCKS - 1n;
+      const tip = await indexBlockRange(
+        client,
+        db,
+        BigInt(cursor),
+        tipCap,
+        started,
+        Math.min(15_000, SYNC_TIME_BUDGET_MS)
+      );
+      tipInserted = tip.inserted;
+      tipChunks = tip.chunks;
+      if (tip.endBlock >= BigInt(cursor)) {
+        tipEnd = Number(tip.endBlock);
+        await setSyncCursor(db, tipEnd + 1);
+        tipFrom = cursor;
+      }
+    } else {
+      tipEnd = Number(latest);
     }
 
-    let inserted = 0;
-    let chunks = 0;
-    let endBlock = fromBlock - 1n;
-
-    // Smaller effective progress when each chunk does more RPC work.
-    const chunkBlocks = LOG_CHUNK_BLOCKS;
-    for (
-      let start = fromBlock;
-      start <= latest && Date.now() - started < SYNC_TIME_BUDGET_MS;
-      start += chunkBlocks
-    ) {
-      const end =
-        start + chunkBlocks - 1n > latest ? latest : start + chunkBlocks - 1n;
-      const rows = await fetchChunkLogs(client, start, end);
-      inserted += await upsertActivity(db, rows);
-      endBlock = end;
-      chunks += 1;
-      await setSyncCursor(db, Number(end + 1n));
+    // 2) Gap repair: re-scan history; INSERT OR IGNORE adds missing events.
+    let repairInserted = 0;
+    let repairFrom: number | undefined;
+    let repairTo: number | undefined;
+    let repairDone = true;
+    const repair = await getRepairCursor(db);
+    if (repair && Date.now() - started < SYNC_TIME_BUDGET_MS) {
+      repairDone = false;
+      repairFrom = repair.next_block;
+      const repairTarget = BigInt(repair.target_block);
+      if (BigInt(repair.next_block) > repairTarget) {
+        await clearRepairCursor(db);
+        repairDone = true;
+      } else {
+        const ranged = await indexBlockRange(
+          client,
+          db,
+          BigInt(repair.next_block),
+          repairTarget,
+          started,
+          SYNC_TIME_BUDGET_MS
+        );
+        repairInserted = ranged.inserted;
+        repairTo = Number(ranged.endBlock);
+        if (ranged.endBlock >= repairTarget) {
+          await clearRepairCursor(db);
+          repairDone = true;
+        } else if (ranged.endBlock >= BigInt(repair.next_block)) {
+          await setRepairCursor(db, Number(ranged.endBlock) + 1, repair.target_block);
+        }
+      }
     }
 
     await recomputeDailyMetrics(db);
     const activityRows = await countActivity(db);
-    const done = endBlock >= latest;
+    const tipCaughtUp = (await getSyncCursor(db))! > Number(latest);
+    const stillRepairing = (await getRepairCursor(db)) != null;
 
     await setSyncMeta(db, {
-      status: done ? "idle" : "catching_up",
+      status: stillRepairing
+        ? "repairing"
+        : tipCaughtUp
+          ? "idle"
+          : "catching_up",
       last_synced_at: new Date().toISOString(),
-      last_block: Number(endBlock),
+      last_block: Number(latest),
       activity_rows: activityRows,
       last_error: null,
     });
 
     return {
-      fromBlock: Number(fromBlock),
-      toBlock: Number(endBlock),
-      inserted,
-      done,
+      fromBlock: tipFrom,
+      toBlock: tipEnd,
+      inserted: tipInserted,
+      done: tipCaughtUp && repairDone,
       activityRows,
-      chunks,
+      chunks: tipChunks,
+      repairInserted,
+      repairFrom,
+      repairTo,
+      repairDone,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

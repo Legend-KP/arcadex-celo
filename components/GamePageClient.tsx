@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Game, gameHasLeaderboard, gameHasContestLive, gameIsLive, gameIsTest } from "@/types";
+import ClaimConfetti from "@/components/ClaimConfetti";
 import GameClient from "@/components/GameClient";
 import GameMenu from "@/components/GameMenu";
 import Leaderboard, { type LeaderboardMode } from "@/components/Leaderboard";
@@ -17,17 +18,20 @@ import {
   preloadGameMenuAssets,
 } from "@/lib/game-assets";
 import { formatChainError } from "@/lib/celo-public-client";
+import { isGameOpenClaimEnabled } from "@/lib/feature-flags";
+import { GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
 import {
-  isArcadeXTxHubConfigured,
-  playPurpose,
-  signInOnChain,
-} from "@/lib/arcadex-tx-hub";
+  claimGameOpenReward,
+  fetchGameOpenClaimStatus,
+} from "@/lib/game-open-claim-client";
+import { ensureWalletSession } from "@/lib/walletAuth";
 import { recordRecentPlayed } from "@/lib/recent-played";
 import {
   isTestGameUnlocked,
   unlockTestGame,
   verifyTestGamePassword,
 } from "@/lib/test-game-access";
+import { hasValidWalletSession } from "@/lib/wallet-session-client";
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
@@ -50,6 +54,11 @@ export default function GamePageClient() {
   const [testPassword, setTestPassword] = useState("");
   const [testPwError, setTestPwError] = useState("");
   const [showTestPw, setShowTestPw] = useState(false);
+  const [needsClaim, setNeedsClaim] = useState(false);
+  const [claimStatusLoaded, setClaimStatusLoaded] = useState(
+    !isGameOpenClaimEnabled()
+  );
+  const [showConfetti, setShowConfetti] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,6 +204,48 @@ export default function GamePageClient() {
     void finishTestUnlock(game);
   }
 
+  useEffect(() => {
+    if (!isGameOpenClaimEnabled() || !walletAddress || !game?.id) {
+      setNeedsClaim(false);
+      setClaimStatusLoaded(true);
+      return;
+    }
+
+    let cancelled = false;
+    setClaimStatusLoaded(false);
+
+    async function loadClaimStatus() {
+      try {
+        const status = await fetchGameOpenClaimStatus(walletAddress, game!.id);
+        if (!cancelled) {
+          setNeedsClaim(
+            Boolean(status.payoutsEnabled && status.canClaim && !status.claimed)
+          );
+          setClaimStatusLoaded(true);
+        }
+      } catch {
+        // Default to claim CTA; claim POST will auth + pay.
+        if (!cancelled) {
+          setNeedsClaim(true);
+          setClaimStatusLoaded(true);
+        }
+      }
+    }
+
+    void loadClaimStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [walletAddress, game?.id]);
+
+  const enterGame = useCallback(async () => {
+    if (!game?.id) {
+      throw new Error("Game not loaded.");
+    }
+    await spendForGame(game.id);
+    setStarted(true);
+  }, [game?.id, spendForGame]);
+
   const handleStart = useCallback(async () => {
     setSparkError("");
 
@@ -213,11 +264,37 @@ export default function GamePageClient() {
       if (!game?.id) {
         throw new Error("Game not loaded.");
       }
-      if (isArcadeXTxHubConfigured()) {
-        await signInOnChain(playPurpose(game.id));
+
+      // Claim $0.005 once per UTC day per game (on-chain spin+claim). No TxHub.
+      if (isGameOpenClaimEnabled() && needsClaim) {
+        if (!hasValidWalletSession(walletAddress)) {
+          await ensureWalletSession(walletAddress);
+        }
+        try {
+          const result = await claimGameOpenReward(walletAddress, game.id);
+          setNeedsClaim(false);
+          if (result.claimed) {
+            setShowConfetti(true);
+            window.setTimeout(() => setShowConfetti(false), 2000);
+          }
+        } catch (claimErr) {
+          const msg =
+            claimErr instanceof Error ? claimErr.message.toLowerCase() : "";
+          // Race: already claimed today — continue into the game.
+          if (
+            msg.includes("already") ||
+            msg.includes("claimed") ||
+            msg.includes("too soon") ||
+            msg.includes("in progress")
+          ) {
+            setNeedsClaim(false);
+          } else {
+            throw claimErr;
+          }
+        }
       }
-      await spendForGame(game.id);
-      setStarted(true);
+
+      await enterGame();
     } catch (err) {
       setSparkError(
         formatChainError(err) ||
@@ -230,8 +307,9 @@ export default function GamePageClient() {
     walletAddress,
     sparks.hasInfinite,
     sparks.available,
-    spendForGame,
     game?.id,
+    needsClaim,
+    enterGame,
   ]);
 
   if (
@@ -343,6 +421,8 @@ export default function GamePageClient() {
     setLbMode("default");
   }
 
+  const claimAmountLabel = `$${GAME_OPEN_CLAIM_USDT.toFixed(3)}`;
+
   return (
     <>
       {!started ? (
@@ -352,8 +432,10 @@ export default function GamePageClient() {
           tutorialImageSrc={tutorialImageSrc}
           onStart={handleStart}
           onLeaderboard={() => openLeaderboard("default")}
-          starting={starting}
+          starting={starting || (isGameOpenClaimEnabled() && !claimStatusLoaded)}
           sparkError={sparkError}
+          needsClaim={isGameOpenClaimEnabled() && needsClaim}
+          claimAmountLabel={claimAmountLabel}
         />
       ) : (
         <GameClient
@@ -361,6 +443,7 @@ export default function GamePageClient() {
           onScoreSubmitted={() => openLeaderboard("postSubmit")}
         />
       )}
+      <ClaimConfetti active={showConfetti} />
       {gameHasLeaderboard(game) && (
         <Leaderboard
           gameId={game.id}

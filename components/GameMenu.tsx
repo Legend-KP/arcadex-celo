@@ -21,6 +21,9 @@ interface GameMenuProps {
   onLeaderboard: () => void;
   starting?: boolean;
   sparkError?: string;
+  /** When true, CTA is Claim $0.005; when false, Start Game. */
+  needsClaim?: boolean;
+  claimAmountLabel?: string;
 }
 
 export default function GameMenu({
@@ -31,6 +34,8 @@ export default function GameMenu({
   onLeaderboard,
   starting = false,
   sparkError,
+  needsClaim = false,
+  claimAmountLabel = "$0.005",
 }: GameMenuProps) {
   const router = useRouter();
   const contestLive = gameHasContestLive(game);
@@ -290,9 +295,15 @@ export default function GameMenu({
             disabled={starting}
           >
             <span className="game-menu-btn__icon" aria-hidden>
-              ▶
+              {needsClaim ? "$" : "▶"}
             </span>
-            {starting ? "Waiting for Approval…" : "Start Game"}
+            {starting
+              ? needsClaim
+                ? "Claiming…"
+                : "Starting…"
+              : needsClaim
+                ? `Claim ${claimAmountLabel}`
+                : "Start Game"}
           </button>
           {sparkError && (
             <p className="game-menu-spark-error" role="alert">

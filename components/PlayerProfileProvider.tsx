@@ -56,6 +56,10 @@ import {
 } from "@/lib/wallet-address";
 import { isArcadeXRewardsConfigured } from "@/lib/arcadex-rewards";
 import {
+  isAutoOnboardingEnabled,
+  isDailyStreakUiEnabled,
+} from "@/lib/feature-flags";
+import {
   fetchPendingStreakUsdt,
   fetchStreakStatus,
   refreshSessionFromCheckIn,
@@ -146,12 +150,18 @@ export default function PlayerProfileProvider({
   const pendingWalletRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // Side-panel Tutorial still opens slides; auto-show for first-time users is off.
+    if (!isAutoOnboardingEnabled()) {
+      setShowOnboarding(false);
+      return;
+    }
     const unseen = !hasSeenOnboarding();
     setShowOnboarding(unseen);
     if (unseen) preloadOnboardingSlides();
   }, []);
 
   const openOnboarding = useCallback(() => {
+    preloadOnboardingSlides();
     setShowOnboarding(true);
   }, []);
 
@@ -258,8 +268,9 @@ export default function PlayerProfileProvider({
         // Catalog, plays, and sparks — do not wait on the Celo streak read.
         void fetchHomeShell(wallet);
 
-        // Sign-in: ArcadeXRewards checkIn/spin → session JWT.
-        if (isArcadeXRewardsConfigured()) {
+        // No on-chain check-in to open the app. Session via personal_sign when needed.
+        // Daily Streak / shuffle UI kept in code but gated off.
+        if (isDailyStreakUiEnabled() && isArcadeXRewardsConfigured()) {
           // Runtime config (Cloudflare vars) — do not rely on build-time NEXT_PUBLIC alone.
           const config = await fetchDailyPlayConfig({ fresh: true });
           if (cancelled) return;
@@ -342,13 +353,8 @@ export default function PlayerProfileProvider({
               throw err;
             }
           }
-        } else if (!hasValidWalletSession(wallet)) {
-          try {
-            await ensureWalletSession(wallet);
-          } catch {
-            // personal_sign optional when rewards/auth not fully configured
-          }
         }
+        // No session mint on app open — claim / save-name paths call ensureWalletSession.
 
         await finishProfileLoad(wallet);
       } catch (err) {
@@ -463,7 +469,7 @@ export default function PlayerProfileProvider({
         wallet = normalizeWalletAddress(wallet);
 
         if (!hasValidWalletSession(wallet)) {
-          if (isArcadeXRewardsConfigured()) {
+          if (isDailyStreakUiEnabled() && isArcadeXRewardsConfigured()) {
             const config = await fetchDailyPlayConfig();
             setDailyPlayMode(config.mode);
             setDailyCampaignId(config.campaignId);
@@ -525,11 +531,15 @@ export default function PlayerProfileProvider({
   const defaultName =
     profile?.name?.trim() || getCachedPlayerName()?.trim() || "";
 
-  // New-user order: onboarding → streak broken (if needed) → daily streak → name modal
+  // New-user order: onboarding (optional) → streak (gated off) → name modal
   const onboardingVisible = showOnboarding === true;
   const onboardingResolved = showOnboarding !== null;
+  const streakUiEnabled = isDailyStreakUiEnabled();
   const checkInVisible =
-    onboardingResolved && !onboardingVisible && showCheckIn;
+    streakUiEnabled &&
+    onboardingResolved &&
+    !onboardingVisible &&
+    showCheckIn;
 
   const previousBrokenDays = streakStatus?.currentDay ?? 0;
   const lastBrokenCheckInAt = streakStatus?.lastCheckInAt ?? 0;
@@ -565,7 +575,8 @@ export default function PlayerProfileProvider({
     !onboardingVisible &&
     !hasPlayerName(profile);
 
-  const usdtClaimVisible = Boolean(usdtClaimItem && walletAddress);
+  const usdtClaimVisible =
+    streakUiEnabled && Boolean(usdtClaimItem && walletAddress);
 
   const criticalModalsBlocking =
     !isReady ||

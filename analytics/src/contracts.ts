@@ -27,6 +27,19 @@ export const CELO_USDC =
 /** Skip dust transfers below $0.05 (6 decimals) — same as Dune. */
 export const MIN_TRANSFER_VALUE = 50_000n;
 
+/** Dune table names → on-chain events we index (same filters as the Dune SQL). */
+export const DUNE_DATA_SOURCES = [
+  "arcadex_celo.arcadextxhub_evt_signedin",
+  "arcadex_celo.arcadextxhub_evt_entrypaid",
+  "arcadex_celo.arcadexrewards_evt_checkedin",
+  "arcadex_celo.arcadexrewards_evt_spinresultgranted",
+  "arcadex_celo.arcadexrewards_evt_onchainrewardclaimed",
+  "arcadex_celo.sparkrefill_evt_entrypaid",
+  "arcadex_celo.scoresubmit_evt_entrypaid",
+  "arcadex_celo.infinitespark_evt_entrypaid",
+  "erc20_celo.evt_transfer",
+] as const;
+
 export const PAYMENT_CONTRACTS: Record<string, ContractLabel> = {
   [SPARK_REFILL.toLowerCase()]: "SparkRefill",
   [SCORE_SUBMIT.toLowerCase()]: "ScoreSubmit",

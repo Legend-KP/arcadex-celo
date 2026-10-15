@@ -1,0 +1,43 @@
+{
+  "contract": "ArcadeXRewards",
+  "network": "celo-mainnet",
+  "chainId": 42220,
+  "address": "0xc5BE4773D5B4a8e3C6f3E7a4C5f7cfBC38986ccF",
+  "campaignId": 7,
+  "campaignType": "optional-bookkeeping-only",
+  "payoutPath": "hot-wallet",
+  "amountUsdt": 0.005,
+  "amountMicro": 5000,
+  "limit": "once per UTC day per (wallet, gameId)",
+  "notes": [
+    "Product claims are paid from the GAME_OPEN / STREAK USDT hot wallet, NOT via spin()+claim() on ArcadeXRewards.",
+    "SHUFFLE campaigns only allow one spin per wallet per UTC day, so they cannot fund per-game daily claims.",
+    "You do NOT need to call setCampaign(7) for payouts to work. Fund the hot wallet with USDT instead.",
+    "Optional: register campaign 7 on-chain as inactive/offchain bookkeeping if you want Celoscan labeling — economics are not used by the app."
+  ],
+  "env": {
+    "GAME_OPEN_USDT_PAYOUTS_ENABLED": "1",
+    "GAME_OPEN_USDT_PAYOUT_PRIVATE_KEY": "(secret — or reuse STREAK_USDT_PAYOUT_PRIVATE_KEY)",
+    "GAME_OPEN_DAILY_USDT_BUDGET": "50",
+    "GAME_OPEN_CLAIM_CAMPAIGN_ID": "7",
+    "NEXT_PUBLIC_GAME_OPEN_CLAIM_ENABLED": "1"
+  },
+  "optionalSetCampaignIfDesired": {
+    "campaignId": 7,
+    "campaignType": 1,
+    "campaignTypeName": "SHUFFLE",
+    "requiredDays": 0,
+    "minIntervalSeconds": 86400,
+    "rewardMode": 0,
+    "rewardTarget": "0x0000000000000000000000000000000000000000",
+    "rewardAmount": 0,
+    "rewardMeta": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "resetAfterMilestone": true,
+    "requireEligibility": false,
+    "maxClaims": 0,
+    "startTime": 0,
+    "endTime": 0,
+    "maxSinglePayout": 5000,
+    "warning": "Even if set, the app does not call spin/claim for this campaign. maxSinglePayout=5000 documents 0.005 USDT."
+  }
+}

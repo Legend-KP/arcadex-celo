@@ -189,7 +189,7 @@ async function rtdbFetch(
   });
 }
 
-async function readPath<T>(path: string): Promise<T | null> {
+export async function readPath<T>(path: string): Promise<T | null> {
   const res = await rtdbFetch(path);
   if (res.status === 404) return null;
   if (!res.ok) {
@@ -239,7 +239,7 @@ async function readPathWithEtag<T>(
   return { data: data ?? null, etag };
 }
 
-async function writePath(path: string, data: unknown): Promise<void> {
+export async function writePath(path: string, data: unknown): Promise<void> {
   const res = await rtdbFetch(path, {
     method: "PUT",
     body: JSON.stringify(data),
@@ -286,7 +286,7 @@ async function writePathIfMatch(
   return "ok";
 }
 
-async function deletePath(path: string): Promise<void> {
+export async function deletePath(path: string): Promise<void> {
   const res = await rtdbFetch(path, { method: "DELETE", silent: true });
   if (!res.ok && res.status !== 404) {
     const text = scrubSecrets(await res.text());
@@ -314,7 +314,7 @@ async function incrementPath(path: string, delta = 1): Promise<void> {
  * Conditional write with automatic retry (RTDB REST transaction via ETag).
  * Return `undefined` from `updateFn` to abort without writing.
  */
-async function runRtdbTransaction<T>(
+export async function runRtdbTransaction<T>(
   path: string,
   updateFn: (current: T | null) => T | undefined,
   maxRetries = RTDB_TRANSACTION_MAX_RETRIES

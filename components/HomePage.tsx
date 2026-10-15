@@ -7,6 +7,8 @@ import ActivityLeaderboardButton from "@/components/ActivityLeaderboardButton";
 import ActivityLeaderboardView from "@/components/ActivityLeaderboardView";
 import AppDrawer, { type AppView } from "@/components/AppDrawer";
 import DailyXpHomeBanner from "@/components/DailyXpHomeBanner";
+import EarnNowHomeBanner from "@/components/EarnNowHomeBanner";
+import EarnNowModal from "@/components/EarnNowModal";
 import GameCard from "@/components/GameCard";
 import HomeFilterBar, { type HomeSort } from "@/components/HomeFilterBar";
 import Logo from "@/components/Logo";
@@ -14,6 +16,10 @@ import PromoPopupHost from "@/components/PromoPopupHost";
 import RewardsPayoutStrip from "@/components/RewardsPayoutStrip";
 import SparkBatteryBar from "@/components/SparkBatteryBar";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
+import {
+  isDailyXpUiEnabled,
+  isGameOpenClaimEnabled,
+} from "@/lib/feature-flags";
 import {
   readCachedGamesList,
   writeCachedGamesList,
@@ -223,6 +229,7 @@ export default function HomePage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [view, setView] = useState<AppView>("home");
   const [activityBoardOpen, setActivityBoardOpen] = useState(false);
+  const [earnNowOpen, setEarnNowOpen] = useState(false);
 
   useEffect(() => {
     if (!walletAddress) return;
@@ -396,10 +403,12 @@ export default function HomePage() {
               <Logo variant="header" />
             </div>
             <div className="topbar-actions">
-              <ActivityLeaderboardButton
-                open={activityBoardOpen}
-                onOpenChange={setActivityBoardOpen}
-              />
+              {isDailyXpUiEnabled() ? (
+                <ActivityLeaderboardButton
+                  open={activityBoardOpen}
+                  onOpenChange={setActivityBoardOpen}
+                />
+              ) : null}
               <SparkBatteryBar />
             </div>
           </header>
@@ -426,9 +435,13 @@ export default function HomePage() {
         <main className="home-main">
           {view === "home" && (
             <>
-              <DailyXpHomeBanner
-                onOpenBoard={() => setActivityBoardOpen(true)}
-              />
+              {isGameOpenClaimEnabled() ? (
+                <EarnNowHomeBanner onOpen={() => setEarnNowOpen(true)} />
+              ) : isDailyXpUiEnabled() ? (
+                <DailyXpHomeBanner
+                  onOpenBoard={() => setActivityBoardOpen(true)}
+                />
+              ) : null}
 
               <HorizontalGameRow
                 title="Live contests"
@@ -508,6 +521,23 @@ export default function HomePage() {
         games={games}
         onOpenActivityBoard={() => setActivityBoardOpen(true)}
       />
+      {isGameOpenClaimEnabled() ? (
+        <EarnNowModal
+          open={earnNowOpen}
+          onClose={() => setEarnNowOpen(false)}
+          onClaimNow={() => {
+            setEarnNowOpen(false);
+            setView("home");
+            try {
+              document
+                .querySelector(".home-section--catalog")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            } catch {
+              // ignore
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }

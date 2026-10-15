@@ -6,6 +6,7 @@ import {
   getUtcDayWindow,
   isDailyXpLive,
 } from "@/lib/daily-xp-board";
+import { isDailyXpUiEnabled } from "@/lib/feature-flags";
 import {
   getPromoRemainingSlotsToday,
   isPromoEventRead,
@@ -156,6 +157,8 @@ function buildGameCandidates(games: Game[], now: number): PromoPopupCandidate[] 
  * Day-keyed id + persistent dismiss = exactly one show/day after they close it.
  */
 function buildDailyXpCandidate(now: number): PromoPopupCandidate | null {
+  // Daily XP board promo — kept in code, gated off with the rest of Daily XP UI.
+  if (!isDailyXpUiEnabled()) return null;
   if (!isDailyXpLive(now)) return null;
   const day = getUtcDayWindow(now);
   return {

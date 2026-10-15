@@ -62,6 +62,44 @@ export async function setSyncCursor(
     .run();
 }
 
+export interface RepairCursor {
+  next_block: number;
+  target_block: number;
+}
+
+export async function getRepairCursor(
+  db: D1Database
+): Promise<RepairCursor | null> {
+  const row = await db
+    .prepare(
+      `SELECT next_block, target_block FROM repair_cursor WHERE id = 1`
+    )
+    .first<RepairCursor>();
+  return row ?? null;
+}
+
+export async function setRepairCursor(
+  db: D1Database,
+  nextBlock: number,
+  targetBlock: number
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO repair_cursor (id, next_block, target_block, updated_at)
+       VALUES (1, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         next_block = excluded.next_block,
+         target_block = excluded.target_block,
+         updated_at = excluded.updated_at`
+    )
+    .bind(nextBlock, targetBlock, new Date().toISOString())
+    .run();
+}
+
+export async function clearRepairCursor(db: D1Database): Promise<void> {
+  await db.prepare(`DELETE FROM repair_cursor WHERE id = 1`).run();
+}
+
 export async function getSyncMeta(db: D1Database): Promise<SyncMeta> {
   const row = await db
     .prepare(
