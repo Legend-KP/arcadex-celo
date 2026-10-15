@@ -36,7 +36,7 @@ export default function EarnNowHomeBanner({ onOpen }: EarnNowHomeBannerProps) {
           className="daily-xp-home-banner__claim"
           onClick={onOpen}
         >
-          Earn Everyday
+          Claim Now
         </button>
       </div>
     </section>
