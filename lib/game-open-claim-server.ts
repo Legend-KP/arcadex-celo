@@ -60,9 +60,13 @@ export async function assertLiveGame(gameId: string): Promise<void> {
 }
 
 export async function requireGameOpenCampaign(
-  gameId: string
+  gameId: string,
+  gameNameHint?: string
 ): Promise<number> {
-  const campaignId = await resolveGameOpenCampaignIdForGame(gameId);
+  const campaignId = await resolveGameOpenCampaignIdForGame(
+    gameId,
+    gameNameHint
+  );
   if (campaignId == null) {
     throw new GameOpenClaimError(
       "This game has no open-claim campaign configured yet.",
@@ -74,7 +78,8 @@ export async function requireGameOpenCampaign(
 
 export async function getGameOpenClaimStatus(
   walletAddress: string,
-  gameId: string
+  gameId: string,
+  gameNameHint?: string
 ): Promise<{
   claimed: boolean;
   amountUsdt: number;
@@ -85,7 +90,10 @@ export async function getGameOpenClaimStatus(
 }> {
   const utcDay = gameOpenClaimDayKey();
   const amountUsdt = 0.005;
-  const campaignId = await resolveGameOpenCampaignIdForGame(gameId);
+  const campaignId = await resolveGameOpenCampaignIdForGame(
+    gameId,
+    gameNameHint
+  );
 
   if (!campaignId) {
     return {

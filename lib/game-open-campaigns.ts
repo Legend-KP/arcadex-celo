@@ -9,7 +9,10 @@
  */
 
 import { slugifyGameName } from "@/lib/game-assets";
-import { getCachedGameDoc } from "@/lib/game-cache";
+import {
+  getCachedGameDoc,
+  readSharedPublicCatalog,
+} from "@/lib/game-cache";
 import { fetchGameFromServer } from "@/lib/firestore-server";
 
 export const GAME_OPEN_CAMPAIGN_ID_MIN = 7;
@@ -144,16 +147,52 @@ export function resolveGameOpenCampaignId(gameId: string): number | null {
   return lookupInMaps(gameId);
 }
 
+function campaignFromNameOrSlug(nameOrSlug: string): number | null {
+  const nameSlug = slugifyGameName(nameOrSlug);
+  const direct = lookupInMaps(nameSlug) ?? lookupInMaps(nameOrSlug);
+  if (direct != null) return direct;
+
+  // Prefer longer alias matches (free-fall before free).
+  let best: { alias: string; campaignId: number } | null = null;
+  for (const [alias, campaignId] of Object.entries(
+    DEFAULT_GAME_OPEN_CAMPAIGN_BY_SLUG
+  )) {
+    if (
+      nameSlug === alias ||
+      nameSlug.includes(alias) ||
+      alias.includes(nameSlug)
+    ) {
+      if (alias.length <= 3 && nameSlug !== alias) continue;
+      if (!best || alias.length > best.alias.length) {
+        best = { alias, campaignId };
+      }
+    }
+  }
+  return best?.campaignId ?? null;
+}
+
 /** Resolve campaign using catalog id + name (handles Firestore auto-ids). */
 export async function resolveGameOpenCampaignIdForGame(
-  gameId: string
+  gameId: string,
+  gameNameHint?: string
 ): Promise<number | null> {
   const direct = lookupInMaps(gameId);
   if (direct != null) return direct;
 
-  const game =
+  if (gameNameHint?.trim()) {
+    const fromHint = campaignFromNameOrSlug(gameNameHint);
+    if (fromHint != null) return fromHint;
+  }
+
+  let game =
     getCachedGameDoc(gameId) ??
     (await fetchGameFromServer(gameId).catch(() => null));
+
+  if (!game) {
+    const catalog = await readSharedPublicCatalog();
+    game = catalog?.games.find((g) => g.id === gameId) ?? null;
+  }
+
   if (!game) return null;
 
   const candidates = [
@@ -167,20 +206,7 @@ export async function resolveGameOpenCampaignIdForGame(
     if (hit != null) return hit;
   }
 
-  // Loose contains match against known titles (e.g. "Coin Sort" → coin).
-  const nameSlug = slugifyGameName(game.name);
-  for (const [alias, campaignId] of Object.entries(
-    DEFAULT_GAME_OPEN_CAMPAIGN_BY_SLUG
-  )) {
-    if (nameSlug === alias || nameSlug.includes(alias) || alias.includes(nameSlug)) {
-      // Prefer longer alias matches to avoid "free" stealing "free-fall" wrongly —
-      // already keyed specifically; skip ultra-short aliases when ambiguous.
-      if (alias.length <= 3 && nameSlug !== alias) continue;
-      return campaignId;
-    }
-  }
-
-  return null;
+  return campaignFromNameOrSlug(game.name);
 }
 
 export function listMappedGameOpenCampaigns(): Array<{

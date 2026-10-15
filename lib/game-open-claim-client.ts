@@ -32,9 +32,11 @@ export interface GameOpenClaimSignResult {
 
 export async function fetchGameOpenClaimStatus(
   walletAddress: string,
-  gameId: string
+  gameId: string,
+  gameName?: string
 ): Promise<GameOpenClaimStatus> {
   const params = new URLSearchParams({ walletAddress, gameId });
+  if (gameName?.trim()) params.set("gameName", gameName.trim());
   const res = await fetch(`/api/game-open-claim/status?${params}`, {
     cache: "no-store",
   });
@@ -61,7 +63,8 @@ export async function fetchGameOpenClaimStatus(
 async function signGameOpenClaim(
   walletAddress: string,
   gameId: string,
-  forceNew = false
+  forceNew = false,
+  gameName?: string
 ): Promise<GameOpenClaimSignResult> {
   const res = await fetch("/api/game-open-claim/claim-sign", {
     method: "POST",
@@ -69,7 +72,7 @@ async function signGameOpenClaim(
       "Content-Type": "application/json",
       ...walletAuthHeaders(),
     },
-    body: JSON.stringify({ walletAddress, gameId, forceNew }),
+    body: JSON.stringify({ walletAddress, gameId, gameName, forceNew }),
     cache: "no-store",
   });
   const data = (await res.json().catch(() => ({}))) as GameOpenClaimSignResult & {
@@ -115,14 +118,15 @@ async function syncGameOpenClaim(opts: {
  */
 export async function claimGameOpenReward(
   walletAddress: string,
-  gameId: string
+  gameId: string,
+  gameName?: string
 ): Promise<{
   claimed: boolean;
   amountUsdt: number;
   txHash: string;
   claimTxHash?: string;
 }> {
-  let prepare = await signGameOpenClaim(walletAddress, gameId);
+  let prepare = await signGameOpenClaim(walletAddress, gameId, false, gameName);
   let txHash: string;
   try {
     ({ txHash } = await spinOnChain({
@@ -142,7 +146,7 @@ export async function claimGameOpenReward(
     ) {
       throw err;
     }
-    prepare = await signGameOpenClaim(walletAddress, gameId, true);
+    prepare = await signGameOpenClaim(walletAddress, gameId, true, gameName);
     ({ txHash } = await spinOnChain({
       campaignId: prepare.campaignId,
       rewardMode: prepare.rewardMode,

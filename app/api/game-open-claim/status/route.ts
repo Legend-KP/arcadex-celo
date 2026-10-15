@@ -31,6 +31,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const rawWallet = searchParams.get("walletAddress")?.trim() ?? "";
     const gameId = searchParams.get("gameId")?.trim() ?? "";
+    const gameName = searchParams.get("gameName")?.trim() ?? "";
 
     if (!rawWallet || !isWalletAddress(rawWallet)) {
       return NextResponse.json(
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
     }
 
     const wallet = normalizeWalletAddress(rawWallet);
-    const status = await getGameOpenClaimStatus(wallet, gameId);
+    const status = await getGameOpenClaimStatus(wallet, gameId, gameName);
     return NextResponse.json({
       ok: true,
       ...status,

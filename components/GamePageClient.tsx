@@ -216,10 +216,21 @@ export default function GamePageClient() {
 
     async function loadClaimStatus() {
       try {
-        const status = await fetchGameOpenClaimStatus(walletAddress, game!.id);
+        const status = await fetchGameOpenClaimStatus(
+          walletAddress,
+          game!.id,
+          game!.name
+        );
         if (!cancelled) {
+          // Show Claim when this game has a campaign and isn't claimed yet.
+          // Don't require a perfect on-chain canClaim read (cold RPC can flake).
           setNeedsClaim(
-            Boolean(status.payoutsEnabled && status.canClaim && !status.claimed)
+            Boolean(
+              !status.claimed &&
+                (status.canClaim ||
+                  status.payoutsEnabled ||
+                  status.campaignId != null)
+            )
           );
           setClaimStatusLoaded(true);
         }
@@ -271,7 +282,11 @@ export default function GamePageClient() {
           await ensureWalletSession(walletAddress);
         }
         try {
-          const result = await claimGameOpenReward(walletAddress, game.id);
+          const result = await claimGameOpenReward(
+            walletAddress,
+            game.id,
+            game.name
+          );
           setNeedsClaim(false);
           if (result.claimed) {
             setShowConfetti(true);

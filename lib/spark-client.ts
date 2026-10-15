@@ -5,6 +5,8 @@ import {
   SessionRefreshError,
 } from "@/lib/streak-client";
 import { isArcadeXRewardsConfigured } from "@/lib/arcadex-rewards";
+import { isDailyStreakUiEnabled } from "@/lib/feature-flags";
+import { ensureWalletSession } from "@/lib/walletAuth";
 import { walletAuthHeaders } from "@/lib/wallet-session-client";
 
 export interface SparkApiResponse {
@@ -78,15 +80,35 @@ export async function spendSpark(
 
   if (
     !result.ok &&
-    (result.status === 401 || result.code === "UNAUTHORIZED") &&
-    isArcadeXRewardsConfigured()
+    (result.status === 401 || result.code === "UNAUTHORIZED")
   ) {
     try {
-      await refreshSessionFromCheckIn(walletAddress);
+      // Check-in session only when Daily Streak UI is still on.
+      if (isDailyStreakUiEnabled() && isArcadeXRewardsConfigured()) {
+        try {
+          await refreshSessionFromCheckIn(walletAddress);
+        } catch (err) {
+          if (
+            err instanceof SessionRefreshError &&
+            err.code === "NEED_CHECKIN"
+          ) {
+            await ensureWalletSession(walletAddress);
+          } else {
+            throw err;
+          }
+        }
+      } else {
+        await ensureWalletSession(walletAddress);
+      }
       result = await spendSparkOnce(walletAddress, id);
     } catch (err) {
       if (err instanceof SessionRefreshError && err.code === "NEED_CHECKIN") {
-        throw new Error("Daily check-in required. Please check in to continue.");
+        throw new Error(
+          "Sign in with MiniPay to continue. Open the app again and try."
+        );
+      }
+      if (err instanceof Error && err.message) {
+        throw err;
       }
       // Fall through to original spend error below
     }

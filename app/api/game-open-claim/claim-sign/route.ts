@@ -63,11 +63,13 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       walletAddress?: string;
       gameId?: string;
+      gameName?: string;
       forceNew?: boolean;
     };
 
     const rawWallet = body.walletAddress?.trim() ?? "";
     const gameId = body.gameId?.trim() ?? "";
+    const gameName = body.gameName?.trim() ?? "";
 
     if (!rawWallet || !isWalletAddress(rawWallet)) {
       return NextResponse.json(
@@ -96,9 +98,9 @@ export async function POST(request: Request) {
     }
 
     await assertLiveGame(gameId);
-    const campaignId = await requireGameOpenCampaign(gameId);
+    const campaignId = await requireGameOpenCampaign(gameId, gameName);
 
-    const status = await getGameOpenClaimStatus(wallet, gameId);
+    const status = await getGameOpenClaimStatus(wallet, gameId, gameName);
     if (status.claimed) {
       return NextResponse.json(
         { error: "Already claimed today's open reward for this game.", code: "ALREADY_CLAIMED" },

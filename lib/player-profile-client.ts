@@ -2,7 +2,9 @@ import { PlayerProfile } from "@/types";
 import { encodeUserId } from "@/lib/wallet-address";
 import { setCachedPlayerName } from "@/lib/player-id";
 import { isArcadeXRewardsConfigured } from "@/lib/arcadex-rewards";
+import { isDailyStreakUiEnabled } from "@/lib/feature-flags";
 import { refreshSessionFromCheckIn } from "@/lib/streak-client";
+import { ensureWalletSession } from "@/lib/walletAuth";
 import { walletAuthHeaders } from "@/lib/wallet-session-client";
 
 export async function fetchPlayerProfile(
@@ -70,9 +72,17 @@ export async function bootstrapPlayerProfile(
 
   let { res, data } = await once();
 
-  if (!res.ok && res.status === 401 && isArcadeXRewardsConfigured()) {
+  if (!res.ok && res.status === 401) {
     try {
-      await refreshSessionFromCheckIn(walletAddress);
+      if (isDailyStreakUiEnabled() && isArcadeXRewardsConfigured()) {
+        try {
+          await refreshSessionFromCheckIn(walletAddress);
+        } catch {
+          await ensureWalletSession(walletAddress);
+        }
+      } else {
+        await ensureWalletSession(walletAddress);
+      }
       ({ res, data } = await once());
     } catch {
       // Keep original bootstrap error
