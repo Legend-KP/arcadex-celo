@@ -5,6 +5,9 @@ import { createPortal } from "react-dom";
 import { GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
 import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
 
+export const EARN_NOW_POPUP_IMAGE = "/earn-now-popup.jpg";
+export const EARN_NOW_SESSION_KEY = "arcadex_earn_now_popup_shown";
+
 interface EarnNowModalProps {
   open: boolean;
   onClose: () => void;
@@ -34,7 +37,7 @@ export default function EarnNowModal({
 
   if (!open || typeof document === "undefined") return null;
 
-  const amountLabel = `$${GAME_OPEN_CLAIM_USDT.toFixed(3)} USDT`;
+  const amountLabel = `$${GAME_OPEN_CLAIM_USDT.toFixed(3)}`;
 
   return createPortal(
     <div
@@ -43,10 +46,10 @@ export default function EarnNowModal({
       onClick={onClose}
     >
       <div
-        className="earn-now-modal"
+        className="earn-now-modal earn-now-modal--image"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="earn-now-title"
+        aria-label="Play games and claim USDT"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -57,21 +60,22 @@ export default function EarnNowModal({
         >
           ✕
         </button>
-        <p className="earn-now-modal__eyebrow">Earn Now</p>
-        <h2 id="earn-now-title" className="earn-now-modal__title">
-          Open a game &amp; claim {amountLabel}
-        </h2>
-        <p className="earn-now-modal__body">
-          Every live game has a one-time claim each day. Tap Claim $
-          {GAME_OPEN_CLAIM_USDT.toFixed(3)} on the game screen to get rewarded,
-          then play.
-        </p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="earn-now-modal__art"
+          src={EARN_NOW_POPUP_IMAGE}
+          alt="Play games, claim USDT"
+          width={1080}
+          height={1080}
+          decoding="async"
+          fetchPriority="high"
+        />
         <button
           type="button"
           className="earn-now-modal__cta"
           onClick={onClaimNow}
         >
-          Claim Now
+          Claim {amountLabel}
         </button>
       </div>
     </div>,

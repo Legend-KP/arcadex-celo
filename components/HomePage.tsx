@@ -8,7 +8,9 @@ import ActivityLeaderboardView from "@/components/ActivityLeaderboardView";
 import AppDrawer, { type AppView } from "@/components/AppDrawer";
 import DailyXpHomeBanner from "@/components/DailyXpHomeBanner";
 import EarnNowHomeBanner from "@/components/EarnNowHomeBanner";
-import EarnNowModal from "@/components/EarnNowModal";
+import EarnNowModal, {
+  EARN_NOW_SESSION_KEY,
+} from "@/components/EarnNowModal";
 import GameCard from "@/components/GameCard";
 import HomeFilterBar, { type HomeSort } from "@/components/HomeFilterBar";
 import Logo from "@/components/Logo";
@@ -208,8 +210,14 @@ function HorizontalGameRow({
 }
 
 export default function HomePage() {
-  const { playerName, walletAddress, openOnboarding, openEditName } =
-    usePlayerProfile();
+  const {
+    playerName,
+    walletAddress,
+    openOnboarding,
+    openEditName,
+    criticalModalsBlocking,
+    isReady,
+  } = usePlayerProfile();
   const [games, setGames] = useState<Game[]>(() => {
     return readCachedGamesList()?.games ?? [];
   });
@@ -230,6 +238,29 @@ export default function HomePage() {
   const [view, setView] = useState<AppView>("home");
   const [activityBoardOpen, setActivityBoardOpen] = useState(false);
   const [earnNowOpen, setEarnNowOpen] = useState(false);
+
+  // Show the daily-claim promo once every app open (each MiniPay session).
+  useEffect(() => {
+    if (!isGameOpenClaimEnabled()) return;
+    if (!isReady || criticalModalsBlocking) return;
+    if (typeof window === "undefined") return;
+    try {
+      if (sessionStorage.getItem(EARN_NOW_SESSION_KEY) === "1") return;
+    } catch {
+      // ignore
+    }
+    const t = window.setTimeout(() => setEarnNowOpen(true), 500);
+    return () => window.clearTimeout(t);
+  }, [isReady, criticalModalsBlocking]);
+
+  function dismissEarnNow() {
+    try {
+      sessionStorage.setItem(EARN_NOW_SESSION_KEY, "1");
+    } catch {
+      // ignore
+    }
+    setEarnNowOpen(false);
+  }
 
   useEffect(() => {
     if (!walletAddress) return;
@@ -524,9 +555,9 @@ export default function HomePage() {
       {isGameOpenClaimEnabled() ? (
         <EarnNowModal
           open={earnNowOpen}
-          onClose={() => setEarnNowOpen(false)}
+          onClose={dismissEarnNow}
           onClaimNow={() => {
-            setEarnNowOpen(false);
+            dismissEarnNow();
             setView("home");
             try {
               document
