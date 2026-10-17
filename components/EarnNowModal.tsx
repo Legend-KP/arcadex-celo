@@ -65,8 +65,8 @@ export default function EarnNowModal({
           className="earn-now-modal__art"
           src={EARN_NOW_POPUP_IMAGE}
           alt="Play games, claim USDT"
-          width={1080}
-          height={1080}
+          width={1024}
+          height={682}
           decoding="async"
           fetchPriority="high"
         />

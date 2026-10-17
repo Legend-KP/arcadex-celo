@@ -127,7 +127,7 @@ export async function POST(request: Request) {
     }
     if (verified.rewardAmount !== GAME_OPEN_CLAIM_REWARD_AMOUNT) {
       return NextResponse.json(
-        { error: "Spin amount does not match 0.012 USDT.", code: "BAD_AMOUNT" },
+        { error: "Spin amount does not match 0.12 USDT.", code: "BAD_AMOUNT" },
         { status: 400 }
       );
     }

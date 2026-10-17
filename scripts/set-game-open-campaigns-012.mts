@@ -1,6 +1,6 @@
 /**
- * Create ArcadeXRewards SHUFFLE campaigns 20–32 at $0.012 USDT
- * (maxSinglePayout = 12000). Optionally deactivate legacy 7–19.
+ * Create ArcadeXRewards SHUFFLE campaigns 20–32 at $0.12 USDT
+ * (maxSinglePayout = 120000). Optionally deactivate legacy 7–19.
  *
  * Usage (owner key required):
  *   ARCADEX_REWARDS_OWNER_PRIVATE_KEY=0x... node ./node_modules/tsx/dist/cli.mjs scripts/set-game-open-campaigns-012.mts
@@ -96,7 +96,7 @@ async function main() {
     "new campaigns",
     newIds.map((id) => `${id}=${GAME_OPEN_CAMPAIGN_TITLES[id]}`).join(", ")
   );
-  console.log("maxSinglePayout", T.maxSinglePayout, "(0.012 USDT)");
+  console.log("maxSinglePayout", T.maxSinglePayout, "(0.12 USDT)");
 
   if (!pk) {
     console.log("\nDry-run only — set ARCADEX_REWARDS_OWNER_PRIVATE_KEY to send txs.");

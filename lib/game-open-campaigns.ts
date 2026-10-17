@@ -1,6 +1,6 @@
 /**
  * Option C: one ArcadeXRewards SHUFFLE campaign per live game.
- * Campaign IDs 20–32 for the current 13 live titles ($0.012 USDT).
+ * Campaign IDs 20–32 for the current 13 live titles ($0.12 USDT).
  * Legacy 7–19 are frozen at $0.005 after participants (ParamsFrozen).
  *
  * Resolution order:
@@ -223,7 +223,7 @@ export function listMappedGameOpenCampaigns(): Array<{
     .sort((a, b) => a.campaignId - b.campaignId || a.gameId.localeCompare(b.gameId));
 }
 
-/** Shared setCampaign economics for every per-game open campaign ($0.012 USDT). */
+/** Shared setCampaign economics for every per-game open campaign ($0.12 USDT). */
 export const GAME_OPEN_SET_CAMPAIGN_TEMPLATE = {
   campaignType: 1 as const,
   active: true,
@@ -239,5 +239,5 @@ export const GAME_OPEN_SET_CAMPAIGN_TEMPLATE = {
     "0x0000000000000000000000000000000000000000000000000000000000000000",
   resetAfterMilestone: true,
   requireEligibility: false,
-  maxSinglePayout: 12_000,
+  maxSinglePayout: 120_000,
 } as const;

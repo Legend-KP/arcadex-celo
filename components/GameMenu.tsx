@@ -21,7 +21,7 @@ interface GameMenuProps {
   onLeaderboard: () => void;
   starting?: boolean;
   sparkError?: string;
-  /** When true, CTA is Claim $0.012; when false, Start Game. */
+  /** When true, CTA is Claim $0.12; when false, Start Game. */
   needsClaim?: boolean;
   claimAmountLabel?: string;
 }
@@ -35,7 +35,7 @@ export default function GameMenu({
   starting = false,
   sparkError,
   needsClaim = false,
-  claimAmountLabel = "$0.012",
+  claimAmountLabel = "$0.12",
 }: GameMenuProps) {
   const router = useRouter();
   const contestLive = gameHasContestLive(game);
