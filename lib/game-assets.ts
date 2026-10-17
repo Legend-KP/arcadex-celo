@@ -145,6 +145,7 @@ const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
   "burger-game",
   "goe",
   "infinite-spiral",
+  "reflector",
 ]);
 
 /** Name/id aliases that map onto a preview-video folder slug. */
@@ -177,6 +178,7 @@ const PREVIEW_VIDEO_FOLDER_ALIASES: Record<string, string> = {
   guardian: "goe",
   infinitespiral: "infinite-spiral",
   spiral: "infinite-spiral",
+  reflect: "reflector",
 };
 
 export type GameVideoSources = {
@@ -266,6 +268,9 @@ function resolvePreviewVideoFolder(game: Game): string | null {
       LOCAL_PREVIEW_VIDEO_FOLDERS.has("infinite-spiral")
     ) {
       return "infinite-spiral";
+    }
+    if (raw.includes("reflect") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("reflector")) {
+      return "reflector";
     }
   }
 
