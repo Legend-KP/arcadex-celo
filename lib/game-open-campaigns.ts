@@ -1,6 +1,7 @@
 /**
  * Option C: one ArcadeXRewards SHUFFLE campaign per live game.
- * Campaign IDs 7–19 for the current 13 live titles.
+ * Campaign IDs 20–32 for the current 13 live titles ($0.012 USDT).
+ * Legacy 7–19 are frozen at $0.005 after participants (ParamsFrozen).
  *
  * Resolution order:
  * 1. GAME_OPEN_CAMPAIGN_MAP env (gameId or slug → campaignId)
@@ -15,85 +16,85 @@ import {
 } from "@/lib/game-cache";
 import { fetchGameFromServer } from "@/lib/firestore-server";
 
-export const GAME_OPEN_CAMPAIGN_ID_MIN = 7;
-export const GAME_OPEN_CAMPAIGN_ID_MAX = 19;
+export const GAME_OPEN_CAMPAIGN_ID_MIN = 20;
+export const GAME_OPEN_CAMPAIGN_ID_MAX = 32;
 
 /**
  * Built-in map from name slug / common aliases → campaign id.
  * Keys are lowercase slugs (no spaces).
  */
 export const DEFAULT_GAME_OPEN_CAMPAIGN_BY_SLUG: Record<string, number> = {
-  // 7 Reflector
-  reflector: 7,
-  // 8 Guardian of Earth
-  "guardian-of-earth": 8,
-  "guardian-of-eath": 8,
-  guardianofearth: 8,
-  guardian: 8,
-  goe: 8,
-  // 9 Free Fall
-  "free-fall": 9,
-  freefall: 9,
-  free: 9,
-  // 10 Infinite (Infinite Spiral)
-  infinite: 10,
-  "infinite-spiral": 10,
-  infinitespiral: 10,
-  spiral: 10,
-  // 11 Dot Connect
-  "dot-connect": 11,
-  dotconnect: 11,
-  // 12 Coin (Coin Sort)
-  coin: 12,
-  "coin-sort": 12,
-  coinsort: 12,
-  "coin-spot": 12,
-  coinspot: 12,
-  // 13 BaseDrop
-  basedrop: 13,
-  "base-drop": 13,
-  // 14 Orbit flow
-  "orbit-flow": 14,
-  orbitflow: 14,
-  orbit: 14,
-  // 15 Jelly Jumble
-  "jelly-jumble": 15,
-  jellyjumble: 15,
-  jelly: 15,
-  // 16 Hungry Hole ("Hunger Hoel")
-  "hungry-hole": 16,
-  hungryhole: 16,
-  hungry: 16,
-  hunger: 16,
-  "hunger-hoel": 16,
-  // 17 Fruit Swipe
-  "fruit-swipe": 17,
-  fruitswipe: 17,
-  "fruit-game": 17,
-  fruit: 17,
-  // 18 Block Blast
-  "block-blast": 18,
-  blockblast: 18,
-  // 19 Line Link
-  "line-link": 19,
-  linelink: 19,
+  // 20 Reflector (was 7)
+  reflector: 20,
+  // 21 Guardian of Earth (was 8)
+  "guardian-of-earth": 21,
+  "guardian-of-eath": 21,
+  guardianofearth: 21,
+  guardian: 21,
+  goe: 21,
+  // 22 Free Fall (was 9)
+  "free-fall": 22,
+  freefall: 22,
+  free: 22,
+  // 23 Infinite (Infinite Spiral) (was 10)
+  infinite: 23,
+  "infinite-spiral": 23,
+  infinitespiral: 23,
+  spiral: 23,
+  // 24 Dot Connect (was 11)
+  "dot-connect": 24,
+  dotconnect: 24,
+  // 25 Coin (Coin Sort) (was 12)
+  coin: 25,
+  "coin-sort": 25,
+  coinsort: 25,
+  "coin-spot": 25,
+  coinspot: 25,
+  // 26 BaseDrop (was 13)
+  basedrop: 26,
+  "base-drop": 26,
+  // 27 Orbit flow (was 14)
+  "orbit-flow": 27,
+  orbitflow: 27,
+  orbit: 27,
+  // 28 Jelly Jumble (was 15)
+  "jelly-jumble": 28,
+  jellyjumble: 28,
+  jelly: 28,
+  // 29 Hungry Hole ("Hunger Hoel") (was 16)
+  "hungry-hole": 29,
+  hungryhole: 29,
+  hungry: 29,
+  hunger: 29,
+  "hunger-hoel": 29,
+  // 30 Fruit Swipe (was 17)
+  "fruit-swipe": 30,
+  fruitswipe: 30,
+  "fruit-game": 30,
+  fruit: 30,
+  // 31 Block Blast (was 18)
+  "block-blast": 31,
+  blockblast: 31,
+  // 32 Line Link (was 19)
+  "line-link": 32,
+  linelink: 32,
 };
 
 /** Human-readable checklist (campaign → title). */
 export const GAME_OPEN_CAMPAIGN_TITLES: Record<number, string> = {
-  7: "Reflector",
-  8: "Guardian of Earth",
-  9: "Free Fall",
-  10: "Infinite",
-  11: "Dot Connect",
-  12: "Coin",
-  13: "BaseDrop",
-  14: "Orbit flow",
-  15: "Jelly Jumble",
-  16: "Hungry Hole",
-  17: "Fruit Swipe",
-  18: "Block Blast",
-  19: "Line Link",
+  20: "Reflector",
+  21: "Guardian of Earth",
+  22: "Free Fall",
+  23: "Infinite",
+  24: "Dot Connect",
+  25: "Coin",
+  26: "BaseDrop",
+  27: "Orbit flow",
+  28: "Jelly Jumble",
+  29: "Hungry Hole",
+  30: "Fruit Swipe",
+  31: "Block Blast",
+  32: "Line Link",
 };
 
 function parseCampaignMap(): Record<string, number> {
@@ -222,7 +223,7 @@ export function listMappedGameOpenCampaigns(): Array<{
     .sort((a, b) => a.campaignId - b.campaignId || a.gameId.localeCompare(b.gameId));
 }
 
-/** Shared setCampaign economics for every per-game open campaign. */
+/** Shared setCampaign economics for every per-game open campaign ($0.012 USDT). */
 export const GAME_OPEN_SET_CAMPAIGN_TEMPLATE = {
   campaignType: 1 as const,
   active: true,
@@ -238,5 +239,5 @@ export const GAME_OPEN_SET_CAMPAIGN_TEMPLATE = {
     "0x0000000000000000000000000000000000000000000000000000000000000000",
   resetAfterMilestone: true,
   requireEligibility: false,
-  maxSinglePayout: 5000,
+  maxSinglePayout: 12_000,
 } as const;

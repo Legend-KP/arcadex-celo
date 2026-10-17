@@ -276,7 +276,7 @@ export default function GamePageClient() {
         throw new Error("Game not loaded.");
       }
 
-      // Claim $0.005 once per UTC day per game (on-chain spin+claim). No TxHub.
+      // Claim $0.012 once per UTC day per game (on-chain spin+claim). No TxHub.
       if (isGameOpenClaimEnabled() && needsClaim) {
         if (!hasValidWalletSession(walletAddress)) {
           await ensureWalletSession(walletAddress);

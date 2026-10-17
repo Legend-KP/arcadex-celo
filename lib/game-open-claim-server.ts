@@ -5,6 +5,7 @@
 import { useD1PlayerData, requireD1 } from "@/lib/d1-client";
 import {
   GAME_OPEN_CLAIM_AMOUNT_MICRO,
+  GAME_OPEN_CLAIM_USDT,
   gameOpenClaimDayKey,
   type GameOpenClaimRecord,
 } from "@/lib/game-open-claim";
@@ -89,7 +90,7 @@ export async function getGameOpenClaimStatus(
   canClaim: boolean;
 }> {
   const utcDay = gameOpenClaimDayKey();
-  const amountUsdt = 0.005;
+  const amountUsdt = GAME_OPEN_CLAIM_USDT;
   const campaignId = await resolveGameOpenCampaignIdForGame(
     gameId,
     gameNameHint

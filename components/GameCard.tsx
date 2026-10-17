@@ -70,7 +70,7 @@ export default function GameCard({
     game.contestEndsAt,
     showContestTimer && contestLive
   );
-  const claimLabel = `Claim $${GAME_OPEN_CLAIM_USDT}`;
+  const claimLabel = `Claim $${GAME_OPEN_CLAIM_USDT.toFixed(3)}`;
 
   const thumbCandidates = useMemo(
     () => gameAssetCandidates(game, "thumbnail"),

@@ -37,7 +37,7 @@ export default function EarnNowModal({
 
   if (!open || typeof document === "undefined") return null;
 
-  const amountLabel = `$${GAME_OPEN_CLAIM_BANNER_USDT.toFixed(2)}`;
+  const amountLabel = `$${GAME_OPEN_CLAIM_BANNER_USDT.toFixed(3)}`;
 
   return createPortal(
     <div

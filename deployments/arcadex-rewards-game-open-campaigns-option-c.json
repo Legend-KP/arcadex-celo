@@ -2,24 +2,25 @@
   "contract": "ArcadeXRewards",
   "address": "0xc5BE4773D5B4a8e3C6f3E7a4C5f7cfBC38986ccF",
   "campaigns": {
-    "7": "Reflector",
-    "8": "Guardian of Earth",
-    "9": "Free Fall",
-    "10": "Infinite",
-    "11": "Dot Connect",
-    "12": "Coin",
-    "13": "BaseDrop",
-    "14": "Orbit flow",
-    "15": "Jelly Jumble",
-    "16": "Hungry Hole",
-    "17": "Fruit Swipe",
-    "18": "Block Blast",
-    "19": "Line Link"
+    "20": "Reflector",
+    "21": "Guardian of Earth",
+    "22": "Free Fall",
+    "23": "Infinite",
+    "24": "Dot Connect",
+    "25": "Coin",
+    "26": "BaseDrop",
+    "27": "Orbit flow",
+    "28": "Jelly Jumble",
+    "29": "Hungry Hole",
+    "30": "Fruit Swipe",
+    "31": "Block Blast",
+    "32": "Line Link"
   },
-  "maxSinglePayout": 5000,
-  "amountUsdt": 0.005,
+  "legacyCampaignsFrozenAt005": "7-19",
+  "maxSinglePayout": 12000,
+  "amountUsdt": 0.012,
   "envOptional": {
-    "GAME_OPEN_CAMPAIGN_MAP": "{\"reflector\":7,\"guardian-of-earth\":8,\"free-fall\":9,\"infinite\":10,\"dot-connect\":11,\"coin\":12,\"basedrop\":13,\"orbit-flow\":14,\"jelly-jumble\":15,\"hungry-hole\":16,\"fruit-swipe\":17,\"block-blast\":18,\"line-link\":19}"
+    "GAME_OPEN_CAMPAIGN_MAP": "{\"reflector\":20,\"guardian-of-earth\":21,\"free-fall\":22,\"infinite\":23,\"dot-connect\":24,\"coin\":25,\"basedrop\":26,\"orbit-flow\":27,\"jelly-jumble\":28,\"hungry-hole\":29,\"fruit-swipe\":30,\"block-blast\":31,\"line-link\":32}"
   },
-  "note": "Slug map is also baked into lib/game-open-campaigns.ts. ENV overrides or adds Firestore gameId keys if needed."
+  "note": "Campaigns 7–19 already have participants so maxSinglePayout is frozen at 5000. New campaigns 20–32 use 12000 (0.012 USDT). Run: ARCADEX_REWARDS_OWNER_PRIVATE_KEY=0x… node ./node_modules/tsx/dist/cli.mjs scripts/set-game-open-campaigns-012.mts"
 }

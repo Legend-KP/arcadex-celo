@@ -1,16 +1,16 @@
 /**
- * Per-game open claim — $0.005 USDT once per UTC day per (wallet, game).
+ * Per-game open claim — $0.012 USDT once per UTC day per (wallet, game).
  * Option C: one SHUFFLE campaign per game → on-chain spin + claim (Celoscan).
  */
 
 import { utcDayKey } from "@/lib/activity-week";
 
-export const GAME_OPEN_CLAIM_USDT = 0.005;
-/** Marketing amount on home banner / popup CTA (not the on-chain payout). */
-export const GAME_OPEN_CLAIM_BANNER_USDT = 0.05;
+export const GAME_OPEN_CLAIM_USDT = 0.012;
+/** Home banner / popup display amount (matches on-chain claim). */
+export const GAME_OPEN_CLAIM_BANNER_USDT = 0.012;
 /** On-chain amount (USDT, 6 decimals). */
-export const GAME_OPEN_CLAIM_AMOUNT_MICRO = 5_000;
-export const GAME_OPEN_CLAIM_REWARD_AMOUNT = BigInt(5_000);
+export const GAME_OPEN_CLAIM_AMOUNT_MICRO = 12_000;
+export const GAME_OPEN_CLAIM_REWARD_AMOUNT = BigInt(12_000);
 
 export function gameOpenClaimDayKey(now = Date.now()): string {
   return utcDayKey(now);

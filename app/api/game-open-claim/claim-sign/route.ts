@@ -131,7 +131,7 @@ export async function POST(request: Request) {
     const maxPayout = BigInt(progress.campaign.maxSinglePayout || "0");
     if (maxPayout > BigInt(0) && GAME_OPEN_CLAIM_REWARD_AMOUNT > maxPayout) {
       return NextResponse.json(
-        { error: "Campaign maxSinglePayout is too low for 0.005 USDT.", code: "BAD_PAYOUT" },
+        { error: "Campaign maxSinglePayout is too low for 0.012 USDT.", code: "BAD_PAYOUT" },
         { status: 400 }
       );
     }
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
       wallet,
       campaignId,
       nonce,
-      outcomeId: `game-open-${gameId}-0.005`,
+      outcomeId: `game-open-${gameId}-0.012`,
       outcomeType: "usdt",
       displayAmount: GAME_OPEN_CLAIM_USDT,
       rewardMode,
