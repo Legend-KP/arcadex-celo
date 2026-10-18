@@ -295,7 +295,7 @@ export default function GamePageClient() {
         } catch (claimErr) {
           const msg =
             claimErr instanceof Error ? claimErr.message.toLowerCase() : "";
-          // Race: already claimed today — continue into the game.
+          // Never block play on claim failure (already claimed, empty pool, etc.).
           if (
             msg.includes("already") ||
             msg.includes("claimed") ||
@@ -304,7 +304,7 @@ export default function GamePageClient() {
           ) {
             setNeedsClaim(false);
           } else {
-            throw claimErr;
+            console.warn("[game-open-claim] skipped; opening game", claimErr);
           }
         }
       }
