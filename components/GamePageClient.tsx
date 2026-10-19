@@ -17,6 +17,11 @@ import {
   loadPrimaryGameMenuImage,
   preloadGameMenuAssets,
 } from "@/lib/game-assets";
+import {
+  isArcadeXTxHubConfigured,
+  playPurpose,
+  signInOnChain,
+} from "@/lib/arcadex-tx-hub";
 import { formatChainError } from "@/lib/celo-public-client";
 import { isGameOpenClaimEnabled } from "@/lib/feature-flags";
 import { GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
@@ -32,6 +37,21 @@ import {
   verifyTestGamePassword,
 } from "@/lib/test-game-access";
 import { hasValidWalletSession } from "@/lib/wallet-session-client";
+
+function isPrizePoolEmptyError(err: unknown): boolean {
+  const msg = (
+    err instanceof Error ? err.message : String(err ?? "")
+  ).toLowerCase();
+  return (
+    msg.includes("prize pool") ||
+    msg.includes("can't cover") ||
+    msg.includes("cannot cover") ||
+    msg.includes("insufficienttreasury") ||
+    msg.includes("insufficient treasury") ||
+    msg.includes("exceedsmaxpayout") ||
+    msg.includes("maxsinglepayout")
+  );
+}
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
@@ -276,7 +296,8 @@ export default function GamePageClient() {
         throw new Error("Game not loaded.");
       }
 
-      // Claim $0.12 once per UTC day per game (on-chain spin+claim). No TxHub.
+      // Claim $0.012 once per UTC day per game. If the prize pool is empty,
+      // fall back to a gas-only ArcadeXTxHub signIn so play still records on-chain.
       if (isGameOpenClaimEnabled() && needsClaim) {
         if (!hasValidWalletSession(walletAddress)) {
           await ensureWalletSession(walletAddress);
@@ -295,7 +316,6 @@ export default function GamePageClient() {
         } catch (claimErr) {
           const msg =
             claimErr instanceof Error ? claimErr.message.toLowerCase() : "";
-          // Never block play on claim failure (already claimed, empty pool, etc.).
           if (
             msg.includes("already") ||
             msg.includes("claimed") ||
@@ -303,8 +323,15 @@ export default function GamePageClient() {
             msg.includes("in progress")
           ) {
             setNeedsClaim(false);
+          } else if (isPrizePoolEmptyError(claimErr)) {
+            if (!isArcadeXTxHubConfigured()) {
+              throw new Error(
+                "The prize pool is empty and TxHub is unavailable. Try again later."
+              );
+            }
+            await signInOnChain(playPurpose(game.id));
           } else {
-            console.warn("[game-open-claim] skipped; opening game", claimErr);
+            throw claimErr;
           }
         }
       }
