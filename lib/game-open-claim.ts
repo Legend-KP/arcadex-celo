@@ -6,8 +6,10 @@
 import { utcDayKey } from "@/lib/activity-week";
 
 export const GAME_OPEN_CLAIM_USDT = 0.012;
-/** Home banner / popup display amount (matches on-chain claim). */
+/** Home banner display amount. */
 export const GAME_OPEN_CLAIM_BANNER_USDT = 0.012;
+/** Earn Now popup button label (display only — not the on-chain payout). */
+export const GAME_OPEN_CLAIM_POPUP_USDT = 0.12;
 /** On-chain amount (USDT, 6 decimals). */
 export const GAME_OPEN_CLAIM_AMOUNT_MICRO = 12_000;
 export const GAME_OPEN_CLAIM_REWARD_AMOUNT = BigInt(12_000);
