@@ -146,6 +146,7 @@ const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
   "goe",
   "infinite-spiral",
   "reflector",
+  "knock-out",
 ]);
 
 /** Name/id aliases that map onto a preview-video folder slug. */
@@ -179,6 +180,8 @@ const PREVIEW_VIDEO_FOLDER_ALIASES: Record<string, string> = {
   infinitespiral: "infinite-spiral",
   spiral: "infinite-spiral",
   reflect: "reflector",
+  knockout: "knock-out",
+  "knock-out": "knock-out",
 };
 
 export type GameVideoSources = {
@@ -271,6 +274,12 @@ function resolvePreviewVideoFolder(game: Game): string | null {
     }
     if (raw.includes("reflect") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("reflector")) {
       return "reflector";
+    }
+    if (
+      (raw.includes("knock-out") || raw.includes("knockout") || raw.includes("knock")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("knock-out")
+    ) {
+      return "knock-out";
     }
   }
 
