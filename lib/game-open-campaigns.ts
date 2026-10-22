@@ -1,6 +1,6 @@
 /**
  * Option C: one ArcadeXRewards SHUFFLE campaign per live game.
- * Campaign IDs 20–32 for the current 13 live titles ($0.12 USDT).
+ * Campaign IDs 20–32 plus 35 (Knockout) and 36 (Retro Blocks) at $0.012 USDT.
  * Legacy 7–19 are frozen at $0.005 after participants (ParamsFrozen).
  *
  * Resolution order:
@@ -17,7 +17,7 @@ import {
 import { fetchGameFromServer } from "@/lib/firestore-server";
 
 export const GAME_OPEN_CAMPAIGN_ID_MIN = 20;
-export const GAME_OPEN_CAMPAIGN_ID_MAX = 32;
+export const GAME_OPEN_CAMPAIGN_ID_MAX = 36;
 
 /**
  * Built-in map from name slug / common aliases → campaign id.
@@ -78,6 +78,15 @@ export const DEFAULT_GAME_OPEN_CAMPAIGN_BY_SLUG: Record<string, number> = {
   // 32 Line Link (was 19)
   "line-link": 32,
   linelink: 32,
+  // 35 Knockout
+  knockout: 35,
+  "knock-out": 35,
+  "knockout-game": 35,
+  // 36 Retro Blocks
+  "retro-blocks": 36,
+  retroblocks: 36,
+  "retro-block": 36,
+  retroblock: 36,
 };
 
 /** Human-readable checklist (campaign → title). */
@@ -95,6 +104,8 @@ export const GAME_OPEN_CAMPAIGN_TITLES: Record<number, string> = {
   30: "Fruit Swipe",
   31: "Block Blast",
   32: "Line Link",
+  35: "Knockout",
+  36: "Retro Blocks",
 };
 
 function parseCampaignMap(): Record<string, number> {
@@ -223,7 +234,7 @@ export function listMappedGameOpenCampaigns(): Array<{
     .sort((a, b) => a.campaignId - b.campaignId || a.gameId.localeCompare(b.gameId));
 }
 
-/** Shared setCampaign economics for every per-game open campaign ($0.12 USDT). */
+/** Shared setCampaign economics for every per-game open campaign ($0.012 USDT). */
 export const GAME_OPEN_SET_CAMPAIGN_TEMPLATE = {
   campaignType: 1 as const,
   active: true,
@@ -239,5 +250,5 @@ export const GAME_OPEN_SET_CAMPAIGN_TEMPLATE = {
     "0x0000000000000000000000000000000000000000000000000000000000000000",
   resetAfterMilestone: true,
   requireEligibility: false,
-  maxSinglePayout: 120_000,
+  maxSinglePayout: 12_000,
 } as const;

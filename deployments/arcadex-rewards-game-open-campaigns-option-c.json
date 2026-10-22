@@ -14,13 +14,15 @@
     "29": "Hungry Hole",
     "30": "Fruit Swipe",
     "31": "Block Blast",
-    "32": "Line Link"
+    "32": "Line Link",
+    "35": "Knockout",
+    "36": "Retro Blocks"
   },
   "legacyCampaignsFrozenAt005": "7-19",
-  "maxSinglePayout": 120000,
-  "amountUsdt": 0.12,
+  "maxSinglePayout": 12000,
+  "amountUsdt": 0.012,
   "envOptional": {
-    "GAME_OPEN_CAMPAIGN_MAP": "{\"reflector\":20,\"guardian-of-earth\":21,\"free-fall\":22,\"infinite\":23,\"dot-connect\":24,\"coin\":25,\"basedrop\":26,\"orbit-flow\":27,\"jelly-jumble\":28,\"hungry-hole\":29,\"fruit-swipe\":30,\"block-blast\":31,\"line-link\":32}"
+    "GAME_OPEN_CAMPAIGN_MAP": "{\"reflector\":20,\"guardian-of-earth\":21,\"free-fall\":22,\"infinite\":23,\"dot-connect\":24,\"coin\":25,\"basedrop\":26,\"orbit-flow\":27,\"jelly-jumble\":28,\"hungry-hole\":29,\"fruit-swipe\":30,\"block-blast\":31,\"line-link\":32,\"knockout\":35,\"knock-out\":35,\"retro-blocks\":36,\"retroblocks\":36}"
   },
-  "note": "Campaigns 7–19 frozen at 5000; 20–32 were 12000 (0.012). App now expects 120000 (0.12 USDT) — raise maxSinglePayout on-chain (or new campaign IDs if frozen). Run owner setCampaign / scripts/set-game-open-campaigns-012.mts after updating the script amount."
+  "note": "Per-game claim is 0.012 USDT (12000 micro). Campaigns 35 Knockout and 36 Retro Blocks use the same amount. maxSinglePayout on those campaigns must be >= 12000."
 }

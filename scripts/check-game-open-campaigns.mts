@@ -1,5 +1,5 @@
 /**
- * Read ArcadeXRewards game-open campaigns 7–32 (Celo mainnet).
+ * Read ArcadeXRewards game-open campaigns 7–36 (Celo mainnet).
  * Usage: node ./node_modules/tsx/dist/cli.mjs scripts/check-game-open-campaigns.mts
  */
 import { createPublicClient, http, type Address } from "viem";
@@ -20,7 +20,7 @@ const client = createPublicClient({
 
 async function main() {
   console.log("contract", CONTRACT);
-  for (let id = 7; id <= 32; id++) {
+  for (let id = 7; id <= 36; id++) {
     const [campaign, hasP] = await Promise.all([
       client.readContract({
         address: CONTRACT,
