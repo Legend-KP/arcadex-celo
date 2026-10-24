@@ -73,7 +73,7 @@ export async function fetchWonRewardPending(
   campaignId: number
 ): Promise<{ pending: boolean; rewardAmount: bigint }> {
   if (!isArcadeXRewardsConfigured()) {
-    return { pending: false, rewardAmount: 0n };
+    return { pending: false, rewardAmount: BigInt(0) };
   }
   const result = await getCeloPublicClient().readContract({
     address: ARCADEX_REWARDS_CONTRACT_ADDRESS,

@@ -243,7 +243,7 @@ export default function GamePageClient() {
               status.campaignId
             );
             pending = won.pending;
-            if (won.pending && won.rewardAmount > 0n) {
+            if (won.pending && won.rewardAmount > BigInt(0)) {
               const usdt = Number(won.rewardAmount) / 1_000_000;
               setClaimAmountLabel(`${usdt.toFixed(3)} USDT`);
             }
