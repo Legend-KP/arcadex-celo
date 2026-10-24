@@ -309,16 +309,22 @@ export default function GamePageClient() {
       }
 
       const mustFinishPending = pendingCampaignId != null;
+      const showConfettiBriefly = () => {
+        setShowConfetti(true);
+        window.setTimeout(() => setShowConfetti(false), 2000);
+      };
 
+      // Claim path only. Do not also send the transaction-hub sign-in.
       if (isGameOpenClaimEnabled() && mustFinishPending) {
         const result = await claimPendingGameOpenReward(pendingCampaignId);
         setPendingCampaignId(null);
         setNeedsClaim(false);
-        if (result.txHash) {
-          setShowConfetti(true);
-          window.setTimeout(() => setShowConfetti(false), 2000);
-        }
-      } else if (isGameOpenClaimEnabled() && needsClaim) {
+        if (result.txHash) showConfettiBriefly();
+        await enterGame();
+        return;
+      }
+
+      if (isGameOpenClaimEnabled() && needsClaim) {
         if (!hasValidWalletSession(walletAddress)) {
           await ensureWalletSession(walletAddress);
         }
@@ -329,26 +335,23 @@ export default function GamePageClient() {
             game.name
           );
           setNeedsClaim(false);
-          if (result.claimed) {
-            setShowConfetti(true);
-            window.setTimeout(() => setShowConfetti(false), 2000);
-          }
+          if (result.claimed) showConfettiBriefly();
+          await enterGame();
+          return;
         } catch (claimErr) {
           const msg =
             claimErr instanceof Error ? claimErr.message.toLowerCase() : "";
-          if (
+          const claimUnavailable =
             msg.includes("already") ||
             msg.includes("claimed") ||
             msg.includes("too soon") ||
-            msg.includes("in progress")
-          ) {
-            setNeedsClaim(false);
-          } else {
-            throw claimErr;
-          }
+            msg.includes("in progress");
+          if (!claimUnavailable) throw claimErr;
+          setNeedsClaim(false);
         }
       }
 
+      // No claim today. Classic Start Game: one transaction-hub sign-in, then open.
       if (isArcadeXTxHubConfigured()) {
         await signInOnChain(playPurpose(game.id));
       }
