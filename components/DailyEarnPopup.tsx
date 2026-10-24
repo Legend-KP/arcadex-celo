@@ -11,7 +11,7 @@ import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
 import type { Game } from "@/types";
 
 export const DAILY_EARN_OVERLAY_ID = "daily-earn";
-const EARN_DAILY_BANNER = "/earn-daily-banner.jpg";
+const EARN_DAILY_BANNER = "/earn-daily-banner.jpg?v=2";
 const USDT_MARK = "/usdt-mark.svg";
 
 /** Three decimals so 0.012 never displays as 0.01. */
@@ -141,7 +141,7 @@ export default function DailyEarnPopup({
             src={EARN_DAILY_BANNER}
             alt=""
             width={660}
-            height={252}
+            height={244}
           />
           <h2 id="daily-earn-title" className="daily-earn__sr">
             Earn Daily
