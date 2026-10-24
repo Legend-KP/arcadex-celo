@@ -39,6 +39,7 @@ import {
   verifyTestGamePassword,
 } from "@/lib/test-game-access";
 import { hasValidWalletSession } from "@/lib/wallet-session-client";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
@@ -72,6 +73,14 @@ export default function GamePageClient() {
     !isGameOpenClaimEnabled()
   );
   const [showConfetti, setShowConfetti] = useState(false);
+  // Menu and the live iframe are position:fixed and cover the screen.
+  // Password, coming soon, and the loading screen stay scrollable.
+  const fixedPlayLayer =
+    started ||
+    Boolean(
+      game && gameIsLive(game) && testUnlocked && menuReady && !loading
+    );
+  useBodyScrollLock(fixedPlayLayer);
 
   useEffect(() => {
     let cancelled = false;

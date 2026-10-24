@@ -10,6 +10,7 @@ import {
   type StreakUsdtPendingItem,
 } from "@/lib/streak-client";
 import { formatUsdtAmount } from "@/lib/streak-rewards";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 type Props = {
   open: boolean;
@@ -29,6 +30,7 @@ export default function StreakUsdtClaimPopup({
   item,
   onClose,
 }: Props) {
+  useBodyScrollLock(open);
   const [claiming, setClaiming] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);

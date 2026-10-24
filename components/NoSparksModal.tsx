@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { playTouchSfx } from "@/lib/sfx";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 interface NoSparksModalProps {
   open: boolean;
@@ -14,6 +15,7 @@ export default function NoSparksModal({
   onClose,
   onGetSpark,
 }: NoSparksModalProps) {
+  useBodyScrollLock(open);
   if (!open) return null;
 
   const modal = (

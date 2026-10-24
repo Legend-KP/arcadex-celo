@@ -1,6 +1,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 interface ExitGameModalProps {
   open: boolean;
@@ -13,6 +14,7 @@ export default function ExitGameModal({
   onCancel,
   onExit,
 }: ExitGameModalProps) {
+  useBodyScrollLock(open);
   if (!open) return null;
 
   const modal = (

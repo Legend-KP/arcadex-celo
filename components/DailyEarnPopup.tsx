@@ -7,6 +7,7 @@ import { dailyEarnLine } from "@/lib/daily-earn-lines";
 import { gameSquareImageCandidates, preloadGameMenuAssets } from "@/lib/game-assets";
 import { GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
 import { playTouchSfx } from "@/lib/sfx";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
 import type { Game } from "@/types";
 
@@ -108,6 +109,7 @@ export default function DailyEarnPopup({
   onClose,
 }: DailyEarnPopupProps) {
   useClaimUiOverlay(DAILY_EARN_OVERLAY_ID, open);
+  useBodyScrollLock(open);
 
   useEffect(() => {
     if (!open) return;
@@ -115,11 +117,8 @@ export default function DailyEarnPopup({
       if (event.key === "Escape") onClose();
     }
     document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
     };
   }, [open, onClose]);
 

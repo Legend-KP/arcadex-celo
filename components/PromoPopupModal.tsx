@@ -16,6 +16,7 @@ import {
   type PromoPopupCandidate,
 } from "@/lib/promo-popups";
 import { playTouchSfx } from "@/lib/sfx";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 interface PromoPopupModalProps {
   open: boolean;
@@ -87,16 +88,15 @@ export default function PromoPopupModal({
     return () => window.clearInterval(id);
   }, [open, item]);
 
+  useBodyScrollLock(open);
+
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onDismiss();
     }
     document.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = prev;
       document.removeEventListener("keydown", onKey);
     };
   }, [open, onDismiss]);

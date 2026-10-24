@@ -28,6 +28,7 @@ import {
   hasShuffleDoneToday,
   markShuffleDoneToday,
 } from "@/lib/shuffle-done-today";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import { ensureWalletSession } from "@/lib/walletAuth";
 
 type Phase =
@@ -209,6 +210,7 @@ export default function DailyShuffleModal({
   status,
   onComplete,
 }: DailyShuffleModalProps) {
+  useBodyScrollLock(open);
   const [mounted, setMounted] = useState(false);
   const [phase, setPhase] = useState<Phase>("intro");
   const [error, setError] = useState("");

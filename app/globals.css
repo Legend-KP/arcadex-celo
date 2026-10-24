@@ -43,12 +43,23 @@
   --home-bg: #f2f2f2;
 }
 
+html {
+  max-width: 100%;
+  /* `clip` hides sideways overflow without turning the page into a scroll
+     container. `hidden` on the viewport freezes vertical scrolling in
+     MiniPay once any child is wider than the screen (the winners strip). */
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-body);
   min-height: 100dvh;
+  max-width: 100%;
   overflow-x: hidden;
+  overflow-x: clip;
 }
 
 a { color: inherit; text-decoration: none; }
@@ -156,6 +167,7 @@ a { color: inherit; text-decoration: none; }
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   padding-bottom: 2px;
+  overscroll-behavior-x: contain;
 }
 
 .home-filter-chips::-webkit-scrollbar {
@@ -6638,9 +6650,10 @@ a { color: inherit; text-decoration: none; }
   overflow-x: auto;
   /* Inset via item margins — overflow padding is unreliable in MiniPay WebViews */
   padding: 0 0 12px;
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
   scroll-padding-inline: 16px;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 .home-rail::-webkit-scrollbar { display: none; }
 .home-rail__item {
@@ -6818,8 +6831,8 @@ a { color: inherit; text-decoration: none; }
 .rewards-payout-strip {
   display: flex;
   align-items: stretch;
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
+  width: 100%;
+  max-width: 100%;
   overflow: hidden;
   background: linear-gradient(
     90deg,

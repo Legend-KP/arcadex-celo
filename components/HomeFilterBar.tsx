@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 export type HomeSort =
   | "default"
@@ -88,6 +89,7 @@ export default function HomeFilterBar({
 }: HomeFilterBarProps) {
   const [sortSheetOpen, setSortSheetOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  useBodyScrollLock(sortSheetOpen);
 
   useEffect(() => {
     setMounted(true);

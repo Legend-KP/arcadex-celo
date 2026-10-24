@@ -7,6 +7,7 @@ import {
   preloadOnboardingSlides,
 } from "@/lib/onboarding";
 import { preloadImage } from "@/lib/preload-image";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 interface OnboardingModalProps {
   open: boolean;
@@ -17,6 +18,7 @@ export default function OnboardingModal({
   open,
   onComplete,
 }: OnboardingModalProps) {
+  useBodyScrollLock(open);
   const [slideIndex, setSlideIndex] = useState(0);
   const [mounted, setMounted] = useState(false);
   const [ready, setReady] = useState(false);
@@ -63,16 +65,6 @@ export default function OnboardingModal({
     const next = ONBOARDING_SLIDES[slideIndex + 1];
     if (next) void preloadImage(next, "high");
   }, [open, slideIndex]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [open]);
 
   if (!open || !mounted) return null;
 

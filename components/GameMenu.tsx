@@ -119,11 +119,8 @@ export default function GameMenu({
       if (contestPosterOpen) dismissContestPoster();
     }
 
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.body.style.overflow = prevOverflow;
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [

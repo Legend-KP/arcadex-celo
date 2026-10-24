@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Logo from "@/components/Logo";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 interface PlayerNameModalProps {
   open: boolean;
@@ -22,6 +23,7 @@ export default function PlayerNameModal({
   editing = false,
   onSubmit,
 }: PlayerNameModalProps) {
+  useBodyScrollLock(open);
   const [name, setName] = useState(defaultName);
 
   useEffect(() => {

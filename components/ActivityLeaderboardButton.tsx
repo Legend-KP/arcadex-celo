@@ -7,6 +7,7 @@ import ActivityLeaderboardPanel from "@/components/ActivityLeaderboardPanel";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { pingActivityVisit } from "@/lib/activity-client";
 import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 function TrophyIcon() {
   return (
@@ -57,6 +58,7 @@ export default function ActivityLeaderboardButton({
     onOpenChange?.(next);
   };
   useClaimUiOverlay("activity-leaderboard", open);
+  useBodyScrollLock(open);
   const [mounted, setMounted] = useState(false);
   const pingedRef = useRef(false);
   const closeOnBackdrop = useRef(false);
@@ -77,11 +79,8 @@ export default function ActivityLeaderboardButton({
       if (event.key === "Escape") setOpen(false);
     }
     document.addEventListener("keydown", handleKeyDown);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = prevOverflow;
     };
   }, [open]);
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { playTouchSfx } from "@/lib/sfx";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 interface DailyStreakBrokenModalProps {
   open: boolean;
@@ -26,6 +27,7 @@ export default function DailyStreakBrokenModal({
   previousDays,
   onContinue,
 }: DailyStreakBrokenModalProps) {
+  useBodyScrollLock(open);
   const startDays = Math.max(0, Math.floor(previousDays));
   const [displayDays, setDisplayDays] = useState(startDays);
   const [flipping, setFlipping] = useState(false);
@@ -95,15 +97,6 @@ export default function DailyStreakBrokenModal({
       for (const id of timers) window.clearTimeout(id);
     };
   }, [open, startDays]);
-
-  useEffect(() => {
-    if (!open) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [open]);
 
   if (!open || !mounted || typeof document === "undefined") return null;
 

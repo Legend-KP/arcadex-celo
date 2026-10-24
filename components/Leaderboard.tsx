@@ -9,6 +9,7 @@ import {
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { formatContestCountdown } from "@/lib/contest";
 import { getLeaderboard } from "@/lib/leaderboard-client";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 export type LeaderboardMode = "default" | "postSubmit";
 
@@ -64,6 +65,7 @@ export default function Leaderboard({
   mode = "default",
   onClose,
 }: LeaderboardProps) {
+  useBodyScrollLock(open);
   const isPostSubmit = mode === "postSubmit";
   const { walletAddress, playerName } = usePlayerProfile();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);

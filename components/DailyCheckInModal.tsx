@@ -23,6 +23,7 @@ import {
   STREAK_LADDER_REQUIRED_DAYS,
   type StreakDayReward,
 } from "@/lib/streak-rewards";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 export type DailyCheckInCompleteResult = {
   day: number;
@@ -236,6 +237,7 @@ export default function DailyCheckInModal({
   status,
   onComplete,
 }: DailyCheckInModalProps) {
+  useBodyScrollLock(open);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedDay, setSelectedDay] = useState<number | null>(null);

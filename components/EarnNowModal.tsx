@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { GAME_OPEN_CLAIM_POPUP_USDT } from "@/lib/game-open-claim";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
 
 export const EARN_NOW_POPUP_IMAGE = "/earn-now-popup.jpg";
@@ -20,6 +21,7 @@ export default function EarnNowModal({
   onClaimNow,
 }: EarnNowModalProps) {
   useClaimUiOverlay("earn-now", open);
+  useBodyScrollLock(open);
 
   useEffect(() => {
     if (!open) return;
@@ -27,11 +29,8 @@ export default function EarnNowModal({
       if (e.key === "Escape") onClose();
     }
     document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
     };
   }, [open, onClose]);
 

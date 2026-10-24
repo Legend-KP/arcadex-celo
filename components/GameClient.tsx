@@ -971,13 +971,25 @@ export default function GameClient({
   // Intercept Android / browser back while the game is open.
   useEffect(() => {
     allowLeaveRef.current = false;
-    window.history.pushState({ arcadeExitGuard: true }, "");
+    // Keep Next's history state. Replacing it drops scroll restoration and
+    // can leave the menu stuck after the player comes back.
+    const current = window.history.state;
+    const base =
+      current && typeof current === "object"
+        ? (current as Record<string, unknown>)
+        : {};
+    window.history.pushState({ ...base, arcadeExitGuard: true }, "");
 
     const onPopState = () => {
       if (allowLeaveRef.current) return;
 
       // Stay on the game URL and ask before leaving.
-      window.history.pushState({ arcadeExitGuard: true }, "");
+      const popped = window.history.state;
+      const next =
+        popped && typeof popped === "object"
+          ? (popped as Record<string, unknown>)
+          : {};
+      window.history.pushState({ ...next, arcadeExitGuard: true }, "");
 
       if (exitOpenRef.current) {
         setExitOpen(false);

@@ -8,6 +8,7 @@ import { formatChainError } from "@/lib/celo-public-client";
 import { playSuccessSfx, playTouchSfx, preloadSfx } from "@/lib/sfx";
 import { formatSparkDuration } from "@/lib/spark";
 import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
 export default function SparkBatteryBar() {
   const { sparks, loading, purchaseInfiniteSpark, purchaseSparkRefill } = useSparks();
@@ -24,6 +25,7 @@ export default function SparkBatteryBar() {
 
   useClaimUiOverlay("spark-panel", open);
   useClaimUiOverlay("spark-success", Boolean(successMessage));
+  useBodyScrollLock(open || Boolean(successMessage));
 
   useEffect(() => {
     if (sessionStorage.getItem("openSparkPanel") === "1") {
@@ -66,12 +68,9 @@ export default function SparkBatteryBar() {
     }
 
     document.addEventListener("keydown", handleKeyDown);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = prevOverflow;
     };
   }, [open]);
 

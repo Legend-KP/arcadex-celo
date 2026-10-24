@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { claimShuffleRewardOnChain } from "@/lib/arcadex-rewards-spin";
 import {
@@ -167,6 +168,7 @@ export default function DailyXpLiveBoard({
   const [gamesOpen, setGamesOpen] = useState(false);
   const [prompt, setPrompt] = useState<PromptKind>(null);
   const [mounted, setMounted] = useState(false);
+  useBodyScrollLock(tipsOpen || gamesOpen || claimModal != null);
   const [me, setMe] = useState<DailyXpBoardResponse["me"]>(null);
   const [threshold, setThreshold] = useState(DAILY_XP_THRESHOLD);
   const [dayEndsAt, setDayEndsAt] = useState(0);
