@@ -318,10 +318,7 @@ export default function GamePageClient() {
           setShowConfetti(true);
           window.setTimeout(() => setShowConfetti(false), 2000);
         }
-        return;
-      }
-
-      if (isGameOpenClaimEnabled() && needsClaim) {
+      } else if (isGameOpenClaimEnabled() && needsClaim) {
         if (!hasValidWalletSession(walletAddress)) {
           await ensureWalletSession(walletAddress);
         }
@@ -350,7 +347,6 @@ export default function GamePageClient() {
             throw claimErr;
           }
         }
-        return;
       }
 
       if (isArcadeXTxHubConfigured()) {
