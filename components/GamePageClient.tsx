@@ -27,7 +27,9 @@ import { isGameOpenClaimEnabled } from "@/lib/feature-flags";
 import { GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
 import {
   claimGameOpenReward,
+  claimPendingGameOpenReward,
   fetchGameOpenClaimStatus,
+  fetchWonRewardPending,
 } from "@/lib/game-open-claim-client";
 import { ensureWalletSession } from "@/lib/walletAuth";
 import { recordRecentPlayed } from "@/lib/recent-played";
@@ -37,21 +39,6 @@ import {
   verifyTestGamePassword,
 } from "@/lib/test-game-access";
 import { hasValidWalletSession } from "@/lib/wallet-session-client";
-
-function isPrizePoolEmptyError(err: unknown): boolean {
-  const msg = (
-    err instanceof Error ? err.message : String(err ?? "")
-  ).toLowerCase();
-  return (
-    msg.includes("prize pool") ||
-    msg.includes("can't cover") ||
-    msg.includes("cannot cover") ||
-    msg.includes("insufficienttreasury") ||
-    msg.includes("insufficient treasury") ||
-    msg.includes("exceedsmaxpayout") ||
-    msg.includes("maxsinglepayout")
-  );
-}
 
 export default function GamePageClient() {
   const { id } = useParams<{ id: string }>();
@@ -75,6 +62,12 @@ export default function GamePageClient() {
   const [testPwError, setTestPwError] = useState("");
   const [showTestPw, setShowTestPw] = useState(false);
   const [needsClaim, setNeedsClaim] = useState(false);
+  const [pendingCampaignId, setPendingCampaignId] = useState<number | null>(
+    null
+  );
+  const [claimAmountLabel, setClaimAmountLabel] = useState(
+    `${GAME_OPEN_CLAIM_USDT.toFixed(3)} USDT`
+  );
   const [claimStatusLoaded, setClaimStatusLoaded] = useState(
     !isGameOpenClaimEnabled()
   );
@@ -227,6 +220,7 @@ export default function GamePageClient() {
   useEffect(() => {
     if (!isGameOpenClaimEnabled() || !walletAddress || !game?.id) {
       setNeedsClaim(false);
+      setPendingCampaignId(null);
       setClaimStatusLoaded(true);
       return;
     }
@@ -241,16 +235,34 @@ export default function GamePageClient() {
           game!.id,
           game!.name
         );
+        let pending = false;
+        if (status.campaignId != null) {
+          try {
+            const won = await fetchWonRewardPending(
+              walletAddress,
+              status.campaignId
+            );
+            pending = won.pending;
+            if (won.pending && won.rewardAmount > 0n) {
+              const usdt = Number(won.rewardAmount) / 1_000_000;
+              setClaimAmountLabel(`${usdt.toFixed(3)} USDT`);
+            }
+          } catch {
+            pending = false;
+          }
+        }
         if (!cancelled) {
-          // Show Claim when this game has a campaign and isn't claimed yet.
-          // Don't require a perfect on-chain canClaim read (cold RPC can flake).
+          setPendingCampaignId(pending ? status.campaignId : null);
+          // A saved spin must be claimed before Start Game. Status "claimed"
+          // is true while won.pending, so don't hide the button in that case.
           setNeedsClaim(
-            Boolean(
-              !status.claimed &&
-                (status.canClaim ||
-                  status.payoutsEnabled ||
-                  status.campaignId != null)
-            )
+            pending ||
+              Boolean(
+                !status.claimed &&
+                  (status.canClaim ||
+                    status.payoutsEnabled ||
+                    status.campaignId != null)
+              )
           );
           setClaimStatusLoaded(true);
         }
@@ -296,8 +308,19 @@ export default function GamePageClient() {
         throw new Error("Game not loaded.");
       }
 
-      // Claim $0.012 once per UTC day per game. If the prize pool is empty,
-      // fall back to a gas-only ArcadeXTxHub signIn so play still records on-chain.
+      const mustFinishPending = pendingCampaignId != null;
+
+      if (isGameOpenClaimEnabled() && mustFinishPending) {
+        const result = await claimPendingGameOpenReward(pendingCampaignId);
+        setPendingCampaignId(null);
+        setNeedsClaim(false);
+        if (result.txHash) {
+          setShowConfetti(true);
+          window.setTimeout(() => setShowConfetti(false), 2000);
+        }
+        return;
+      }
+
       if (isGameOpenClaimEnabled() && needsClaim) {
         if (!hasValidWalletSession(walletAddress)) {
           await ensureWalletSession(walletAddress);
@@ -323,19 +346,16 @@ export default function GamePageClient() {
             msg.includes("in progress")
           ) {
             setNeedsClaim(false);
-          } else if (isPrizePoolEmptyError(claimErr)) {
-            if (!isArcadeXTxHubConfigured()) {
-              throw new Error(
-                "The prize pool is empty and TxHub is unavailable. Try again later."
-              );
-            }
-            await signInOnChain(playPurpose(game.id));
           } else {
             throw claimErr;
           }
         }
+        return;
       }
 
+      if (isArcadeXTxHubConfigured()) {
+        await signInOnChain(playPurpose(game.id));
+      }
       await enterGame();
     } catch (err) {
       setSparkError(
@@ -351,6 +371,7 @@ export default function GamePageClient() {
     sparks.available,
     game?.id,
     needsClaim,
+    pendingCampaignId,
     enterGame,
   ]);
 
@@ -462,8 +483,6 @@ export default function GamePageClient() {
     setLbOpen(false);
     setLbMode("default");
   }
-
-  const claimAmountLabel = `$${GAME_OPEN_CLAIM_USDT.toFixed(2)}`;
 
   return (
     <>

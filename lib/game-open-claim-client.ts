@@ -1,10 +1,17 @@
 "use client";
 
 import type { Address, Hex } from "viem";
+import { getAddress } from "viem";
 import {
   claimShuffleRewardOnChain,
   spinOnChain,
 } from "@/lib/arcadex-rewards-spin";
+import {
+  ARCADEX_REWARDS_ABI,
+  ARCADEX_REWARDS_CONTRACT_ADDRESS,
+  isArcadeXRewardsConfigured,
+} from "@/lib/arcadex-rewards";
+import { getCeloPublicClient } from "@/lib/celo-public-client";
 import { GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
 import { walletAuthHeaders } from "@/lib/wallet-session-client";
 
@@ -58,6 +65,36 @@ export async function fetchGameOpenClaimStatus(
     payoutsEnabled: Boolean(data.payoutsEnabled),
     canClaim: Boolean(data.canClaim ?? (data.payoutsEnabled && !data.claimed)),
   };
+}
+
+/** On-chain wonRewards[player][campaignId].pending — spin saved, claim not finished. */
+export async function fetchWonRewardPending(
+  walletAddress: string,
+  campaignId: number
+): Promise<{ pending: boolean; rewardAmount: bigint }> {
+  if (!isArcadeXRewardsConfigured()) {
+    return { pending: false, rewardAmount: 0n };
+  }
+  const result = await getCeloPublicClient().readContract({
+    address: ARCADEX_REWARDS_CONTRACT_ADDRESS,
+    abi: ARCADEX_REWARDS_ABI,
+    functionName: "getWonReward",
+    args: [getAddress(walletAddress), BigInt(campaignId)],
+  });
+  const [pending, , , rewardAmount] = result as readonly [
+    boolean,
+    number,
+    Address,
+    bigint,
+  ];
+  return { pending: Boolean(pending), rewardAmount };
+}
+
+/** Finish a spin that already reserved USDT. Does not call spin again. */
+export async function claimPendingGameOpenReward(
+  campaignId: number
+): Promise<{ txHash: Hex }> {
+  return claimShuffleRewardOnChain(campaignId);
 }
 
 async function signGameOpenClaim(
@@ -140,9 +177,19 @@ export async function claimGameOpenReward(
     }));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const lower = message.toLowerCase();
+    if (lower.includes("claimpending")) {
+      const claimed = await claimShuffleRewardOnChain(prepare.campaignId);
+      return {
+        claimed: true,
+        amountUsdt: prepare.rewardUsdt ?? GAME_OPEN_CLAIM_USDT,
+        txHash: claimed.txHash,
+        claimTxHash: claimed.txHash,
+      };
+    }
     if (
-      !message.toLowerCase().includes("invalidspinsignature") &&
-      !message.toLowerCase().includes("could not be verified")
+      !lower.includes("invalidspinsignature") &&
+      !lower.includes("could not be verified")
     ) {
       throw err;
     }
