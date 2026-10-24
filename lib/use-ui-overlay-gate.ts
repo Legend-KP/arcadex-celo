@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   claimUiOverlay,
   hasUiOverlay,
+  isForeignUiBusy,
   subscribeUiOverlays,
 } from "@/lib/ui-overlay-gate";
 
@@ -13,6 +14,21 @@ export function useClaimUiOverlay(id: string, open: boolean): void {
     if (!open) return;
     return claimUiOverlay(id);
   }, [id, open]);
+}
+
+/** True when an overlay other than `selfId` is open. */
+export function useForeignUiBusy(selfId: string): boolean {
+  const [busy, setBusy] = useState(() =>
+    typeof document === "undefined" ? false : isForeignUiBusy(selfId)
+  );
+
+  useEffect(() => {
+    const read = () => setBusy(isForeignUiBusy(selfId));
+    read();
+    return subscribeUiOverlays(read);
+  }, [selfId]);
+
+  return busy;
 }
 
 /** True when any claimed overlay is currently open. */

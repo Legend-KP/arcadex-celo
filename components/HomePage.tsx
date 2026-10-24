@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Game, gameHasContestLive, gameIsLive } from "@/types";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Game, gameHasContestLive, gameIsLive, gameIsTest } from "@/types";
 import AchievementsView from "@/components/AchievementsView";
 import ActivityLeaderboardButton from "@/components/ActivityLeaderboardButton";
 import ActivityLeaderboardView from "@/components/ActivityLeaderboardView";
 import AppDrawer, { type AppView } from "@/components/AppDrawer";
+import DailyEarnPopup, {
+  DAILY_EARN_OVERLAY_ID,
+} from "@/components/DailyEarnPopup";
 import DailyXpHomeBanner from "@/components/DailyXpHomeBanner";
 import EarnNowHomeBanner from "@/components/EarnNowHomeBanner";
 import EarnNowModal, {
@@ -27,9 +30,11 @@ import {
   writeCachedGamesList,
 } from "@/lib/games-list-client-cache";
 import { fetchHomeShell } from "@/lib/home-client";
+import { matchGameOpenCampaignId } from "@/lib/game-open-campaign-ids";
 import { getCachedWallet } from "@/lib/player-id";
 import { getRecentPlayedMap } from "@/lib/recent-played";
-import { useGameOpenClaimMap } from "@/lib/use-game-open-claim-map";
+import { useGameOpenClaimDetails } from "@/lib/use-game-open-claim-map";
+import { useForeignUiBusy } from "@/lib/use-ui-overlay-gate";
 
 function applyHomeBrowse(
   games: Game[],
@@ -260,20 +265,8 @@ export default function HomePage() {
   const [view, setView] = useState<AppView>("home");
   const [activityBoardOpen, setActivityBoardOpen] = useState(false);
   const [earnNowOpen, setEarnNowOpen] = useState(false);
-
-  // Show the daily-claim promo once every app open (each MiniPay session).
-  useEffect(() => {
-    if (!isGameOpenClaimEnabled()) return;
-    if (!isReady || criticalModalsBlocking) return;
-    if (typeof window === "undefined") return;
-    try {
-      if (sessionStorage.getItem(EARN_NOW_SESSION_KEY) === "1") return;
-    } catch {
-      // ignore
-    }
-    const t = window.setTimeout(() => setEarnNowOpen(true), 500);
-    return () => window.clearTimeout(t);
-  }, [isReady, criticalModalsBlocking]);
+  const [dailyEarnDismissed, setDailyEarnDismissed] = useState(false);
+  const dailyEarnBlocked = useForeignUiBusy(DAILY_EARN_OVERLAY_ID);
 
   function dismissEarnNow() {
     try {
@@ -378,10 +371,63 @@ export default function HomePage() {
     () => games.filter((g) => !gameIsLive(g)),
     [games]
   );
-  const claimableByGameId = useGameOpenClaimMap(
-    walletAddress ?? "",
-    liveGames
-  );
+  const claimDetails = useGameOpenClaimDetails(walletAddress ?? "", liveGames);
+  const claimableByGameId = useMemo(() => {
+    const out: Record<string, boolean> = {};
+    for (const [id, row] of Object.entries(claimDetails.byId)) {
+      if (row.claimable) out[id] = true;
+    }
+    return out;
+  }, [claimDetails.byId]);
+
+  const dailyEarnGroups = useMemo(() => {
+    const unclaimed: Game[] = [];
+    const claimed: Game[] = [];
+    for (const game of liveGames) {
+      if (game.active === false || gameIsTest(game)) continue;
+      if (matchGameOpenCampaignId(game.id, game.name) == null) continue;
+      if (claimDetails.byId[game.id]?.claimed) claimed.push(game);
+      else unclaimed.push(game);
+    }
+    return { unclaimed, claimed };
+  }, [liveGames, claimDetails.byId]);
+
+  const dailyEarnReady =
+    !isGameOpenClaimEnabled() || !walletAddress || claimDetails.loaded;
+  const showDailyEarn =
+    isGameOpenClaimEnabled() &&
+    isReady &&
+    !criticalModalsBlocking &&
+    !loading &&
+    dailyEarnReady &&
+    !dailyEarnBlocked &&
+    !dailyEarnDismissed &&
+    dailyEarnGroups.unclaimed.length > 0;
+
+  const dismissDailyEarn = useCallback(() => {
+    setDailyEarnDismissed(true);
+  }, []);
+
+  // Image promo stays once per MiniPay session, and only when every
+  // daily game claim is already done. The game list popup is separate.
+  useEffect(() => {
+    if (!isGameOpenClaimEnabled()) return;
+    if (!isReady || criticalModalsBlocking) return;
+    if (!dailyEarnReady || dailyEarnGroups.unclaimed.length > 0) return;
+    if (typeof window === "undefined") return;
+    try {
+      if (sessionStorage.getItem(EARN_NOW_SESSION_KEY) === "1") return;
+    } catch {
+      // ignore
+    }
+    const t = window.setTimeout(() => setEarnNowOpen(true), 500);
+    return () => window.clearTimeout(t);
+  }, [
+    isReady,
+    criticalModalsBlocking,
+    dailyEarnReady,
+    dailyEarnGroups.unclaimed.length,
+  ]);
 
   const catalogGames = useMemo(() => {
     const source =
@@ -574,6 +620,14 @@ export default function HomePage() {
         games={games}
         onOpenActivityBoard={() => setActivityBoardOpen(true)}
       />
+      {isGameOpenClaimEnabled() ? (
+        <DailyEarnPopup
+          open={showDailyEarn}
+          unclaimed={dailyEarnGroups.unclaimed}
+          claimed={dailyEarnGroups.claimed}
+          onClose={dismissDailyEarn}
+        />
+      ) : null}
       {isGameOpenClaimEnabled() ? (
         <EarnNowModal
           open={earnNowOpen}

@@ -33,6 +33,14 @@ export function hasUiOverlay(): boolean {
   return overlays.size > 0;
 }
 
+/** True when some overlay other than `selfId` is claimed. */
+export function hasForeignUiOverlay(selfId: string): boolean {
+  for (const id of overlays) {
+    if (id !== selfId) return true;
+  }
+  return false;
+}
+
 export function subscribeUiOverlays(listener: Listener): () => void {
   listeners.add(listener);
   return () => {
@@ -62,6 +70,11 @@ export function hasDomBlockingOverlay(): boolean {
 
 export function isPromoUiBusy(): boolean {
   return hasUiOverlay() || hasDomBlockingOverlay();
+}
+
+/** Busy because of a different overlay, ignoring this popup's own claim. */
+export function isForeignUiBusy(selfId: string): boolean {
+  return hasForeignUiOverlay(selfId) || hasDomBlockingOverlay();
 }
 
 const PROMO_SESSION_KEY = "arcadex_promo_session_shown_v1";

@@ -4,11 +4,13 @@ import {
   getClientIp,
   rateLimitResponse,
 } from "@/lib/rate-limit";
+import { parseAuthChallengeMessage } from "@/lib/wallet-auth-message";
 import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import {
   createWalletSessionToken,
   verifyWalletSignature,
 } from "@/lib/wallet-session";
+import { recordWalletSignIn } from "@/lib/wallet-signins";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +54,16 @@ export async function POST(request: Request) {
         { error: "Invalid or expired wallet signature." },
         { status: 401 }
       );
+    }
+
+    const parsed = parseAuthChallengeMessage(message);
+    if (parsed) {
+      await recordWalletSignIn({
+        wallet,
+        nonce: parsed.nonce,
+        issuedAt: parsed.issuedAt,
+        signature,
+      });
     }
 
     const token = await createWalletSessionToken(wallet);

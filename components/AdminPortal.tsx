@@ -25,6 +25,7 @@ import {
 } from "@/types";
 import AdminContestModal from "@/components/AdminContestModal";
 import AdminMissionsPanel from "@/components/AdminMissionsPanel";
+import AdminSignInsPanel from "@/components/AdminSignInsPanel";
 import Logo from "@/components/Logo";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "/";
@@ -386,6 +387,7 @@ export default function AdminPortal() {
       </header>
 
       <div className="admin-content">
+        <AdminSignInsPanel />
         <h2 className="admin-section-title">Add New Game</h2>
         <div className="add-game-card">
           <div className="form-group">

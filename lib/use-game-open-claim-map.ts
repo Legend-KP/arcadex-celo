@@ -6,6 +6,13 @@ import { fetchGameOpenClaimStatus } from "@/lib/game-open-claim-client";
 import type { Game } from "@/types";
 import { gameIsLive } from "@/types";
 
+export type GameOpenClaimUiState = {
+  /** Still claimable today. */
+  claimable: boolean;
+  /** Already claimed for the current UTC day. */
+  claimed: boolean;
+};
+
 /**
  * Live-game claim map for home thumbnails: true = still claimable today.
  */
@@ -13,7 +20,26 @@ export function useGameOpenClaimMap(
   walletAddress: string,
   games: Game[]
 ): Record<string, boolean> {
-  const [map, setMap] = useState<Record<string, boolean>>({});
+  const details = useGameOpenClaimDetails(walletAddress, games);
+  return useMemo(() => {
+    const out: Record<string, boolean> = {};
+    for (const [id, row] of Object.entries(details.byId)) {
+      if (row.claimable) out[id] = true;
+    }
+    return out;
+  }, [details.byId]);
+}
+
+/**
+ * Per live game: whether today's $0.012 open claim is still open.
+ * `loaded` is true once the first fetch for this wallet + game list settles.
+ */
+export function useGameOpenClaimDetails(
+  walletAddress: string,
+  games: Game[]
+): { byId: Record<string, GameOpenClaimUiState>; loaded: boolean } {
+  const [byId, setById] = useState<Record<string, GameOpenClaimUiState>>({});
+  const [loaded, setLoaded] = useState(false);
   const liveKey = useMemo(
     () =>
       games
@@ -25,7 +51,8 @@ export function useGameOpenClaimMap(
 
   useEffect(() => {
     if (!isGameOpenClaimEnabled() || !liveKey) {
-      setMap({});
+      setById({});
+      setLoaded(true);
       return;
     }
 
@@ -36,11 +63,17 @@ export function useGameOpenClaimMap(
 
     // No wallet yet — still tease Claim on every live thumb.
     if (!walletAddress) {
-      setMap(Object.fromEntries(live.map((g) => [g.id, true])));
+      setById(
+        Object.fromEntries(
+          live.map((g) => [g.id, { claimable: true, claimed: false }])
+        )
+      );
+      setLoaded(true);
       return;
     }
 
     let cancelled = false;
+    setLoaded(false);
 
     async function load() {
       const entries = await Promise.all(
@@ -56,15 +89,16 @@ export function useGameOpenClaimMap(
               (status.canClaim ||
                 status.payoutsEnabled ||
                 status.campaignId != null);
-            return [game.id, claimable] as const;
+            return [game.id, { claimable, claimed: status.claimed }] as const;
           } catch {
             // Optimistic: show Claim until we know otherwise.
-            return [game.id, true] as const;
+            return [game.id, { claimable: true, claimed: false }] as const;
           }
         })
       );
       if (!cancelled) {
-        setMap(Object.fromEntries(entries));
+        setById(Object.fromEntries(entries));
+        setLoaded(true);
       }
     }
 
@@ -81,5 +115,5 @@ export function useGameOpenClaimMap(
     };
   }, [walletAddress, liveKey]);
 
-  return map;
+  return { byId, loaded };
 }
