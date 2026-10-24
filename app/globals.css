@@ -20237,7 +20237,7 @@ a { color: inherit; text-decoration: none; }
   transform: scale(0.98);
 }
 
-/* Earn Daily list — per-game $0.012, outside the promo popup cap. */
+/* Earn Daily list — per-game 0.012 USDT, outside the promo popup cap. */
 .daily-earn-backdrop {
   position: fixed;
   inset: 0;
@@ -20245,68 +20245,83 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: max(16px, env(safe-area-inset-top))
-    max(16px, env(safe-area-inset-right))
-    max(16px, env(safe-area-inset-bottom))
-    max(16px, env(safe-area-inset-left));
-  background: rgba(8, 10, 18, 0.72);
+  padding: max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  background: rgba(8, 16, 32, 0.55);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
 .daily-earn {
   width: min(100%, 420px);
-  max-height: min(86vh, 640px);
+  max-height: min(90vh, 760px);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  padding: 16px 14px 14px;
-  border-radius: 24px;
-  background: #fff;
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28);
+  border-radius: 28px;
+  overflow: hidden;
+  background: #e8f6ff;
+  box-shadow: 0 22px 50px rgba(15, 40, 70, 0.35);
 }
-.daily-earn__head {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 34px;
-  align-items: center;
-  margin-bottom: 12px;
+.daily-earn__hero {
+  position: relative;
   flex: 0 0 auto;
+  line-height: 0;
+  background: #5ec8ff;
 }
-.daily-earn__head-spacer {
-  width: 34px;
-  height: 34px;
+.daily-earn__banner {
+  display: block;
+  width: 100%;
+  height: auto;
 }
-.daily-earn__title {
-  margin: 0;
-  text-align: center;
-  font-family: var(--font-head);
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-  color: #0f172a;
+.daily-earn__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .daily-earn__close {
-  width: 34px;
-  height: 34px;
-  justify-self: end;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
   border: none;
   border-radius: 999px;
-  background: #e2e8f0;
-  color: #0f172a;
-  font-size: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #243044;
+  font-size: 15px;
   line-height: 1;
   cursor: pointer;
+  box-shadow: 0 1px 4px rgba(20, 60, 100, 0.18);
+}
+.daily-earn__sheet {
+  position: relative;
+  z-index: 1;
+  margin-top: -16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #ffffff 0%, #f4faff 100%);
+  border-radius: 22px 22px 0 0;
+  padding: 6px 8px 10px;
 }
 .daily-earn__list {
   flex: 1 1 auto;
   min-height: 0;
-  max-height: min(52vh, 420px);
+  max-height: min(52vh, 460px);
+  overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 2px 2px 2px 0;
+  gap: 2px;
 }
 .daily-earn__list > * {
   width: 100%;
@@ -20315,66 +20330,103 @@ a { color: inherit; text-decoration: none; }
 }
 .daily-earn__split {
   height: 1px;
-  margin: 4px 0;
-  background: #e2e8f0;
+  margin: 4px 6px;
+  background: #d5e6f5;
   flex: 0 0 auto;
 }
 .daily-earn__row {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 146px;
-  column-gap: 10px;
+  grid-template-columns: 46px minmax(0, 1fr) max-content 108px;
+  column-gap: 8px;
   align-items: center;
   width: 100%;
   min-width: 0;
-  min-height: 52px;
+  min-height: 58px;
+  padding: 6px 4px;
   box-sizing: border-box;
 }
 .daily-earn__logo {
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   border-radius: 12px;
   object-fit: cover;
-  background: #e2e8f0;
+  background: #e7f3fb;
   display: block;
 }
 .daily-earn__logo--empty {
   display: block;
 }
+.daily-earn__copy {
+  min-width: 0;
+}
 .daily-earn__name {
   margin: 0;
   min-width: 0;
   text-align: left;
-  font-family: var(--font-head);
+  font-family: var(--font-body);
   font-size: 14px;
-  font-weight: 700;
-  line-height: 1.2;
-  color: #0f172a;
+  font-weight: 800;
+  line-height: 1.15;
+  color: #1c2838;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.daily-earn__line {
+  margin: 2px 0 0;
+  min-width: 0;
+  text-align: left;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #8aa0b4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.daily-earn__amount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  color: #3d4d63;
+}
+.daily-earn__usdt {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex: 0 0 18px;
+}
 .daily-earn__btn {
   box-sizing: border-box;
-  width: 146px;
-  height: 44px;
+  width: 108px;
+  height: 40px;
   margin: 0;
-  padding: 0 8px;
+  padding: 0 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   border: none;
   border-radius: 999px;
-  font-family: var(--font-head);
-  font-size: 11px;
+  font-family: var(--font-body);
+  font-size: 15px;
   font-weight: 800;
-  line-height: 1.15;
+  line-height: 1;
   letter-spacing: 0;
   text-align: center;
   text-decoration: none;
-  white-space: normal;
+  white-space: nowrap;
   color: #fff;
-  background: linear-gradient(135deg, #16a34a 0%, #22c55e 55%, #eab308 100%);
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.28);
+  background: linear-gradient(90deg, #2fce4f 0%, #5ee06a 62%, #c6f16d 130%);
+  box-shadow: 0 4px 10px rgba(40, 180, 80, 0.28);
   cursor: pointer;
 }
 .daily-earn__btn:active {
@@ -20382,13 +20434,43 @@ a { color: inherit; text-decoration: none; }
 }
 .daily-earn__btn--done,
 .daily-earn__btn--done:disabled {
-  color: #64748b;
-  background: #e2e8f0;
+  color: #7b8da0;
+  background: #e7eef5;
   box-shadow: none;
   cursor: default;
   transform: none;
   font-size: 10px;
+  font-weight: 800;
   line-height: 1.15;
+  white-space: normal;
+  padding: 0 8px;
+}
+@media (max-width: 400px) {
+  .daily-earn__row {
+    grid-template-columns: 40px minmax(0, 1fr) max-content 96px;
+    column-gap: 6px;
+  }
+  .daily-earn__logo {
+    width: 40px;
+    height: 40px;
+  }
+  .daily-earn__name {
+    font-size: 13px;
+  }
+  .daily-earn__amount {
+    font-size: 11px;
+    gap: 4px;
+  }
+  .daily-earn__usdt {
+    width: 16px;
+    height: 16px;
+    flex-basis: 16px;
+  }
+  .daily-earn__btn {
+    width: 96px;
+    height: 36px;
+    font-size: 14px;
+  }
 }
 
 /* Claim confetti burst */
