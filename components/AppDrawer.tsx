@@ -25,14 +25,25 @@ export type AppView =
   | "leaderboard"
   | "achievements";
 
-const NAV: { id: AppView | "sparks"; label: string }[] = [
-  { id: "home", label: "Home" },
-  { id: "games", label: "Games" },
-  { id: "contests", label: "Contests" },
-  { id: "leaderboard", label: "Daily XP Board" },
-  { id: "sparks", label: "Sparks" },
-  { id: "achievements", label: "Achievements" },
-].filter((item) => item.id !== "leaderboard" || isDailyXpUiEnabled());
+type NavItem = { id: AppView | "sparks"; label: string };
+
+function drawerNav(): NavItem[] {
+  const items: NavItem[] = [
+    { id: "home", label: "Home" },
+    { id: "games", label: "Games" },
+    { id: "contests", label: "Contests" },
+  ];
+  if (isDailyXpUiEnabled()) {
+    items.push({ id: "leaderboard", label: "Daily XP Board" });
+  }
+  items.push(
+    { id: "sparks", label: "Sparks" },
+    { id: "achievements", label: "Achievements" }
+  );
+  return items;
+}
+
+const NAV = drawerNav();
 
 interface AppDrawerProps {
   open: boolean;
