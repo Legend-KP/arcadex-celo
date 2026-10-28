@@ -1,6 +1,8 @@
 /**
  * Option C: one ArcadeXRewards SHUFFLE campaign per live game.
- * Campaign IDs 20–32 plus 35 (Knockout) and 36 (Retro Blocks) at $0.012 USDT.
+ * Campaign IDs 20–32 plus 35 (Knockout), 36 (Retro Blocks), 37 (Zeno),
+ * and 38 (2048) at $0.012 USDT. 39–40 exist on-chain with the same payout
+ * and are not tied to a game yet.
  * Legacy 7–19 are frozen at $0.005 after participants (ParamsFrozen).
  *
  * Sync slug matching lives in game-open-campaign-ids.ts so client UI can

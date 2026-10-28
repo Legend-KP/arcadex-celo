@@ -148,6 +148,7 @@ const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
   "reflector",
   "knock-out",
   "retro-blocks",
+  "zeno",
 ]);
 
 /** Name/id aliases that map onto a preview-video folder slug. */
@@ -290,6 +291,9 @@ function resolvePreviewVideoFolder(game: Game): string | null {
       LOCAL_PREVIEW_VIDEO_FOLDERS.has("retro-blocks")
     ) {
       return "retro-blocks";
+    }
+    if (raw.includes("zeno") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("zeno")) {
+      return "zeno";
     }
   }
 
@@ -642,6 +646,15 @@ const GAME_TUTORIAL_BY_FOLDER: Record<string, string> = {
   "infinite-spiral": "/tutorials/INFINITE-SPIRAL.webp",
   infinitespiral: "/tutorials/INFINITE-SPIRAL.webp",
   infinite: "/tutorials/INFINITE-SPIRAL.webp",
+  reflector: "/tutorials/REFLECTOR.webp",
+  reflect: "/tutorials/REFLECTOR.webp",
+  knockout: "/tutorials/KNOCKOUT.webp",
+  "knock-out": "/tutorials/KNOCKOUT.webp",
+  "retro-blocks": "/tutorials/RETRO-BLOCKS.webp",
+  retroblocks: "/tutorials/RETRO-BLOCKS.webp",
+  "retro-block": "/tutorials/RETRO-BLOCKS.webp",
+  retroblock: "/tutorials/RETRO-BLOCKS.webp",
+  zeno: "/tutorials/ZENO.webp",
 };
 
 function resolveTutorialKey(game: Game): string {
@@ -700,6 +713,24 @@ export function getGameTutorialCandidates(game: Game): string[] {
   ) {
     push(GAME_TUTORIAL_BY_FOLDER["infinite-spiral"]);
   }
+  if (nameSlug.includes("reflect") || (!isFirestoreAutoId(id) && id.includes("reflect"))) {
+    push(GAME_TUTORIAL_BY_FOLDER.reflector);
+  }
+  if (
+    nameSlug.includes("knock") ||
+    (!isFirestoreAutoId(id) && id.includes("knock"))
+  ) {
+    push(GAME_TUTORIAL_BY_FOLDER.knockout);
+  }
+  if (
+    nameSlug.includes("retro") ||
+    (!isFirestoreAutoId(id) && id.includes("retro"))
+  ) {
+    push(GAME_TUTORIAL_BY_FOLDER["retro-blocks"]);
+  }
+  if (nameSlug.includes("zeno") || (!isFirestoreAutoId(id) && id.includes("zeno"))) {
+    push(GAME_TUTORIAL_BY_FOLDER.zeno);
+  }
   const hyphen = key.toUpperCase();
   const spaced = key.replace(/-/g, " ").toUpperCase();
   push(`/tutorials/${hyphen}.webp`);
@@ -736,6 +767,18 @@ export function getGameTutorialCandidates(game: Game): string[] {
     (nameSlug.includes("infinite") && nameSlug.includes("spiral"))
   ) {
     push("/tutorials/INFINITE-SPIRAL.webp");
+  }
+  if (nameSlug.includes("reflect") || key.includes("reflect")) {
+    push("/tutorials/REFLECTOR.webp");
+  }
+  if (nameSlug.includes("knock") || key.includes("knock")) {
+    push("/tutorials/KNOCKOUT.webp");
+  }
+  if (nameSlug.includes("retro") || key.includes("retro")) {
+    push("/tutorials/RETRO-BLOCKS.webp");
+  }
+  if (nameSlug.includes("zeno") || key.includes("zeno")) {
+    push("/tutorials/ZENO.webp");
   }
 
   return out;

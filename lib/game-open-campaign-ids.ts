@@ -11,7 +11,7 @@
 import { slugifyGameName } from "@/lib/game-assets";
 
 export const GAME_OPEN_CAMPAIGN_ID_MIN = 20;
-export const GAME_OPEN_CAMPAIGN_ID_MAX = 36;
+export const GAME_OPEN_CAMPAIGN_ID_MAX = 40;
 
 /**
  * Built-in map from name slug / common aliases → campaign id.
@@ -81,6 +81,10 @@ export const DEFAULT_GAME_OPEN_CAMPAIGN_BY_SLUG: Record<string, number> = {
   retroblocks: 36,
   "retro-block": 36,
   retroblock: 36,
+  // 37 Zeno
+  zeno: 37,
+  // 38 2048
+  "2048": 38,
 };
 
 /** Human-readable checklist (campaign → title). */
@@ -100,6 +104,8 @@ export const GAME_OPEN_CAMPAIGN_TITLES: Record<number, string> = {
   32: "Line Link",
   35: "Knockout",
   36: "Retro Blocks",
+  37: "Zeno",
+  38: "2048",
 };
 
 function parseCampaignMap(): Record<string, number> {
