@@ -17,7 +17,7 @@ export const GAME_OPEN_CLAIM_AMOUNT_MICRO = 12_000;
  * Each claim is one spin plus one claim on ArcadeXRewards.
  * Resets with gameOpenClaimDayKey (00:00 UTC).
  */
-export const GAME_OPEN_CLAIM_DAILY_CAP = 5_500;
+export const GAME_OPEN_CLAIM_DAILY_CAP = 5_000;
 export const GAME_OPEN_CLAIM_REWARD_AMOUNT = BigInt(12_000);
 
 export function gameOpenClaimDayKey(now = Date.now()): string {
