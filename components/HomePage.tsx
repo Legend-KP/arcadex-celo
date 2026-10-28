@@ -542,9 +542,7 @@ export default function HomePage() {
           {view === "home" && (
             <>
               {isGameOpenClaimEnabled() ? (
-                claimDetails.claimsOpen ? (
-                  <EarnNowHomeBanner onOpen={() => setEarnNowOpen(true)} />
-                ) : null
+                <EarnNowHomeBanner onOpen={() => setEarnNowOpen(true)} />
               ) : isDailyXpUiEnabled() ? (
                 <DailyXpHomeBanner
                   onOpenBoard={() => setActivityBoardOpen(true)}
