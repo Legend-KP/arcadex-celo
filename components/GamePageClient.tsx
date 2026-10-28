@@ -264,10 +264,12 @@ export default function GamePageClient() {
           setPendingCampaignId(pending ? status.campaignId : null);
           // A saved spin must be claimed before Start Game. Status "claimed"
           // is true while won.pending, so don't hide the button in that case.
+          const dayOpen = status.claimsOpen !== false;
           setNeedsClaim(
             pending ||
               Boolean(
-                !status.claimed &&
+                dayOpen &&
+                  !status.claimed &&
                   (status.canClaim ||
                     status.payoutsEnabled ||
                     status.campaignId != null)

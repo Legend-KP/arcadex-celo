@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { isGameOpenClaimEnabled } from "@/lib/feature-flags";
-import { fetchGameOpenClaimStatus } from "@/lib/game-open-claim-client";
+import {
+  fetchGameOpenClaimDay,
+  fetchGameOpenClaimStatus,
+} from "@/lib/game-open-claim-client";
 import type { Game } from "@/types";
 import { gameIsLive } from "@/types";
 
@@ -37,9 +40,14 @@ export function useGameOpenClaimMap(
 export function useGameOpenClaimDetails(
   walletAddress: string,
   games: Game[]
-): { byId: Record<string, GameOpenClaimUiState>; loaded: boolean } {
+): {
+  byId: Record<string, GameOpenClaimUiState>;
+  loaded: boolean;
+  claimsOpen: boolean;
+} {
   const [byId, setById] = useState<Record<string, GameOpenClaimUiState>>({});
   const [loaded, setLoaded] = useState(false);
+  const [claimsOpen, setClaimsOpen] = useState(true);
   const liveKey = useMemo(
     () =>
       games
@@ -48,6 +56,24 @@ export function useGameOpenClaimDetails(
         .join("|"),
     [games]
   );
+
+  useEffect(() => {
+    if (!isGameOpenClaimEnabled()) {
+      setClaimsOpen(true);
+      return;
+    }
+    let cancelled = false;
+    void fetchGameOpenClaimDay()
+      .then((day) => {
+        if (!cancelled) setClaimsOpen(day.claimsOpen);
+      })
+      .catch(() => {
+        if (!cancelled) setClaimsOpen(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [liveKey]);
 
   useEffect(() => {
     if (!isGameOpenClaimEnabled() || !liveKey) {
@@ -61,11 +87,11 @@ export function useGameOpenClaimDetails(
       return { id, name };
     });
 
-    // No wallet yet — still tease Claim on every live thumb.
+    // No wallet yet — tease Claim only while the UTC day is still open.
     if (!walletAddress) {
       setById(
         Object.fromEntries(
-          live.map((g) => [g.id, { claimable: true, claimed: false }])
+          live.map((g) => [g.id, { claimable: claimsOpen, claimed: false }])
         )
       );
       setLoaded(true);
@@ -84,15 +110,17 @@ export function useGameOpenClaimDetails(
               game.id,
               game.name
             );
+            const dayOpen = claimsOpen && status.claimsOpen !== false;
             const claimable =
+              dayOpen &&
               !status.claimed &&
               (status.canClaim ||
                 status.payoutsEnabled ||
                 status.campaignId != null);
             return [game.id, { claimable, claimed: status.claimed }] as const;
           } catch {
-            // Optimistic: show Claim until we know otherwise.
-            return [game.id, { claimable: true, claimed: false }] as const;
+            // Optimistic while claims are open. A closed day stays on Start Game.
+            return [game.id, { claimable: claimsOpen, claimed: false }] as const;
           }
         })
       );
@@ -113,7 +141,7 @@ export function useGameOpenClaimDetails(
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [walletAddress, liveKey]);
+  }, [walletAddress, liveKey, claimsOpen]);
 
-  return { byId, loaded };
+  return { byId, loaded, claimsOpen };
 }

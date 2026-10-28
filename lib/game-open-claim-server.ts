@@ -5,6 +5,7 @@
 import { useD1PlayerData, requireD1 } from "@/lib/d1-client";
 import {
   GAME_OPEN_CLAIM_AMOUNT_MICRO,
+  GAME_OPEN_CLAIM_DAILY_CAP,
   GAME_OPEN_CLAIM_USDT,
   gameOpenClaimDayKey,
   type GameOpenClaimRecord,
@@ -35,6 +36,7 @@ export class GameOpenClaimError extends Error {
       | "WRONG_TYPE"
       | "ALREADY_CLAIMED"
       | "TOO_SOON"
+      | "DAILY_CAP"
       | "PAYOUT_FAILED"
   ) {
     super(message);
@@ -44,6 +46,88 @@ export class GameOpenClaimError extends Error {
 
 function claimPath(wallet: string, utcDay: string, gameId: string): string {
   return `gameOpenClaims/${wallet.toLowerCase()}/${utcDay}/${gameId}`;
+}
+
+function dailyCountPath(utcDay: string): string {
+  return `gameOpenClaimDailyCount/${utcDay}`;
+}
+
+let capTableReady = false;
+
+async function ensureDailyCapTable(
+  db: Awaited<ReturnType<typeof requireD1>>
+): Promise<void> {
+  if (capTableReady) return;
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS game_open_claim_daily (
+         utc_day TEXT PRIMARY KEY,
+         claim_count INTEGER NOT NULL
+       )`
+    )
+    .run();
+  capTableReady = true;
+}
+
+/** Seed today's row from claims already stored, then leave later increments to markGameOpenClaimed. */
+async function ensureDailyClaimRow(
+  db: Awaited<ReturnType<typeof requireD1>>,
+  utcDay: string
+): Promise<void> {
+  await ensureDailyCapTable(db);
+  await db
+    .prepare(
+      `INSERT INTO game_open_claim_daily (utc_day, claim_count)
+       SELECT ?, COUNT(*) FROM game_open_claims
+       WHERE utc_day = ? AND status = 'claimed'
+       ON CONFLICT(utc_day) DO NOTHING`
+    )
+    .bind(utcDay, utcDay)
+    .run();
+}
+
+async function readDailyClaimCount(utcDay: string): Promise<number> {
+  if (await useD1PlayerData()) {
+    const db = await requireD1();
+    await ensureDailyClaimRow(db, utcDay);
+    const row = await db
+      .prepare(
+        `SELECT claim_count AS n FROM game_open_claim_daily WHERE utc_day = ?`
+      )
+      .bind(utcDay)
+      .first<{ n: number }>();
+    return Number(row?.n ?? 0);
+  }
+
+  const stored = await readPath<number>(dailyCountPath(utcDay));
+  return typeof stored === "number" && Number.isFinite(stored) ? stored : 0;
+}
+
+async function incrementDailyClaimCount(utcDay: string): Promise<void> {
+  if (await useD1PlayerData()) {
+    const db = await requireD1();
+    await ensureDailyClaimRow(db, utcDay);
+    await db
+      .prepare(
+        `UPDATE game_open_claim_daily
+         SET claim_count = claim_count + 1
+         WHERE utc_day = ?`
+      )
+      .bind(utcDay)
+      .run();
+    return;
+  }
+
+  const current = await readDailyClaimCount(utcDay);
+  await writePath(dailyCountPath(utcDay), current + 1);
+}
+
+/** True while this UTC day still has room for a new game-open claim. */
+export async function isGameOpenClaimDayOpen(
+  now = Date.now()
+): Promise<boolean> {
+  const count = await readDailyClaimCount(gameOpenClaimDayKey(now));
+  return count < GAME_OPEN_CLAIM_DAILY_CAP;
 }
 
 export async function assertLiveGame(gameId: string): Promise<void> {
@@ -88,9 +172,11 @@ export async function getGameOpenClaimStatus(
   utcDay: string;
   payoutsEnabled: boolean;
   canClaim: boolean;
+  claimsOpen: boolean;
 }> {
   const utcDay = gameOpenClaimDayKey();
   const amountUsdt = GAME_OPEN_CLAIM_USDT;
+  const claimsOpen = await isGameOpenClaimDayOpen();
   const campaignId = await resolveGameOpenCampaignIdForGame(
     gameId,
     gameNameHint
@@ -104,6 +190,7 @@ export async function getGameOpenClaimStatus(
       utcDay,
       payoutsEnabled: false,
       canClaim: false,
+      claimsOpen,
     };
   }
 
@@ -114,7 +201,8 @@ export async function getGameOpenClaimStatus(
       campaignId,
       utcDay,
       payoutsEnabled: true,
-      canClaim: true,
+      canClaim: claimsOpen,
+      claimsOpen,
     };
   }
 
@@ -130,6 +218,7 @@ export async function getGameOpenClaimStatus(
       utcDay,
       payoutsEnabled: true,
       canClaim: false,
+      claimsOpen,
     };
   }
 
@@ -147,7 +236,8 @@ export async function getGameOpenClaimStatus(
       campaignId,
       utcDay,
       payoutsEnabled: active,
-      canClaim: active && progress.canCheckIn,
+      canClaim: claimsOpen && active && progress.canCheckIn,
+      claimsOpen,
     };
   } catch {
     return {
@@ -156,7 +246,8 @@ export async function getGameOpenClaimStatus(
       campaignId,
       utcDay,
       payoutsEnabled: true,
-      canClaim: true,
+      canClaim: claimsOpen,
+      claimsOpen,
     };
   }
 }
@@ -255,6 +346,15 @@ export async function markGameOpenClaimed(opts: {
 
   if (await useD1PlayerData()) {
     const db = await requireD1();
+    const before = await db
+      .prepare(
+        `SELECT status FROM game_open_claims
+         WHERE wallet = ? AND game_id = ? AND utc_day = ?`
+      )
+      .bind(wallet, opts.gameId, utcDay)
+      .first<{ status: string }>();
+    const alreadyCounted = before?.status === "claimed";
+    if (!alreadyCounted) await ensureDailyClaimRow(db, utcDay);
     await db
       .prepare(
         `INSERT INTO game_open_claims
@@ -277,11 +377,22 @@ export async function markGameOpenClaimed(opts: {
         claimedAt
       )
       .run();
+    if (!alreadyCounted) {
+      await db
+        .prepare(
+          `UPDATE game_open_claim_daily
+           SET claim_count = claim_count + 1
+           WHERE utc_day = ?`
+        )
+        .bind(utcDay)
+        .run();
+    }
     return;
   }
 
   const path = claimPath(wallet, utcDay, opts.gameId);
   const existing = await readPath<GameOpenClaimRecord>(path);
+  const alreadyCounted = existing?.status === "claimed";
   await writePath(path, {
     wallet,
     gameId: opts.gameId,
@@ -294,6 +405,7 @@ export async function markGameOpenClaimed(opts: {
     createdAt: existing?.createdAt ?? claimedAt,
     claimedAt,
   } satisfies GameOpenClaimRecord);
+  if (!alreadyCounted) await incrementDailyClaimCount(utcDay);
 }
 
 export async function clearPendingGameOpenClaim(

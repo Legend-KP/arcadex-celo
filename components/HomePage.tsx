@@ -402,6 +402,7 @@ export default function HomePage() {
     dailyEarnReady &&
     !dailyEarnBlocked &&
     !dailyEarnDismissed &&
+    claimDetails.claimsOpen &&
     dailyEarnGroups.unclaimed.length > 0;
 
   const dismissDailyEarn = useCallback(() => {
@@ -412,6 +413,7 @@ export default function HomePage() {
   // daily game claim is already done. The game list popup is separate.
   useEffect(() => {
     if (!isGameOpenClaimEnabled()) return;
+    if (!claimDetails.claimsOpen) return;
     if (!isReady || criticalModalsBlocking) return;
     if (!dailyEarnReady || dailyEarnGroups.unclaimed.length > 0) return;
     if (typeof window === "undefined") return;
@@ -427,6 +429,7 @@ export default function HomePage() {
     criticalModalsBlocking,
     dailyEarnReady,
     dailyEarnGroups.unclaimed.length,
+    claimDetails.claimsOpen,
   ]);
 
   const catalogGames = useMemo(() => {
@@ -539,7 +542,9 @@ export default function HomePage() {
           {view === "home" && (
             <>
               {isGameOpenClaimEnabled() ? (
-                <EarnNowHomeBanner onOpen={() => setEarnNowOpen(true)} />
+                claimDetails.claimsOpen ? (
+                  <EarnNowHomeBanner onOpen={() => setEarnNowOpen(true)} />
+                ) : null
               ) : isDailyXpUiEnabled() ? (
                 <DailyXpHomeBanner
                   onOpenBoard={() => setActivityBoardOpen(true)}

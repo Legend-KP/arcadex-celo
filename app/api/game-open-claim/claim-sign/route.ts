@@ -18,6 +18,7 @@ import {
   assertLiveGame,
   GameOpenClaimError,
   getGameOpenClaimStatus,
+  isGameOpenClaimDayOpen,
   requireGameOpenCampaign,
   reserveGameOpenClaim,
 } from "@/lib/game-open-claim-server";
@@ -127,6 +128,12 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
+    if (!(await isGameOpenClaimDayOpen())) {
+      throw new GameOpenClaimError(
+        "Already reached today's claim limit.",
+        "DAILY_CAP"
+      );
+    }
 
     const maxPayout = BigInt(progress.campaign.maxSinglePayout || "0");
     if (maxPayout > BigInt(0) && GAME_OPEN_CLAIM_REWARD_AMOUNT > maxPayout) {
@@ -196,7 +203,9 @@ export async function POST(request: Request) {
   } catch (err) {
     if (err instanceof GameOpenClaimError) {
       const status =
-        err.code === "ALREADY_CLAIMED" || err.code === "TOO_SOON"
+        err.code === "ALREADY_CLAIMED" ||
+        err.code === "TOO_SOON" ||
+        err.code === "DAILY_CAP"
           ? 409
           : err.code === "NO_GAME" || err.code === "NOT_LIVE"
             ? 404

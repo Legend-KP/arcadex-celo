@@ -22,6 +22,8 @@ export interface GameOpenClaimStatus {
   utcDay: string;
   payoutsEnabled: boolean;
   canClaim: boolean;
+  /** False after the shared daily cap. Pending on-chain rewards can still be claimed. */
+  claimsOpen: boolean;
 }
 
 export interface GameOpenClaimSignResult {
@@ -64,6 +66,27 @@ export async function fetchGameOpenClaimStatus(
     utcDay: typeof data.utcDay === "string" ? data.utcDay : "",
     payoutsEnabled: Boolean(data.payoutsEnabled),
     canClaim: Boolean(data.canClaim ?? (data.payoutsEnabled && !data.claimed)),
+    claimsOpen: data.claimsOpen !== false,
+  };
+}
+
+/** Shared UTC-day cap. Does not require a wallet. */
+export async function fetchGameOpenClaimDay(): Promise<{
+  claimsOpen: boolean;
+  utcDay: string;
+}> {
+  const res = await fetch("/api/game-open-claim/day", { cache: "no-store" });
+  const data = (await res.json().catch(() => ({}))) as {
+    claimsOpen?: boolean;
+    utcDay?: string;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error ?? "Could not load claim day.");
+  }
+  return {
+    claimsOpen: data.claimsOpen !== false,
+    utcDay: typeof data.utcDay === "string" ? data.utcDay : "",
   };
 }
 
