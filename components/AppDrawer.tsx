@@ -14,6 +14,7 @@ import {
   unlockTestGame,
   verifyTestGamePassword,
 } from "@/lib/test-game-access";
+import { isDailyXpUiEnabled } from "@/lib/feature-flags";
 import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
 import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 
@@ -31,7 +32,7 @@ const NAV: { id: AppView | "sparks"; label: string }[] = [
   { id: "leaderboard", label: "Daily XP Board" },
   { id: "sparks", label: "Sparks" },
   { id: "achievements", label: "Achievements" },
-];
+].filter((item) => item.id !== "leaderboard" || isDailyXpUiEnabled());
 
 interface AppDrawerProps {
   open: boolean;
