@@ -149,6 +149,7 @@ const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
   "knock-out",
   "retro-blocks",
   "zeno",
+  "2048",
 ]);
 
 /** Name/id aliases that map onto a preview-video folder slug. */
@@ -294,6 +295,9 @@ function resolvePreviewVideoFolder(game: Game): string | null {
     }
     if (raw.includes("zeno") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("zeno")) {
       return "zeno";
+    }
+    if (raw.includes("2048") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("2048")) {
+      return "2048";
     }
   }
 
