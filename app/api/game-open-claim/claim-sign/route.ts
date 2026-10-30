@@ -18,7 +18,7 @@ import {
   assertLiveGame,
   GameOpenClaimError,
   getGameOpenClaimStatus,
-  isGameOpenClaimDayOpen,
+  areNewGameOpenClaimsOpen,
   requireGameOpenCampaign,
   reserveGameOpenClaim,
 } from "@/lib/game-open-claim-server";
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
-    if (!(await isGameOpenClaimDayOpen())) {
+    if (!(await areNewGameOpenClaimsOpen())) {
       throw new GameOpenClaimError(
         "Already reached today's claim limit.",
         "DAILY_CAP"

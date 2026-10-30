@@ -356,7 +356,9 @@ export default function GamePageClient() {
             msg.includes("already") ||
             msg.includes("claimed") ||
             msg.includes("too soon") ||
-            msg.includes("in progress");
+            msg.includes("in progress") ||
+            msg.includes("prize pool") ||
+            msg.includes("insufficienttreasury");
           if (!claimUnavailable) throw claimErr;
           setNeedsClaim(false);
         }

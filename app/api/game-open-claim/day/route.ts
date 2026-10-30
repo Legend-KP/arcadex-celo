@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isGameOpenClaimEnabled } from "@/lib/feature-flags";
 import { gameOpenClaimDayKey } from "@/lib/game-open-claim";
-import { isGameOpenClaimDayOpen } from "@/lib/game-open-claim-server";
+import { areNewGameOpenClaimsOpen } from "@/lib/game-open-claim-server";
 import {
   checkRateLimit,
   getClientIp,
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const claimsOpen = await isGameOpenClaimDayOpen();
+    const claimsOpen = await areNewGameOpenClaimsOpen();
     return NextResponse.json({
       ok: true,
       claimsOpen,

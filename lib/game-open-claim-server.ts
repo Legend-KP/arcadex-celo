@@ -22,7 +22,12 @@ import {
   writePath,
 } from "@/lib/rtdb-server";
 import { readStreakProgress } from "@/lib/arcadex-rewards-verify";
-import { CAMPAIGN_TYPE_SHUFFLE } from "@/lib/arcadex-rewards";
+import { getCeloPublicClient } from "@/lib/celo-public-client";
+import {
+  ARCADEX_REWARDS_ABI,
+  ARCADEX_REWARDS_CONTRACT_ADDRESS,
+  CAMPAIGN_TYPE_SHUFFLE,
+} from "@/lib/arcadex-rewards";
 
 export class GameOpenClaimError extends Error {
   constructor(
@@ -130,6 +135,35 @@ export async function isGameOpenClaimDayOpen(
   return count < GAME_OPEN_CLAIM_DAILY_CAP;
 }
 
+const POOL_CACHE_MS = 20_000;
+let poolCache: { at: number; open: boolean } | null = null;
+
+/** True while unreserved USDT can fund one new 0.012 game-open claim. */
+export async function isGameOpenPoolOpen(): Promise<boolean> {
+  const now = Date.now();
+  if (poolCache && now - poolCache.at < POOL_CACHE_MS) return poolCache.open;
+  try {
+    const available = (await getCeloPublicClient().readContract({
+      address: ARCADEX_REWARDS_CONTRACT_ADDRESS,
+      abi: ARCADEX_REWARDS_ABI,
+      functionName: "availableUSDT",
+    })) as bigint;
+    const open = available >= BigInt(GAME_OPEN_CLAIM_AMOUNT_MICRO);
+    poolCache = { at: now, open };
+    return open;
+  } catch {
+    return poolCache?.open ?? true;
+  }
+}
+
+/** New claims need both a remaining daily slot and enough unreserved USDT. */
+export async function areNewGameOpenClaimsOpen(
+  now = Date.now()
+): Promise<boolean> {
+  if (!(await isGameOpenClaimDayOpen(now))) return false;
+  return isGameOpenPoolOpen();
+}
+
 export async function assertLiveGame(gameId: string): Promise<void> {
   const id = gameId.trim();
   if (!id) {
@@ -176,7 +210,7 @@ export async function getGameOpenClaimStatus(
 }> {
   const utcDay = gameOpenClaimDayKey();
   const amountUsdt = GAME_OPEN_CLAIM_USDT;
-  const claimsOpen = await isGameOpenClaimDayOpen();
+  const claimsOpen = await areNewGameOpenClaimsOpen();
   const campaignId = await resolveGameOpenCampaignIdForGame(
     gameId,
     gameNameHint
