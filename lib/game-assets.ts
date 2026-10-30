@@ -150,6 +150,7 @@ const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
   "retro-blocks",
   "zeno",
   "2048",
+  "knife-throw",
 ]);
 
 /** Name/id aliases that map onto a preview-video folder slug. */
@@ -188,6 +189,9 @@ const PREVIEW_VIDEO_FOLDER_ALIASES: Record<string, string> = {
   retroblocks: "retro-blocks",
   "retro-block": "retro-blocks",
   retroblock: "retro-blocks",
+  knife: "knife-throw",
+  knifethrow: "knife-throw",
+  "knife-throw-game": "knife-throw",
 };
 
 export type GameVideoSources = {
@@ -298,6 +302,12 @@ function resolvePreviewVideoFolder(game: Game): string | null {
     }
     if (raw.includes("2048") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("2048")) {
       return "2048";
+    }
+    if (
+      (raw.includes("knife-throw") || raw.includes("knifethrow") || raw.includes("knife")) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("knife-throw")
+    ) {
+      return "knife-throw";
     }
   }
 
@@ -659,6 +669,10 @@ const GAME_TUTORIAL_BY_FOLDER: Record<string, string> = {
   "retro-block": "/tutorials/RETRO-BLOCKS.webp",
   retroblock: "/tutorials/RETRO-BLOCKS.webp",
   zeno: "/tutorials/ZENO.webp",
+  "knife-throw": "/tutorials/KNIFE-THROW.webp",
+  knifethrow: "/tutorials/KNIFE-THROW.webp",
+  knife: "/tutorials/KNIFE-THROW.webp",
+  "knife-throw-game": "/tutorials/KNIFE-THROW.webp",
 };
 
 function resolveTutorialKey(game: Game): string {
@@ -735,6 +749,9 @@ export function getGameTutorialCandidates(game: Game): string[] {
   if (nameSlug.includes("zeno") || (!isFirestoreAutoId(id) && id.includes("zeno"))) {
     push(GAME_TUTORIAL_BY_FOLDER.zeno);
   }
+  if (nameSlug.includes("knife") || (!isFirestoreAutoId(id) && id.includes("knife"))) {
+    push(GAME_TUTORIAL_BY_FOLDER["knife-throw"]);
+  }
   const hyphen = key.toUpperCase();
   const spaced = key.replace(/-/g, " ").toUpperCase();
   push(`/tutorials/${hyphen}.webp`);
@@ -783,6 +800,9 @@ export function getGameTutorialCandidates(game: Game): string[] {
   }
   if (nameSlug.includes("zeno") || key.includes("zeno")) {
     push("/tutorials/ZENO.webp");
+  }
+  if (nameSlug.includes("knife") || key.includes("knife")) {
+    push("/tutorials/KNIFE-THROW.webp");
   }
 
   return out;
