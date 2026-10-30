@@ -1,12 +1,14 @@
 "use client";
 
+import { formatGameOpenUsdt, GAME_OPEN_CLAIM_BANNER_USDT } from "@/lib/game-open-claim";
+
 interface EarnNowHomeBannerProps {
   onOpen?: () => void;
 }
 
 /** Home promo strip — replaces Daily XP banner (code kept, UI gated). */
 export default function EarnNowHomeBanner({ onOpen }: EarnNowHomeBannerProps) {
-  const rewardLabel = "$0.12 USDT";
+  const rewardLabel = `$${formatGameOpenUsdt(GAME_OPEN_CLAIM_BANNER_USDT)} USDT`;
   return (
     <section className="daily-xp-home-banner" aria-label="Earn everyday reward">
       <div className="daily-xp-home-banner__card">

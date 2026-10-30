@@ -14,7 +14,7 @@
     "29": "Hungry Hole",
     "30": "Fruit Swipe",
     "31": "Block Blast",
-    "32": "Line Link",
+    "32": "Knife Throw",
     "35": "Knockout",
     "36": "Retro Blocks",
     "37": "Zeno",
@@ -22,9 +22,9 @@
   },
   "legacyCampaignsFrozenAt005": "7-19",
   "maxSinglePayout": 12000,
-  "amountUsdt": 0.012,
+  "amountUsdt": 0.01,
   "envOptional": {
-    "GAME_OPEN_CAMPAIGN_MAP": "{\"reflector\":20,\"guardian-of-earth\":21,\"free-fall\":22,\"infinite\":23,\"dot-connect\":24,\"coin\":25,\"basedrop\":26,\"orbit-flow\":27,\"jelly-jumble\":28,\"hungry-hole\":29,\"fruit-swipe\":30,\"block-blast\":31,\"line-link\":32,\"knockout\":35,\"knock-out\":35,\"retro-blocks\":36,\"retroblocks\":36,\"zeno\":37,\"2048\":38}"
+    "GAME_OPEN_CAMPAIGN_MAP": "{\"reflector\":20,\"guardian-of-earth\":21,\"free-fall\":22,\"infinite\":23,\"dot-connect\":24,\"coin\":25,\"basedrop\":26,\"orbit-flow\":27,\"jelly-jumble\":28,\"hungry-hole\":29,\"fruit-swipe\":30,\"block-blast\":31,\"knife-throw\":32,\"knifethrow\":32,\"knockout\":35,\"knock-out\":35,\"retro-blocks\":36,\"retroblocks\":36,\"zeno\":37,\"2048\":38}"
   },
-  "note": "Per-game claim is 0.012 USDT (12000 micro). Campaigns 35–38 use the same amount. maxSinglePayout on those campaigns must be >= 12000."
+  "note": "Per-game claim is 0.01 USDT (10000 micro). Existing campaign ceilings stay at 12000 because they are frozen after the first player. 10000 is within that ceiling."
 }

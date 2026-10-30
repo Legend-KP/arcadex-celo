@@ -20250,7 +20250,7 @@ a { color: inherit; text-decoration: none; }
   transform: scale(0.98);
 }
 
-/* Earn Daily list — per-game 0.012 USDT, outside the promo popup cap. */
+/* Earn Daily list — per-game 0.01 USDT, outside the promo popup cap. */
 .daily-earn-backdrop {
   position: fixed;
   inset: 0;

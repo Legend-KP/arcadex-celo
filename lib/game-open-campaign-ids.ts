@@ -1,5 +1,5 @@
 /**
- * Client-safe $0.012 open-claim campaign ids.
+ * Client-safe $0.01 open-claim campaign ids.
  * Slug map + sync matching only — no catalog or server imports.
  *
  * Resolution order:
@@ -69,9 +69,10 @@ export const DEFAULT_GAME_OPEN_CAMPAIGN_BY_SLUG: Record<string, number> = {
   // 31 Block Blast (was 18)
   "block-blast": 31,
   blockblast: 31,
-  // 32 Line Link (was 19)
-  "line-link": 32,
-  linelink: 32,
+  // 32 Knife Throw (was Line Link)
+  "knife-throw": 32,
+  knifethrow: 32,
+  "knife-throw-game": 32,
   // 35 Knockout
   knockout: 35,
   "knock-out": 35,

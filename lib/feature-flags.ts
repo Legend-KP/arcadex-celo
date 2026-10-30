@@ -30,7 +30,7 @@ export function isAutoOnboardingEnabled(): boolean {
   return envFlag("NEXT_PUBLIC_AUTO_ONBOARDING_ENABLED", false);
 }
 
-/** Per-game $0.12 USDT open claim (on-chain spin+claim). */
+/** Per-game $0.01 USDT open claim (on-chain spin+claim). */
 export function isGameOpenClaimEnabled(): boolean {
   return envFlag("NEXT_PUBLIC_GAME_OPEN_CLAIM_ENABLED", true);
 }

@@ -24,7 +24,7 @@ import {
 } from "@/lib/arcadex-tx-hub";
 import { formatChainError } from "@/lib/celo-public-client";
 import { isGameOpenClaimEnabled } from "@/lib/feature-flags";
-import { GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
+import { formatGameOpenUsdt, GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
 import {
   claimGameOpenReward,
   claimPendingGameOpenReward,
@@ -67,7 +67,7 @@ export default function GamePageClient() {
     null
   );
   const [claimAmountLabel, setClaimAmountLabel] = useState(
-    `${GAME_OPEN_CLAIM_USDT.toFixed(3)} USDT`
+    `${formatGameOpenUsdt(GAME_OPEN_CLAIM_USDT)} USDT`
   );
   const [claimStatusLoaded, setClaimStatusLoaded] = useState(
     !isGameOpenClaimEnabled()
@@ -254,7 +254,7 @@ export default function GamePageClient() {
             pending = won.pending;
             if (won.pending && won.rewardAmount > BigInt(0)) {
               const usdt = Number(won.rewardAmount) / 1_000_000;
-              setClaimAmountLabel(`${usdt.toFixed(3)} USDT`);
+              setClaimAmountLabel(`${formatGameOpenUsdt(usdt)} USDT`);
             }
           } catch {
             pending = false;

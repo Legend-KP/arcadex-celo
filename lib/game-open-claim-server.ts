@@ -138,7 +138,7 @@ export async function isGameOpenClaimDayOpen(
 const POOL_CACHE_MS = 20_000;
 let poolCache: { at: number; open: boolean } | null = null;
 
-/** True while unreserved USDT can fund one new 0.012 game-open claim. */
+/** True while unreserved USDT can fund one new 0.01 game-open claim. */
 export async function isGameOpenPoolOpen(): Promise<boolean> {
   const now = Date.now();
   if (poolCache && now - poolCache.at < POOL_CACHE_MS) return poolCache.open;

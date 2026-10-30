@@ -34,7 +34,7 @@ export function useGameOpenClaimMap(
 }
 
 /**
- * Per live game: whether today's $0.012 open claim is still open.
+ * Per live game: whether today's $0.01 open claim is still open.
  * `loaded` is true once the first fetch for this wallet + game list settles.
  */
 export function useGameOpenClaimDetails(

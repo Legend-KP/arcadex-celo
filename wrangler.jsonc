@@ -35,7 +35,7 @@
 				"DAILY_XP_CAMPAIGN_ID": "6",
 				"NEXT_PUBLIC_DAILY_XP_CAMPAIGN_ID": "6",
 				"NEXT_PUBLIC_GAME_OPEN_CLAIM_ENABLED": "1",
-				"GAME_OPEN_CAMPAIGN_MAP": "{\"reflector\":20,\"guardian-of-earth\":21,\"free-fall\":22,\"infinite\":23,\"dot-connect\":24,\"coin\":25,\"basedrop\":26,\"orbit-flow\":27,\"jelly-jumble\":28,\"hungry-hole\":29,\"fruit-swipe\":30,\"block-blast\":31,\"line-link\":32,\"knockout\":35,\"knock-out\":35,\"retro-blocks\":36,\"retroblocks\":36,\"zeno\":37,\"2048\":38}",
+				"GAME_OPEN_CAMPAIGN_MAP": "{\"reflector\":20,\"guardian-of-earth\":21,\"free-fall\":22,\"infinite\":23,\"dot-connect\":24,\"coin\":25,\"basedrop\":26,\"orbit-flow\":27,\"jelly-jumble\":28,\"hungry-hole\":29,\"fruit-swipe\":30,\"block-blast\":31,\"knife-throw\":32,\"knifethrow\":32,\"knockout\":35,\"knock-out\":35,\"retro-blocks\":36,\"retroblocks\":36,\"zeno\":37,\"2048\":38}",
 				"NEXT_PUBLIC_DAILY_STREAK_UI_ENABLED": "0",
 				"NEXT_PUBLIC_DAILY_XP_UI_ENABLED": "0",
 				"NEXT_PUBLIC_AUTO_ONBOARDING_ENABLED": "0"
@@ -114,7 +114,7 @@
 				"DAILY_XP_CAMPAIGN_ID": "6",
 				"NEXT_PUBLIC_DAILY_XP_CAMPAIGN_ID": "6",
 				"NEXT_PUBLIC_GAME_OPEN_CLAIM_ENABLED": "1",
-				"GAME_OPEN_CAMPAIGN_MAP": "{\"reflector\":20,\"guardian-of-earth\":21,\"free-fall\":22,\"infinite\":23,\"dot-connect\":24,\"coin\":25,\"basedrop\":26,\"orbit-flow\":27,\"jelly-jumble\":28,\"hungry-hole\":29,\"fruit-swipe\":30,\"block-blast\":31,\"line-link\":32,\"knockout\":35,\"knock-out\":35,\"retro-blocks\":36,\"retroblocks\":36,\"zeno\":37,\"2048\":38}",
+				"GAME_OPEN_CAMPAIGN_MAP": "{\"reflector\":20,\"guardian-of-earth\":21,\"free-fall\":22,\"infinite\":23,\"dot-connect\":24,\"coin\":25,\"basedrop\":26,\"orbit-flow\":27,\"jelly-jumble\":28,\"hungry-hole\":29,\"fruit-swipe\":30,\"block-blast\":31,\"knife-throw\":32,\"knifethrow\":32,\"knockout\":35,\"knock-out\":35,\"retro-blocks\":36,\"retroblocks\":36,\"zeno\":37,\"2048\":38}",
 				"NEXT_PUBLIC_DAILY_STREAK_UI_ENABLED": "0",
 				"NEXT_PUBLIC_DAILY_XP_UI_ENABLED": "0",
 				"NEXT_PUBLIC_AUTO_ONBOARDING_ENABLED": "0"

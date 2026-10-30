@@ -26,8 +26,8 @@ const LINES: Array<[string, string]> = [
   ["fruit", "Swipe the fruit, keep the combo"],
   ["block-blast", "Blast blocks, open the board"],
   ["blockblast", "Blast blocks, open the board"],
-  ["line-link", "Link the lines, clear the path"],
-  ["linelink", "Link the lines, clear the path"],
+  ["knife-throw", "Throw the knives, hit the target"],
+  ["knifethrow", "Throw the knives, hit the target"],
 ];
 
 const SORTED = [...LINES].sort((a, b) => b[0].length - a[0].length);

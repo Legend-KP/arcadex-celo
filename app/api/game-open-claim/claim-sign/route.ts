@@ -138,7 +138,7 @@ export async function POST(request: Request) {
     const maxPayout = BigInt(progress.campaign.maxSinglePayout || "0");
     if (maxPayout > BigInt(0) && GAME_OPEN_CLAIM_REWARD_AMOUNT > maxPayout) {
       return NextResponse.json(
-        { error: "Campaign maxSinglePayout is too low for 0.12 USDT.", code: "BAD_PAYOUT" },
+        { error: "Campaign maxSinglePayout is too low for 0.01 USDT.", code: "BAD_PAYOUT" },
         { status: 400 }
       );
     }

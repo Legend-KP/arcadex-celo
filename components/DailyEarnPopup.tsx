@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { dailyEarnLine } from "@/lib/daily-earn-lines";
 import { gameSquareImageCandidates, preloadGameMenuAssets } from "@/lib/game-assets";
-import { GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
+import { formatGameOpenUsdt, GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
 import { playTouchSfx } from "@/lib/sfx";
 import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
@@ -15,8 +15,7 @@ export const DAILY_EARN_OVERLAY_ID = "daily-earn";
 const EARN_DAILY_BANNER = "/earn-daily-banner.jpg?v=2";
 const USDT_MARK = "/usdt-mark.svg";
 
-/** Three decimals so 0.012 never displays as 0.01. */
-const EARN_DAILY_AMOUNT = `${GAME_OPEN_CLAIM_USDT.toFixed(3)} USDT`;
+const EARN_DAILY_AMOUNT = `${formatGameOpenUsdt(GAME_OPEN_CLAIM_USDT)} USDT`;
 
 interface DailyEarnPopupProps {
   open: boolean;

@@ -1,7 +1,7 @@
 /**
  * Option C: one ArcadeXRewards SHUFFLE campaign per live game.
  * Campaign IDs 20–32 plus 35 (Knockout), 36 (Retro Blocks), 37 (Zeno),
- * and 38 (2048) at $0.012 USDT. 39–40 exist on-chain with the same payout
+ * and 38 (2048) at $0.01 USDT. 39–40 exist on-chain with the same payout
  * and are not tied to a game yet.
  * Legacy 7–19 are frozen at $0.005 after participants (ParamsFrozen).
  *
@@ -48,7 +48,7 @@ export async function resolveGameOpenCampaignIdForGame(
   return matchGameOpenCampaignId(game.id, game.name);
 }
 
-/** Shared setCampaign economics for every per-game open campaign ($0.012 USDT). */
+/** Shared setCampaign economics for every per-game open campaign ($0.01 USDT). */
 export const GAME_OPEN_SET_CAMPAIGN_TEMPLATE = {
   campaignType: 1 as const,
   active: true,

@@ -10,7 +10,7 @@ import {
 } from "@/lib/game-assets";
 import { formatContestCountdown } from "@/lib/contest";
 import { formatPlayCount } from "@/lib/format-play-count";
-import { GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
+import { formatGameOpenUsdt, GAME_OPEN_CLAIM_USDT } from "@/lib/game-open-claim";
 import {
   Game,
   gameHasContestLive,
@@ -70,7 +70,7 @@ export default function GameCard({
     game.contestEndsAt,
     showContestTimer && contestLive
   );
-  const claimLabel = `Claim $${GAME_OPEN_CLAIM_USDT.toFixed(3)}`;
+  const claimLabel = `Claim $${formatGameOpenUsdt(GAME_OPEN_CLAIM_USDT)}`;
 
   const thumbCandidates = useMemo(
     () => gameAssetCandidates(game, "thumbnail"),
