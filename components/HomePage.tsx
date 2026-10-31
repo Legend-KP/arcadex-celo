@@ -27,6 +27,7 @@ import {
 } from "@/lib/feature-flags";
 import {
   readCachedGamesList,
+  shouldBackgroundRefreshGamesList,
   writeCachedGamesList,
 } from "@/lib/games-list-client-cache";
 import { fetchHomeShell } from "@/lib/home-client";
@@ -347,9 +348,9 @@ export default function HomePage() {
     }
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        void loadGames(true);
-      }
+      if (document.visibilityState !== "visible") return;
+      if (!shouldBackgroundRefreshGamesList()) return;
+      void loadGames(true);
     };
 
     document.addEventListener("visibilitychange", onVisible);

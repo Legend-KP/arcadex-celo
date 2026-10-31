@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { isGameOpenClaimEnabled } from "@/lib/feature-flags";
 import {
   fetchGameOpenClaimDay,
-  fetchGameOpenClaimStatus,
+  fetchGameOpenClaimStatuses,
 } from "@/lib/game-open-claim-client";
 import type { Game } from "@/types";
 import { gameIsLive } from "@/types";
@@ -48,6 +48,9 @@ export function useGameOpenClaimDetails(
   const [byId, setById] = useState<Record<string, GameOpenClaimUiState>>({});
   const [loaded, setLoaded] = useState(false);
   const [claimsOpen, setClaimsOpen] = useState(true);
+  const lastBatchAt = useRef(0);
+  const claimsOpenRef = useRef(claimsOpen);
+  claimsOpenRef.current = claimsOpen;
   const liveKey = useMemo(
     () =>
       games
@@ -62,6 +65,8 @@ export function useGameOpenClaimDetails(
       setClaimsOpen(true);
       return;
     }
+    // Signed-in home gets claimsOpen from the batched status call.
+    if (walletAddress) return;
     let cancelled = false;
     void fetchGameOpenClaimDay()
       .then((day) => {
@@ -73,7 +78,7 @@ export function useGameOpenClaimDetails(
     return () => {
       cancelled = true;
     };
-  }, [liveKey]);
+  }, [liveKey, walletAddress]);
 
   useEffect(() => {
     if (!isGameOpenClaimEnabled() || !liveKey) {
@@ -91,7 +96,10 @@ export function useGameOpenClaimDetails(
     if (!walletAddress) {
       setById(
         Object.fromEntries(
-          live.map((g) => [g.id, { claimable: claimsOpen, claimed: false }])
+          live.map((g) => [
+            g.id,
+            { claimable: claimsOpenRef.current, claimed: false },
+          ])
         )
       );
       setLoaded(true);
@@ -101,46 +109,88 @@ export function useGameOpenClaimDetails(
     let cancelled = false;
     setLoaded(false);
 
-    async function load() {
-      const entries = await Promise.all(
-        live.map(async (game) => {
-          try {
-            const status = await fetchGameOpenClaimStatus(
-              walletAddress,
-              game.id,
-              game.name
-            );
-            const dayOpen = claimsOpen && status.claimsOpen !== false;
-            const claimable =
-              dayOpen &&
-              !status.claimed &&
-              (status.canClaim ||
-                status.payoutsEnabled ||
-                status.campaignId != null);
-            return [game.id, { claimable, claimed: status.claimed }] as const;
-          } catch {
-            // Optimistic while claims are open. A closed day stays on Start Game.
-            return [game.id, { claimable: claimsOpen, claimed: false }] as const;
-          }
-        })
-      );
-      if (!cancelled) {
-        setById(Object.fromEntries(entries));
-        setLoaded(true);
+    function applyBatch(
+      rows: Awaited<ReturnType<typeof fetchGameOpenClaimStatuses>>
+    ) {
+      const dayOpen = rows.claimsOpen;
+      const entries = live.map((game) => {
+        const status = rows.byGameId[game.id];
+        if (!status) {
+          return [game.id, { claimable: dayOpen, claimed: false }] as const;
+        }
+        const claimable =
+          dayOpen &&
+          status.claimsOpen !== false &&
+          !status.claimed &&
+          (status.canClaim ||
+            status.payoutsEnabled ||
+            status.campaignId != null);
+        return [game.id, { claimable, claimed: status.claimed }] as const;
+      });
+      setClaimsOpen(dayOpen);
+      setById(Object.fromEntries(entries));
+      setLoaded(true);
+    }
+
+    async function load(force: boolean) {
+      if (
+        !force &&
+        lastBatchAt.current > 0 &&
+        Date.now() - lastBatchAt.current < 60_000
+      ) {
+        return;
+      }
+      lastBatchAt.current = Date.now();
+      try {
+        const rows = await fetchGameOpenClaimStatuses(walletAddress, live);
+        if (!cancelled) applyBatch(rows);
+      } catch {
+        if (!cancelled) {
+          setById(
+            Object.fromEntries(
+              live.map((game) => [
+                game.id,
+                { claimable: claimsOpenRef.current, claimed: false },
+              ])
+            )
+          );
+          setLoaded(true);
+          lastBatchAt.current = 0;
+        }
       }
     }
 
-    void load();
+    void load(true);
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") void load();
+      if (document.visibilityState === "visible") void load(false);
+    };
+    const onClaimed = (event: Event) => {
+      const gameId = (event as CustomEvent<{ gameId?: string }>).detail?.gameId;
+      if (!gameId) return;
+      setById((prev) => ({
+        ...prev,
+        [gameId]: { claimable: false, claimed: true },
+      }));
     };
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("arcadex:game-open-claimed", onClaimed);
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("arcadex:game-open-claimed", onClaimed);
     };
+  }, [walletAddress, liveKey]);
+
+  useEffect(() => {
+    if (walletAddress || !liveKey || !isGameOpenClaimEnabled()) return;
+    const live = liveKey.split("|").map((entry) => entry.split("\0")[0]);
+    setById(
+      Object.fromEntries(
+        live.map((id) => [id, { claimable: claimsOpen, claimed: false }])
+      )
+    );
   }, [walletAddress, liveKey, claimsOpen]);
 
   return { byId, loaded, claimsOpen };

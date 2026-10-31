@@ -331,6 +331,11 @@ export default function GamePageClient() {
         setPendingCampaignId(null);
         setNeedsClaim(false);
         if (result.txHash) showConfettiBriefly();
+        window.dispatchEvent(
+          new CustomEvent("arcadex:game-open-claimed", {
+            detail: { gameId: game.id },
+          })
+        );
         await enterGame();
         return;
       }
@@ -346,7 +351,14 @@ export default function GamePageClient() {
             game.name
           );
           setNeedsClaim(false);
-          if (result.claimed) showConfettiBriefly();
+          if (result.claimed) {
+            showConfettiBriefly();
+            window.dispatchEvent(
+              new CustomEvent("arcadex:game-open-claimed", {
+                detail: { gameId: game.id },
+              })
+            );
+          }
           await enterGame();
           return;
         } catch (claimErr) {

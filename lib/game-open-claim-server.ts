@@ -23,6 +23,8 @@ import {
 } from "@/lib/rtdb-server";
 import { readStreakProgress } from "@/lib/arcadex-rewards-verify";
 import { getCeloPublicClient } from "@/lib/celo-public-client";
+import { getAddress, type Address } from "viem";
+import { matchGameOpenCampaignId } from "@/lib/game-open-campaign-ids";
 import {
   ARCADEX_REWARDS_ABI,
   ARCADEX_REWARDS_CONTRACT_ADDRESS,
@@ -286,6 +288,294 @@ export async function getGameOpenClaimStatus(
   }
 }
 
+export type GameOpenClaimStatusRow = {
+  claimed: boolean;
+  amountUsdt: number;
+  campaignId: number | null;
+  utcDay: string;
+  payoutsEnabled: boolean;
+  canClaim: boolean;
+  claimsOpen: boolean;
+};
+
+const CAMPAIGN_CACHE_MS = 10 * 60_000;
+const STATUS_BATCH_CACHE_MS = 20_000;
+const STATUS_BATCH_MAX_GAMES = 40;
+
+type CampaignSnap = { payoutsEnabled: boolean; at: number };
+
+const campaignSnapCache = new Map<number, CampaignSnap>();
+const statusBatchCache = new Map<
+  string,
+  { at: number; value: GameOpenClaimBatch }
+>();
+
+export type GameOpenClaimBatch = {
+  utcDay: string;
+  claimsOpen: boolean;
+  byGameId: Record<string, GameOpenClaimStatusRow>;
+};
+
+function freshCampaignSnap(campaignId: number): CampaignSnap | null {
+  const snap = campaignSnapCache.get(campaignId);
+  if (!snap || Date.now() - snap.at >= CAMPAIGN_CACHE_MS) return null;
+  return snap;
+}
+
+function rememberCampaignSnap(campaignId: number, payoutsEnabled: boolean): void {
+  campaignSnapCache.set(campaignId, { payoutsEnabled, at: Date.now() });
+}
+
+function campaignPayoutsEnabled(result: unknown): boolean | null {
+  if (!Array.isArray(result) || result.length < 4) return null;
+  const active = Boolean(result[0]);
+  const cancelled = Boolean(result[1]);
+  const campaignType = Number(result[3]);
+  return (
+    active && !cancelled && campaignType === CAMPAIGN_TYPE_SHUFFLE
+  );
+}
+
+function progressFromChain(
+  result: unknown
+): { claimed: boolean; canCheckIn: boolean } | null {
+  if (!Array.isArray(result) || result.length < 6) return null;
+  const lastCheckInAt = Number(result[1]);
+  const canCheckIn = Boolean(result[5]);
+  return {
+    claimed: !canCheckIn && Number.isFinite(lastCheckInAt) && lastCheckInAt > 0,
+    canCheckIn,
+  };
+}
+
+function dropStatusBatchCache(wallet: string): void {
+  const prefix = `${wallet}|`;
+  for (const key of statusBatchCache.keys()) {
+    if (key.startsWith(prefix)) statusBatchCache.delete(key);
+  }
+}
+
+async function readLedgerClaimedGameIds(
+  wallet: string,
+  utcDay: string,
+  gameIds: string[]
+): Promise<Set<string>> {
+  if (gameIds.length === 0) return new Set();
+
+  if (await useD1PlayerData()) {
+    const db = await requireD1();
+    const placeholders = gameIds.map(() => "?").join(", ");
+    const { results } = await db
+      .prepare(
+        `SELECT game_id FROM game_open_claims
+         WHERE wallet = ? AND utc_day = ? AND status = 'claimed'
+           AND game_id IN (${placeholders})`
+      )
+      .bind(wallet, utcDay, ...gameIds)
+      .all<{ game_id: string }>();
+    return new Set((results ?? []).map((row) => row.game_id));
+  }
+
+  const dayNode = await readPath<Record<string, GameOpenClaimRecord | null>>(
+    `gameOpenClaims/${wallet.toLowerCase()}/${utcDay}`
+  );
+  const claimed = new Set<string>();
+  if (!dayNode || typeof dayNode !== "object") return claimed;
+  for (const id of gameIds) {
+    if (dayNode[id]?.status === "claimed") claimed.add(id);
+  }
+  return claimed;
+}
+
+/**
+ * One Worker invocation for the whole home grid.
+ * Per-game /status calls each paid a full Next.js boot plus two chain reads.
+ */
+export async function listGameOpenClaimStatuses(
+  walletAddress: string,
+  games: { id: string; name?: string }[]
+): Promise<GameOpenClaimBatch> {
+  const utcDay = gameOpenClaimDayKey();
+  const amountUsdt = GAME_OPEN_CLAIM_USDT;
+  const seen = new Set<string>();
+  const unique: { id: string; name?: string }[] = [];
+  for (const game of games) {
+    const id = game.id?.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    unique.push({ id, name: game.name });
+    if (unique.length >= STATUS_BATCH_MAX_GAMES) break;
+  }
+
+  const wallet = isWalletAddress(walletAddress)
+    ? normalizeWalletAddress(walletAddress)
+    : "";
+  const cacheKey = `${wallet}|${utcDay}|${unique
+    .map((game) => game.id)
+    .sort()
+    .join(",")}`;
+  const cached = statusBatchCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < STATUS_BATCH_CACHE_MS) {
+    return cached.value;
+  }
+
+  const claimsOpen = await areNewGameOpenClaimsOpen();
+  const byGameId: Record<string, GameOpenClaimStatusRow> = {};
+  const withCampaign: { id: string; campaignId: number }[] = [];
+
+  for (const game of unique) {
+    const campaignId = matchGameOpenCampaignId(game.id, game.name);
+    if (campaignId == null) {
+      byGameId[game.id] = {
+        claimed: false,
+        amountUsdt,
+        campaignId: null,
+        utcDay,
+        payoutsEnabled: false,
+        canClaim: false,
+        claimsOpen,
+      };
+      continue;
+    }
+    withCampaign.push({ id: game.id, campaignId });
+  }
+
+  if (!wallet) {
+    for (const game of withCampaign) {
+      byGameId[game.id] = {
+        claimed: false,
+        amountUsdt,
+        campaignId: game.campaignId,
+        utcDay,
+        payoutsEnabled: true,
+        canClaim: claimsOpen,
+        claimsOpen,
+      };
+    }
+    const value = { utcDay, claimsOpen, byGameId };
+    statusBatchCache.set(cacheKey, { at: Date.now(), value });
+    return value;
+  }
+
+  const ledgerClaimed = await readLedgerClaimedGameIds(
+    wallet,
+    utcDay,
+    withCampaign.map((game) => game.id)
+  );
+  const needsChain: { id: string; campaignId: number }[] = [];
+  for (const game of withCampaign) {
+    if (ledgerClaimed.has(game.id)) {
+      byGameId[game.id] = {
+        claimed: true,
+        amountUsdt,
+        campaignId: game.campaignId,
+        utcDay,
+        payoutsEnabled: true,
+        canClaim: false,
+        claimsOpen,
+      };
+      continue;
+    }
+    needsChain.push(game);
+  }
+
+  const player = getAddress(wallet) as Address;
+  type TaggedCall =
+    | { kind: "campaign"; campaignId: number }
+    | { kind: "progress"; gameId: string };
+  const tagged: TaggedCall[] = [];
+  const contracts: {
+    address: typeof ARCADEX_REWARDS_CONTRACT_ADDRESS;
+    abi: typeof ARCADEX_REWARDS_ABI;
+    functionName: "getCampaign" | "getProgress";
+    args: readonly [bigint] | readonly [Address, bigint];
+  }[] = [];
+
+  const campaignIds = [...new Set(needsChain.map((game) => game.campaignId))];
+  for (const campaignId of campaignIds) {
+    if (freshCampaignSnap(campaignId)) continue;
+    tagged.push({ kind: "campaign", campaignId });
+    contracts.push({
+      address: ARCADEX_REWARDS_CONTRACT_ADDRESS,
+      abi: ARCADEX_REWARDS_ABI,
+      functionName: "getCampaign",
+      args: [BigInt(campaignId)],
+    });
+  }
+  for (const game of needsChain) {
+    tagged.push({ kind: "progress", gameId: game.id });
+    contracts.push({
+      address: ARCADEX_REWARDS_CONTRACT_ADDRESS,
+      abi: ARCADEX_REWARDS_ABI,
+      functionName: "getProgress",
+      args: [player, BigInt(game.campaignId)],
+    });
+  }
+
+  const progressByGame = new Map<
+    string,
+    { claimed: boolean; canCheckIn: boolean }
+  >();
+
+  if (contracts.length > 0) {
+    try {
+      const results = await getCeloPublicClient().multicall({
+        contracts,
+        allowFailure: true,
+      });
+      results.forEach((entry, index) => {
+        const tag = tagged[index];
+        if (!tag || entry.status !== "success") return;
+        if (tag.kind === "campaign") {
+          const enabled = campaignPayoutsEnabled(entry.result);
+          if (enabled != null) rememberCampaignSnap(tag.campaignId, enabled);
+          return;
+        }
+        const progress = progressFromChain(entry.result);
+        if (progress) progressByGame.set(tag.gameId, progress);
+      });
+    } catch {
+      // Same fallback as the single-game status route: still show Claim.
+    }
+  }
+
+  for (const game of needsChain) {
+    const snap = freshCampaignSnap(game.campaignId);
+    const progress = progressByGame.get(game.id);
+    if (!progress || !snap) {
+      byGameId[game.id] = {
+        claimed: false,
+        amountUsdt,
+        campaignId: game.campaignId,
+        utcDay,
+        payoutsEnabled: true,
+        canClaim: claimsOpen,
+        claimsOpen,
+      };
+      continue;
+    }
+    byGameId[game.id] = {
+      claimed: progress.claimed,
+      amountUsdt,
+      campaignId: game.campaignId,
+      utcDay,
+      payoutsEnabled: snap.payoutsEnabled,
+      canClaim: claimsOpen && snap.payoutsEnabled && progress.canCheckIn,
+      claimsOpen,
+    };
+  }
+
+  const value = { utcDay, claimsOpen, byGameId };
+  if (statusBatchCache.size > 200) {
+    const now = Date.now();
+    for (const [key, entry] of statusBatchCache) {
+      if (now - entry.at >= STATUS_BATCH_CACHE_MS) statusBatchCache.delete(key);
+    }
+  }
+  statusBatchCache.set(cacheKey, { at: Date.now(), value });
+  return value;
+}
+
 async function isLedgerClaimed(
   wallet: string,
   gameId: string,
@@ -375,6 +665,7 @@ export async function markGameOpenClaimed(opts: {
   const wallet = normalizeWalletAddress(opts.walletAddress);
   const utcDay = gameOpenClaimDayKey();
   const claimedAt = Date.now();
+  dropStatusBatchCache(wallet);
   const spinTx = opts.spinTx.toLowerCase();
   const claimTx = opts.claimTx?.toLowerCase() ?? null;
 

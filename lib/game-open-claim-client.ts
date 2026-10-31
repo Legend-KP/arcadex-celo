@@ -70,6 +70,57 @@ export async function fetchGameOpenClaimStatus(
   };
 }
 
+export async function fetchGameOpenClaimStatuses(
+  walletAddress: string,
+  games: { id: string; name?: string }[]
+): Promise<{
+  claimsOpen: boolean;
+  utcDay: string;
+  byGameId: Record<string, GameOpenClaimStatus>;
+}> {
+  const res = await fetch("/api/game-open-claim/statuses", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify({
+      walletAddress,
+      games: games.map((game) => ({
+        id: game.id,
+        name: game.name ?? "",
+      })),
+    }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    claimsOpen?: boolean;
+    utcDay?: string;
+    byGameId?: Record<string, GameOpenClaimStatus>;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error ?? "Could not load claim status.");
+  }
+  const byGameId: Record<string, GameOpenClaimStatus> = {};
+  for (const [id, row] of Object.entries(data.byGameId ?? {})) {
+    byGameId[id] = {
+      claimed: Boolean(row?.claimed),
+      amountUsdt:
+        typeof row?.amountUsdt === "number"
+          ? row.amountUsdt
+          : GAME_OPEN_CLAIM_USDT,
+      campaignId: typeof row?.campaignId === "number" ? row.campaignId : null,
+      utcDay: typeof row?.utcDay === "string" ? row.utcDay : "",
+      payoutsEnabled: Boolean(row?.payoutsEnabled),
+      canClaim: Boolean(row?.canClaim ?? (row?.payoutsEnabled && !row?.claimed)),
+      claimsOpen: row?.claimsOpen !== false,
+    };
+  }
+  return {
+    claimsOpen: data.claimsOpen !== false,
+    utcDay: typeof data.utcDay === "string" ? data.utcDay : "",
+    byGameId,
+  };
+}
+
 /** Shared UTC-day cap. Does not require a wallet. */
 export async function fetchGameOpenClaimDay(): Promise<{
   claimsOpen: boolean;

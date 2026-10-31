@@ -39,6 +39,8 @@ type CeloPublicClient = ReturnType<typeof createHttpClient>;
 
 let browserClient: CeloPublicClient | null = null;
 let browserClientIndex = 0;
+/** One client per isolate. Building a viem client on every chain read is CPU. */
+let serverClient: CeloPublicClient | null = null;
 
 function createBrowserPublicClient(): CeloPublicClient {
   const urls = getRpcUrls();
@@ -53,7 +55,8 @@ export function getCeloPublicClient(): CeloPublicClient {
     return browserClient;
   }
 
-  return createHttpClient(getRpcUrls()[0]!);
+  serverClient ??= createHttpClient(getRpcUrls()[0]!);
+  return serverClient;
 }
 
 /** Reset cached browser client and rotate to the next RPC URL. */

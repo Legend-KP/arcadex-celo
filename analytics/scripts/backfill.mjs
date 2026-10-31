@@ -40,7 +40,7 @@ async function postWithRetry(path, attempts = 8) {
       lastErr = err;
       const msg = err instanceof Error ? err.message : String(err);
       const transient =
-        /healthy|timeout|429|503|502|ECONNRESET|fetch failed|RPC Request failed/i.test(
+        /healthy|timeout|404|429|500|502|503|520|521|522|523|524|ECONNRESET|fetch failed|RPC Request failed/i.test(
           msg
         );
       console.warn(`attempt ${a}/${attempts} failed: ${msg.slice(0, 180)}`);
