@@ -1,4 +1,5 @@
 import { Game } from "@/types";
+import { BUNDLED_PUBLIC_ASSETS } from "@/lib/bundled-public-assets";
 import { injectImagePreload, preloadImage } from "@/lib/preload-image";
 
 /** Folder names under public/games/ for each title. */
@@ -49,7 +50,45 @@ const ROOT_GAME_LOGOS: Record<string, string> = {
   "free-fall": "/games/free-logo.webp",
   freefall: "/games/free-logo.webp",
   free: "/games/free-logo.webp",
+  "2048": "/games/2048-logo.webp",
+  zeno: "/games/zeno-logo.webp",
+  retro: "/games/retro-logo.webp",
+  "retro-blocks": "/games/retro-logo.webp",
+  knockout: "/games/knock-logo.webp",
+  "knock-out": "/games/knock-logo.webp",
+  reflector: "/games/reflector-logo.webp",
+  spiral: "/games/spiral-logo.webp",
+  "infinite-spiral": "/games/spiral-logo.webp",
+  goe: "/games/goe-logo.webp",
+  "guardian-of-earth": "/games/goe-logo.webp",
+  fruit: "/games/fruit-logo.webp",
+  "fruit-swipe": "/games/fruit-logo.webp",
+  hungry: "/games/hungry-logo.webp",
+  "hungry-hole": "/games/hungry-logo.webp",
+  knife: "/games/knife-logo.webp",
+  "knife-throw": "/games/knife-logo.webp",
+  tower: "/games/tower-logo.webp",
 };
+
+/** Remote URLs stay. Local /games, /thumbnails, and /tutorials URLs must exist on disk. */
+export function isBundledOrRemoteAsset(url: string): boolean {
+  if (
+    url.startsWith("https://") ||
+    url.startsWith("http://") ||
+    url.startsWith("data:")
+  ) {
+    return true;
+  }
+  const path = url.split("?")[0];
+  if (
+    path.startsWith("/games/") ||
+    path.startsWith("/thumbnails/") ||
+    path.startsWith("/tutorials/")
+  ) {
+    return BUNDLED_PUBLIC_ASSETS.has(path);
+  }
+  return true;
+}
 
 function resolveRootLogo(game: Game): string | null {
   const nameSlug = slugifyGameName(game.name);
@@ -388,7 +427,7 @@ export function gameAssetCandidates(
 
   const push = (url?: string) => {
     const normalized = normalizeImageAssetUrl(url);
-    if (!normalized || seen.has(normalized)) return;
+    if (!normalized || !isBundledOrRemoteAsset(normalized) || seen.has(normalized)) return;
     seen.add(normalized);
     out.push(normalized);
   };
@@ -449,7 +488,7 @@ export function gameFallbackCandidates(game: Game): string[] {
 
   const push = (url?: string) => {
     const normalized = normalizeImageAssetUrl(url);
-    if (!normalized || seen.has(normalized)) return;
+    if (!normalized || !isBundledOrRemoteAsset(normalized) || seen.has(normalized)) return;
     seen.add(normalized);
     out.push(normalized);
   };
@@ -485,7 +524,7 @@ export function gameMenuImageCandidates(game: Game): string[] {
 
   const push = (url?: string) => {
     const normalized = normalizeImageAssetUrl(url);
-    if (!normalized || seen.has(normalized)) return;
+    if (!normalized || !isBundledOrRemoteAsset(normalized) || seen.has(normalized)) return;
     seen.add(normalized);
     out.push(normalized);
   };
@@ -504,7 +543,7 @@ export function gameMenuBackgroundCandidates(game: Game): string[] {
 
   const push = (url?: string) => {
     const normalized = normalizeImageAssetUrl(url);
-    if (!normalized || seen.has(normalized)) return;
+    if (!normalized || !isBundledOrRemoteAsset(normalized) || seen.has(normalized)) return;
     seen.add(normalized);
     out.push(normalized);
   };
@@ -531,7 +570,7 @@ export function gameSquareImageCandidates(game: Game): string[] {
 
   const push = (url?: string) => {
     const normalized = normalizeImageAssetUrl(url);
-    if (!normalized || seen.has(normalized)) return;
+    if (!normalized || !isBundledOrRemoteAsset(normalized) || seen.has(normalized)) return;
     seen.add(normalized);
     out.push(normalized);
   };
@@ -687,7 +726,7 @@ export function getGameTutorialCandidates(game: Game): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   const push = (url?: string) => {
-    if (!url || seen.has(url)) return;
+    if (!url || !isBundledOrRemoteAsset(url) || seen.has(url)) return;
     seen.add(url);
     out.push(url);
   };
