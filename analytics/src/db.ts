@@ -14,8 +14,7 @@ export interface DailyMetricRow {
   day: string;
   daily_transactions: number;
   dau: number;
-  wau: number;
-  mau: number;
+  total_users: number;
   transactions_last_7_days: number;
   transactions_last_30_days: number;
   transactions_last_60_days: number;
@@ -216,13 +215,13 @@ export async function replaceDailyMetrics(
   if (rows.length === 0) return;
   const stmt = db.prepare(
     `INSERT INTO daily_metrics (
-      day, daily_transactions, dau, wau, mau,
+      day, daily_transactions, dau, total_users,
       transactions_last_7_days, transactions_last_30_days,
       transactions_last_60_days, transactions_last_90_days,
       total_transactions_to_date,
       txhub_transactions, rewards_transactions, sparkrefill_transactions,
       scoresubmit_transactions, infinitespark_transactions, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   for (let i = 0; i < rows.length; i += 100) {
     const chunk = rows.slice(i, i + 100).map((r) =>
@@ -230,8 +229,7 @@ export async function replaceDailyMetrics(
         r.day,
         r.daily_transactions,
         r.dau,
-        r.wau,
-        r.mau,
+        r.total_users,
         r.transactions_last_7_days,
         r.transactions_last_30_days,
         r.transactions_last_60_days,

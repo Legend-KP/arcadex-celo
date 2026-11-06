@@ -12,7 +12,7 @@ function addDays(day: string, delta: number): string {
 
 /**
  * Mirrors the Dune rolling CTE:
- * unique_activity → daily + rolling WAU/MAU + tx windows + running total.
+ * unique_activity → daily + lifetime users + tx windows + running total.
  * Only days with activity are emitted (same as Dune GROUP BY day).
  */
 export async function recomputeDailyMetrics(db: D1Database): Promise<number> {
@@ -31,7 +31,6 @@ export async function recomputeDailyMetrics(db: D1Database): Promise<number> {
     }
   >();
 
-  const playerDayKeys = new Map<string, Set<string>>();
   const txDayKeys = new Map<string, Set<string>>();
 
   for (const row of activity) {
@@ -52,13 +51,6 @@ export async function recomputeDailyMetrics(db: D1Database): Promise<number> {
       bucket.byContract.set(row.contract, cset);
     }
     cset.add(row.tx_hash);
-
-    let pd = playerDayKeys.get(row.player);
-    if (!pd) {
-      pd = new Set();
-      playerDayKeys.set(row.player, pd);
-    }
-    pd.add(row.day);
 
     let td = txDayKeys.get(row.tx_hash);
     if (!td) {
@@ -89,11 +81,15 @@ export async function recomputeDailyMetrics(db: D1Database): Promise<number> {
   const nowIso = new Date().toISOString();
   const metrics: DailyMetricRow[] = [];
   let runningTotal = 0;
+  const lifetimeUsers = new Set<string>();
 
   for (const day of days) {
     const bucket = byDay.get(day)!;
     const dailyTx = bucket.txs.size;
     runningTotal += dailyTx;
+    for (const player of bucket.players) {
+      lifetimeUsers.add(player);
+    }
 
     const wStart = addDays(day, -6);
     const mStart = addDays(day, -29);
@@ -104,8 +100,7 @@ export async function recomputeDailyMetrics(db: D1Database): Promise<number> {
       day,
       daily_transactions: dailyTx,
       dau: bucket.players.size,
-      wau: countDistinctInWindow(playerDayKeys, wStart, day),
-      mau: countDistinctInWindow(playerDayKeys, mStart, day),
+      total_users: lifetimeUsers.size,
       transactions_last_7_days: countDistinctInWindow(txDayKeys, wStart, day),
       transactions_last_30_days: countDistinctInWindow(txDayKeys, mStart, day),
       transactions_last_60_days: countDistinctInWindow(txDayKeys, d60, day),
