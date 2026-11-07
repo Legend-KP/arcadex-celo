@@ -6,6 +6,7 @@ import { useD1PlayerData, requireD1 } from "@/lib/d1-client";
 import {
   GAME_OPEN_CLAIM_AMOUNT_MICRO,
   GAME_OPEN_CLAIM_DAILY_CAP,
+  GAME_OPEN_CLAIM_PER_WALLET_DAILY,
   GAME_OPEN_CLAIM_USDT,
   gameOpenClaimDayKey,
   type GameOpenClaimRecord,
@@ -19,6 +20,7 @@ import { isWalletAddress, normalizeWalletAddress } from "@/lib/wallet-address";
 import {
   deletePath,
   readPath,
+  runRtdbTransaction,
   writePath,
 } from "@/lib/rtdb-server";
 import { readStreakProgress } from "@/lib/arcadex-rewards-verify";
@@ -44,6 +46,7 @@ export class GameOpenClaimError extends Error {
       | "ALREADY_CLAIMED"
       | "TOO_SOON"
       | "DAILY_CAP"
+      | "WALLET_DAILY_CAP"
       | "PAYOUT_FAILED"
   ) {
     super(message);
@@ -59,7 +62,12 @@ function dailyCountPath(utcDay: string): string {
   return `gameOpenClaimDailyCount/${utcDay}`;
 }
 
+function walletDailyCountPath(wallet: string, utcDay: string): string {
+  return `gameOpenClaimWalletDaily/${wallet.toLowerCase()}/${utcDay}`;
+}
+
 let capTableReady = false;
+let walletCapTableReady = false;
 
 async function ensureDailyCapTable(
   db: Awaited<ReturnType<typeof requireD1>>
@@ -76,7 +84,24 @@ async function ensureDailyCapTable(
   capTableReady = true;
 }
 
-/** Seed today's row from claims already stored, then leave later increments to markGameOpenClaimed. */
+async function ensureWalletCapTable(
+  db: Awaited<ReturnType<typeof requireD1>>
+): Promise<void> {
+  if (walletCapTableReady) return;
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS game_open_claim_wallet_daily (
+         wallet TEXT NOT NULL,
+         utc_day TEXT NOT NULL,
+         reserved_count INTEGER NOT NULL,
+         PRIMARY KEY (wallet, utc_day)
+       )`
+    )
+    .run();
+  walletCapTableReady = true;
+}
+
+/** Seed today's global row from reserved slots (pending + claimed). */
 async function ensureDailyClaimRow(
   db: Awaited<ReturnType<typeof requireD1>>,
   utcDay: string
@@ -86,10 +111,29 @@ async function ensureDailyClaimRow(
     .prepare(
       `INSERT INTO game_open_claim_daily (utc_day, claim_count)
        SELECT ?, COUNT(*) FROM game_open_claims
-       WHERE utc_day = ? AND status = 'claimed'
+       WHERE utc_day = ? AND status IN ('pending', 'paying', 'claimed')
        ON CONFLICT(utc_day) DO NOTHING`
     )
     .bind(utcDay, utcDay)
+    .run();
+}
+
+/** Seed this wallet's day row from reserved slots (pending + claimed). */
+async function ensureWalletClaimRow(
+  db: Awaited<ReturnType<typeof requireD1>>,
+  wallet: string,
+  utcDay: string
+): Promise<void> {
+  await ensureWalletCapTable(db);
+  await db
+    .prepare(
+      `INSERT INTO game_open_claim_wallet_daily (wallet, utc_day, reserved_count)
+       SELECT ?, ?, COUNT(*) FROM game_open_claims
+       WHERE wallet = ? AND utc_day = ?
+         AND status IN ('pending', 'paying', 'claimed')
+       ON CONFLICT(wallet, utc_day) DO NOTHING`
+    )
+    .bind(wallet, utcDay, wallet, utcDay)
     .run();
 }
 
@@ -110,23 +154,36 @@ async function readDailyClaimCount(utcDay: string): Promise<number> {
   return typeof stored === "number" && Number.isFinite(stored) ? stored : 0;
 }
 
-async function incrementDailyClaimCount(utcDay: string): Promise<void> {
+async function readWalletReservedCount(
+  wallet: string,
+  utcDay: string
+): Promise<number> {
   if (await useD1PlayerData()) {
     const db = await requireD1();
-    await ensureDailyClaimRow(db, utcDay);
-    await db
+    await ensureWalletClaimRow(db, wallet, utcDay);
+    const row = await db
       .prepare(
-        `UPDATE game_open_claim_daily
-         SET claim_count = claim_count + 1
-         WHERE utc_day = ?`
+        `SELECT reserved_count AS n FROM game_open_claim_wallet_daily
+         WHERE wallet = ? AND utc_day = ?`
       )
-      .bind(utcDay)
-      .run();
-    return;
+      .bind(wallet, utcDay)
+      .first<{ n: number }>();
+    return Number(row?.n ?? 0);
   }
 
-  const current = await readDailyClaimCount(utcDay);
-  await writePath(dailyCountPath(utcDay), current + 1);
+  const stored = await readPath<number>(walletDailyCountPath(wallet, utcDay));
+  return typeof stored === "number" && Number.isFinite(stored) ? stored : 0;
+}
+
+/** True while this wallet still has an open-claim slot today. */
+export async function isWalletGameOpenClaimsOpen(
+  walletAddress: string,
+  now = Date.now()
+): Promise<boolean> {
+  if (!isWalletAddress(walletAddress)) return true;
+  const wallet = normalizeWalletAddress(walletAddress);
+  const count = await readWalletReservedCount(wallet, gameOpenClaimDayKey(now));
+  return count < GAME_OPEN_CLAIM_PER_WALLET_DAILY;
 }
 
 /** True while this UTC day still has room for a new game-open claim. */
@@ -209,6 +266,7 @@ export async function getGameOpenClaimStatus(
   payoutsEnabled: boolean;
   canClaim: boolean;
   claimsOpen: boolean;
+  walletClaimsOpen: boolean;
 }> {
   const utcDay = gameOpenClaimDayKey();
   const amountUsdt = GAME_OPEN_CLAIM_USDT;
@@ -227,6 +285,7 @@ export async function getGameOpenClaimStatus(
       payoutsEnabled: false,
       canClaim: false,
       claimsOpen,
+      walletClaimsOpen: true,
     };
   }
 
@@ -239,14 +298,15 @@ export async function getGameOpenClaimStatus(
       payoutsEnabled: true,
       canClaim: claimsOpen,
       claimsOpen,
+      walletClaimsOpen: true,
     };
   }
 
   const wallet = normalizeWalletAddress(walletAddress);
+  const walletClaimsOpen = await isWalletGameOpenClaimsOpen(wallet);
+  const ledgerStatus = await readLedgerStatus(wallet, gameId, utcDay);
 
-  // App ledger first (fast).
-  const ledgerClaimed = await isLedgerClaimed(wallet, gameId, utcDay);
-  if (ledgerClaimed) {
+  if (ledgerStatus === "claimed") {
     return {
       claimed: true,
       amountUsdt,
@@ -255,6 +315,21 @@ export async function getGameOpenClaimStatus(
       payoutsEnabled: true,
       canClaim: false,
       claimsOpen,
+      walletClaimsOpen,
+    };
+  }
+
+  // Already reserved this game today — allow finishing even at the wallet cap.
+  if (ledgerStatus === "pending" || ledgerStatus === "paying") {
+    return {
+      claimed: false,
+      amountUsdt,
+      campaignId,
+      utcDay,
+      payoutsEnabled: true,
+      canClaim: true,
+      claimsOpen,
+      walletClaimsOpen,
     };
   }
 
@@ -272,8 +347,13 @@ export async function getGameOpenClaimStatus(
       campaignId,
       utcDay,
       payoutsEnabled: active,
-      canClaim: claimsOpen && active && progress.canCheckIn,
+      canClaim:
+        claimsOpen &&
+        walletClaimsOpen &&
+        active &&
+        progress.canCheckIn,
       claimsOpen,
+      walletClaimsOpen,
     };
   } catch {
     return {
@@ -282,8 +362,9 @@ export async function getGameOpenClaimStatus(
       campaignId,
       utcDay,
       payoutsEnabled: true,
-      canClaim: claimsOpen,
+      canClaim: claimsOpen && walletClaimsOpen,
       claimsOpen,
+      walletClaimsOpen,
     };
   }
 }
@@ -296,6 +377,7 @@ export type GameOpenClaimStatusRow = {
   payoutsEnabled: boolean;
   canClaim: boolean;
   claimsOpen: boolean;
+  walletClaimsOpen: boolean;
 };
 
 const CAMPAIGN_CACHE_MS = 10 * 60_000;
@@ -313,6 +395,8 @@ const statusBatchCache = new Map<
 export type GameOpenClaimBatch = {
   utcDay: string;
   claimsOpen: boolean;
+  /** False once this wallet has reserved 10 slots today (pending + claimed). */
+  walletClaimsOpen: boolean;
   byGameId: Record<string, GameOpenClaimStatusRow>;
 };
 
@@ -355,36 +439,51 @@ function dropStatusBatchCache(wallet: string): void {
   }
 }
 
-async function readLedgerClaimedGameIds(
+type LedgerStatus = "pending" | "paying" | "claimed";
+
+async function readLedgerStatuses(
   wallet: string,
   utcDay: string,
   gameIds: string[]
-): Promise<Set<string>> {
-  if (gameIds.length === 0) return new Set();
+): Promise<Map<string, LedgerStatus>> {
+  const out = new Map<string, LedgerStatus>();
+  if (gameIds.length === 0) return out;
 
   if (await useD1PlayerData()) {
     const db = await requireD1();
     const placeholders = gameIds.map(() => "?").join(", ");
     const { results } = await db
       .prepare(
-        `SELECT game_id FROM game_open_claims
-         WHERE wallet = ? AND utc_day = ? AND status = 'claimed'
-           AND game_id IN (${placeholders})`
+        `SELECT game_id, status FROM game_open_claims
+         WHERE wallet = ? AND utc_day = ?
+           AND game_id IN (${placeholders})
+           AND status IN ('pending', 'paying', 'claimed')`
       )
       .bind(wallet, utcDay, ...gameIds)
-      .all<{ game_id: string }>();
-    return new Set((results ?? []).map((row) => row.game_id));
+      .all<{ game_id: string; status: string }>();
+    for (const row of results ?? []) {
+      if (
+        row.status === "pending" ||
+        row.status === "paying" ||
+        row.status === "claimed"
+      ) {
+        out.set(row.game_id, row.status);
+      }
+    }
+    return out;
   }
 
   const dayNode = await readPath<Record<string, GameOpenClaimRecord | null>>(
     `gameOpenClaims/${wallet.toLowerCase()}/${utcDay}`
   );
-  const claimed = new Set<string>();
-  if (!dayNode || typeof dayNode !== "object") return claimed;
+  if (!dayNode || typeof dayNode !== "object") return out;
   for (const id of gameIds) {
-    if (dayNode[id]?.status === "claimed") claimed.add(id);
+    const status = dayNode[id]?.status;
+    if (status === "pending" || status === "paying" || status === "claimed") {
+      out.set(id, status);
+    }
   }
-  return claimed;
+  return out;
 }
 
 /**
@@ -420,6 +519,9 @@ export async function listGameOpenClaimStatuses(
   }
 
   const claimsOpen = await areNewGameOpenClaimsOpen();
+  const walletClaimsOpen = wallet
+    ? await isWalletGameOpenClaimsOpen(wallet)
+    : true;
   const byGameId: Record<string, GameOpenClaimStatusRow> = {};
   const withCampaign: { id: string; campaignId: number }[] = [];
 
@@ -434,6 +536,7 @@ export async function listGameOpenClaimStatuses(
         payoutsEnabled: false,
         canClaim: false,
         claimsOpen,
+        walletClaimsOpen,
       };
       continue;
     }
@@ -450,21 +553,23 @@ export async function listGameOpenClaimStatuses(
         payoutsEnabled: true,
         canClaim: claimsOpen,
         claimsOpen,
+        walletClaimsOpen: true,
       };
     }
-    const value = { utcDay, claimsOpen, byGameId };
+    const value = { utcDay, claimsOpen, walletClaimsOpen: true, byGameId };
     statusBatchCache.set(cacheKey, { at: Date.now(), value });
     return value;
   }
 
-  const ledgerClaimed = await readLedgerClaimedGameIds(
+  const ledgerByGame = await readLedgerStatuses(
     wallet,
     utcDay,
     withCampaign.map((game) => game.id)
   );
   const needsChain: { id: string; campaignId: number }[] = [];
   for (const game of withCampaign) {
-    if (ledgerClaimed.has(game.id)) {
+    const ledger = ledgerByGame.get(game.id);
+    if (ledger === "claimed") {
       byGameId[game.id] = {
         claimed: true,
         amountUsdt,
@@ -473,6 +578,20 @@ export async function listGameOpenClaimStatuses(
         payoutsEnabled: true,
         canClaim: false,
         claimsOpen,
+        walletClaimsOpen,
+      };
+      continue;
+    }
+    if (ledger === "pending" || ledger === "paying") {
+      byGameId[game.id] = {
+        claimed: false,
+        amountUsdt,
+        campaignId: game.campaignId,
+        utcDay,
+        payoutsEnabled: true,
+        canClaim: true,
+        claimsOpen,
+        walletClaimsOpen,
       };
       continue;
     }
@@ -549,8 +668,9 @@ export async function listGameOpenClaimStatuses(
         campaignId: game.campaignId,
         utcDay,
         payoutsEnabled: true,
-        canClaim: claimsOpen,
+        canClaim: claimsOpen && walletClaimsOpen,
         claimsOpen,
+        walletClaimsOpen,
       };
       continue;
     }
@@ -560,12 +680,17 @@ export async function listGameOpenClaimStatuses(
       campaignId: game.campaignId,
       utcDay,
       payoutsEnabled: snap.payoutsEnabled,
-      canClaim: claimsOpen && snap.payoutsEnabled && progress.canCheckIn,
+      canClaim:
+        claimsOpen &&
+        walletClaimsOpen &&
+        snap.payoutsEnabled &&
+        progress.canCheckIn,
       claimsOpen,
+      walletClaimsOpen,
     };
   }
 
-  const value = { utcDay, claimsOpen, byGameId };
+  const value = { utcDay, claimsOpen, walletClaimsOpen, byGameId };
   if (statusBatchCache.size > 200) {
     const now = Date.now();
     for (const [key, entry] of statusBatchCache) {
@@ -576,11 +701,11 @@ export async function listGameOpenClaimStatuses(
   return value;
 }
 
-async function isLedgerClaimed(
+async function readLedgerStatus(
   wallet: string,
   gameId: string,
   utcDay: string
-): Promise<boolean> {
+): Promise<LedgerStatus | null> {
   if (await useD1PlayerData()) {
     const db = await requireD1();
     const row = await db
@@ -590,15 +715,31 @@ async function isLedgerClaimed(
       )
       .bind(wallet, gameId, utcDay)
       .first<{ status: string }>();
-    return row?.status === "claimed";
+    if (
+      row?.status === "pending" ||
+      row?.status === "paying" ||
+      row?.status === "claimed"
+    ) {
+      return row.status;
+    }
+    return null;
   }
 
   const existing = await readPath<GameOpenClaimRecord>(
     claimPath(wallet, utcDay, gameId)
   );
-  return existing?.status === "claimed";
+  const status = existing?.status;
+  if (status === "pending" || status === "paying" || status === "claimed") {
+    return status;
+  }
+  return null;
 }
 
+/**
+ * Atomically reserve one open-claim slot for (wallet, game, day).
+ * Counts pending + claimed toward both the per-wallet 10 and global 6000 caps.
+ * Re-signing an existing pending row does not consume another slot.
+ */
 export async function reserveGameOpenClaim(opts: {
   walletAddress: string;
   gameId: string;
@@ -610,37 +751,186 @@ export async function reserveGameOpenClaim(opts: {
   const wallet = normalizeWalletAddress(opts.walletAddress);
   const utcDay = gameOpenClaimDayKey();
   const now = Date.now();
+  dropStatusBatchCache(wallet);
 
   if (await useD1PlayerData()) {
-    const db = await requireD1();
+    await reserveGameOpenClaimD1(wallet, utcDay, now, opts);
+    return;
+  }
+
+  await reserveGameOpenClaimRtdb(wallet, utcDay, now, opts);
+}
+
+async function reserveGameOpenClaimD1(
+  wallet: string,
+  utcDay: string,
+  now: number,
+  opts: {
+    gameId: string;
+    campaignId: number;
+    nonce: number;
+    signature: string;
+    deadline: number;
+  }
+): Promise<void> {
+  const db = await requireD1();
+  await ensureDailyClaimRow(db, utcDay);
+  await ensureWalletClaimRow(db, wallet, utcDay);
+
+  const existing = await db
+    .prepare(
+      `SELECT status FROM game_open_claims
+       WHERE wallet = ? AND game_id = ? AND utc_day = ?`
+    )
+    .bind(wallet, opts.gameId, utcDay)
+    .first<{ status: string }>();
+
+  if (existing?.status === "claimed") {
+    throw new GameOpenClaimError(
+      "Already claimed today's open reward for this game.",
+      "ALREADY_CLAIMED"
+    );
+  }
+
+  if (existing?.status === "pending" || existing?.status === "paying") {
     await db
       .prepare(
-        `INSERT INTO game_open_claims
-         (wallet, game_id, utc_day, campaign_id, amount_micro, status, created_at)
-         VALUES (?, ?, ?, ?, ?, 'pending', ?)
-         ON CONFLICT(wallet, game_id, utc_day) DO UPDATE SET
-           campaign_id = excluded.campaign_id,
-           status = CASE
-             WHEN game_open_claims.status = 'claimed' THEN game_open_claims.status
-             ELSE 'pending'
-           END`
+        `UPDATE game_open_claims
+         SET campaign_id = ?, status = 'pending'
+         WHERE wallet = ? AND game_id = ? AND utc_day = ?
+           AND status IN ('pending', 'paying')`
       )
-      .bind(
-        wallet,
-        opts.gameId,
-        utcDay,
-        opts.campaignId,
-        GAME_OPEN_CLAIM_AMOUNT_MICRO,
-        now
-      )
+      .bind(opts.campaignId, wallet, opts.gameId, utcDay)
       .run();
     return;
   }
 
+  // Insert first so same-game races share one row (no double counter bump).
+  const inserted = await db
+    .prepare(
+      `INSERT OR IGNORE INTO game_open_claims
+       (wallet, game_id, utc_day, campaign_id, amount_micro, status, created_at)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?)`
+    )
+    .bind(
+      wallet,
+      opts.gameId,
+      utcDay,
+      opts.campaignId,
+      GAME_OPEN_CLAIM_AMOUNT_MICRO,
+      now
+    )
+    .run();
+
+  if (!inserted.meta?.changes) {
+    const raced = await db
+      .prepare(
+        `SELECT status FROM game_open_claims
+         WHERE wallet = ? AND game_id = ? AND utc_day = ?`
+      )
+      .bind(wallet, opts.gameId, utcDay)
+      .first<{ status: string }>();
+    if (raced?.status === "claimed") {
+      throw new GameOpenClaimError(
+        "Already claimed today's open reward for this game.",
+        "ALREADY_CLAIMED"
+      );
+    }
+    // Another request reserved this game — reuse that slot.
+    return;
+  }
+
+  const walletBump = await db
+    .prepare(
+      `UPDATE game_open_claim_wallet_daily
+       SET reserved_count = reserved_count + 1
+       WHERE wallet = ? AND utc_day = ?
+         AND reserved_count < ?`
+    )
+    .bind(wallet, utcDay, GAME_OPEN_CLAIM_PER_WALLET_DAILY)
+    .run();
+  if (!walletBump.meta?.changes) {
+    await db
+      .prepare(
+        `DELETE FROM game_open_claims
+         WHERE wallet = ? AND game_id = ? AND utc_day = ? AND status = 'pending'`
+      )
+      .bind(wallet, opts.gameId, utcDay)
+      .run()
+      .catch(() => {});
+    throw new GameOpenClaimError(
+      "Already reached today's per-wallet claim limit.",
+      "WALLET_DAILY_CAP"
+    );
+  }
+
+  const globalBump = await db
+    .prepare(
+      `UPDATE game_open_claim_daily
+       SET claim_count = claim_count + 1
+       WHERE utc_day = ? AND claim_count < ?`
+    )
+    .bind(utcDay, GAME_OPEN_CLAIM_DAILY_CAP)
+    .run();
+  if (!globalBump.meta?.changes) {
+    await db
+      .prepare(
+        `DELETE FROM game_open_claims
+         WHERE wallet = ? AND game_id = ? AND utc_day = ? AND status = 'pending'`
+      )
+      .bind(wallet, opts.gameId, utcDay)
+      .run()
+      .catch(() => {});
+    await db
+      .prepare(
+        `UPDATE game_open_claim_wallet_daily
+         SET reserved_count = CASE
+           WHEN reserved_count > 0 THEN reserved_count - 1
+           ELSE 0
+         END
+         WHERE wallet = ? AND utc_day = ?`
+      )
+      .bind(wallet, utcDay)
+      .run()
+      .catch(() => {});
+    throw new GameOpenClaimError(
+      "Already reached today's claim limit.",
+      "DAILY_CAP"
+    );
+  }
+}
+
+async function reserveGameOpenClaimRtdb(
+  wallet: string,
+  utcDay: string,
+  now: number,
+  opts: {
+    gameId: string;
+    campaignId: number;
+    nonce: number;
+    signature: string;
+    deadline: number;
+  }
+): Promise<void> {
   const path = claimPath(wallet, utcDay, opts.gameId);
   const existing = await readPath<GameOpenClaimRecord>(path);
-  if (existing?.status === "claimed") return;
-  await writePath(path, {
+  if (existing?.status === "claimed") {
+    throw new GameOpenClaimError(
+      "Already claimed today's open reward for this game.",
+      "ALREADY_CLAIMED"
+    );
+  }
+  if (existing?.status === "pending" || existing?.status === "paying") {
+    await writePath(path, {
+      ...existing,
+      campaignId: opts.campaignId,
+      status: "pending",
+      nonce: opts.nonce,
+    } satisfies GameOpenClaimRecord);
+    return;
+  }
+
+  const pendingRecord: GameOpenClaimRecord = {
     wallet,
     gameId: opts.gameId,
     utcDay,
@@ -650,9 +940,69 @@ export async function reserveGameOpenClaim(opts: {
     claimTx: null,
     spinTx: null,
     nonce: opts.nonce,
-    createdAt: existing?.createdAt ?? now,
+    createdAt: now,
     claimedAt: null,
-  } satisfies GameOpenClaimRecord);
+  };
+
+  // Create the per-game row first so same-game races share one slot.
+  const created = await runRtdbTransaction<GameOpenClaimRecord>(
+    path,
+    (current) => {
+      if (current != null) return undefined;
+      return pendingRecord;
+    }
+  );
+  if (!created.committed) {
+    const raced = await readPath<GameOpenClaimRecord>(path);
+    if (raced?.status === "claimed") {
+      throw new GameOpenClaimError(
+        "Already claimed today's open reward for this game.",
+        "ALREADY_CLAIMED"
+      );
+    }
+    if (raced?.status === "pending" || raced?.status === "paying") return;
+    throw new GameOpenClaimError(
+      "Already reached today's claim limit.",
+      "DAILY_CAP"
+    );
+  }
+
+  const walletPath = walletDailyCountPath(wallet, utcDay);
+  const walletTx = await runRtdbTransaction<number>(walletPath, (current) => {
+    const n =
+      typeof current === "number" && Number.isFinite(current) ? current : 0;
+    if (n >= GAME_OPEN_CLAIM_PER_WALLET_DAILY) return undefined;
+    return n + 1;
+  });
+  if (!walletTx.committed) {
+    await deletePath(path).catch(() => {});
+    throw new GameOpenClaimError(
+      "Already reached today's per-wallet claim limit.",
+      "WALLET_DAILY_CAP"
+    );
+  }
+
+  const globalTx = await runRtdbTransaction<number>(
+    dailyCountPath(utcDay),
+    (current) => {
+      const n =
+        typeof current === "number" && Number.isFinite(current) ? current : 0;
+      if (n >= GAME_OPEN_CLAIM_DAILY_CAP) return undefined;
+      return n + 1;
+    }
+  );
+  if (!globalTx.committed) {
+    await deletePath(path).catch(() => {});
+    await runRtdbTransaction<number>(walletPath, (current) => {
+      const n =
+        typeof current === "number" && Number.isFinite(current) ? current : 0;
+      return Math.max(0, n - 1);
+    }).catch(() => ({ committed: false, snapshot: null }));
+    throw new GameOpenClaimError(
+      "Already reached today's claim limit.",
+      "DAILY_CAP"
+    );
+  }
 }
 
 export async function markGameOpenClaimed(opts: {
@@ -678,8 +1028,23 @@ export async function markGameOpenClaimed(opts: {
       )
       .bind(wallet, opts.gameId, utcDay)
       .first<{ status: string }>();
-    const alreadyCounted = before?.status === "claimed";
-    if (!alreadyCounted) await ensureDailyClaimRow(db, utcDay);
+    const alreadyReserved =
+      before?.status === "pending" ||
+      before?.status === "paying" ||
+      before?.status === "claimed";
+
+    // Legacy sync without a prior reserve: take the slot now.
+    if (!alreadyReserved) {
+      await reserveGameOpenClaim({
+        walletAddress: wallet,
+        gameId: opts.gameId,
+        campaignId: opts.campaignId,
+        nonce: 0,
+        signature: "",
+        deadline: 0,
+      });
+    }
+
     await db
       .prepare(
         `INSERT INTO game_open_claims
@@ -702,22 +1067,26 @@ export async function markGameOpenClaimed(opts: {
         claimedAt
       )
       .run();
-    if (!alreadyCounted) {
-      await db
-        .prepare(
-          `UPDATE game_open_claim_daily
-           SET claim_count = claim_count + 1
-           WHERE utc_day = ?`
-        )
-        .bind(utcDay)
-        .run();
-    }
     return;
   }
 
   const path = claimPath(wallet, utcDay, opts.gameId);
   const existing = await readPath<GameOpenClaimRecord>(path);
-  const alreadyCounted = existing?.status === "claimed";
+  const alreadyReserved =
+    existing?.status === "pending" ||
+    existing?.status === "paying" ||
+    existing?.status === "claimed";
+  if (!alreadyReserved) {
+    await reserveGameOpenClaim({
+      walletAddress: wallet,
+      gameId: opts.gameId,
+      campaignId: opts.campaignId,
+      nonce: 0,
+      signature: "",
+      deadline: 0,
+    });
+  }
+  const reserved = await readPath<GameOpenClaimRecord>(path);
   await writePath(path, {
     wallet,
     gameId: opts.gameId,
@@ -727,10 +1096,9 @@ export async function markGameOpenClaimed(opts: {
     status: "claimed",
     claimTx: claimTx ?? spinTx,
     spinTx,
-    createdAt: existing?.createdAt ?? claimedAt,
+    createdAt: reserved?.createdAt ?? existing?.createdAt ?? claimedAt,
     claimedAt,
   } satisfies GameOpenClaimRecord);
-  if (!alreadyCounted) await incrementDailyClaimCount(utcDay);
 }
 
 export async function clearPendingGameOpenClaim(
@@ -739,21 +1107,72 @@ export async function clearPendingGameOpenClaim(
 ): Promise<void> {
   const wallet = normalizeWalletAddress(walletAddress);
   const utcDay = gameOpenClaimDayKey();
+  dropStatusBatchCache(wallet);
+
   if (await useD1PlayerData()) {
     const db = await requireD1();
-    await db
+    const before = await db
       .prepare(
-        `DELETE FROM game_open_claims
-         WHERE wallet = ? AND game_id = ? AND utc_day = ? AND status = 'pending'`
+        `SELECT status FROM game_open_claims
+         WHERE wallet = ? AND game_id = ? AND utc_day = ?`
       )
       .bind(wallet, gameId, utcDay)
+      .first<{ status: string }>();
+    if (before?.status !== "pending" && before?.status !== "paying") return;
+
+    const deleted = await db
+      .prepare(
+        `DELETE FROM game_open_claims
+         WHERE wallet = ? AND game_id = ? AND utc_day = ?
+           AND status IN ('pending', 'paying')`
+      )
+      .bind(wallet, gameId, utcDay)
+      .run()
+      .catch(() => null);
+    if (!deleted?.meta?.changes) return;
+
+    await db
+      .prepare(
+        `UPDATE game_open_claim_wallet_daily
+         SET reserved_count = CASE
+           WHEN reserved_count > 0 THEN reserved_count - 1
+           ELSE 0
+         END
+         WHERE wallet = ? AND utc_day = ?`
+      )
+      .bind(wallet, utcDay)
+      .run()
+      .catch(() => {});
+    await db
+      .prepare(
+        `UPDATE game_open_claim_daily
+         SET claim_count = CASE
+           WHEN claim_count > 0 THEN claim_count - 1
+           ELSE 0
+         END
+         WHERE utc_day = ?`
+      )
+      .bind(utcDay)
       .run()
       .catch(() => {});
     return;
   }
+
   const path = claimPath(wallet, utcDay, gameId);
   const existing = await readPath<GameOpenClaimRecord>(path);
-  if (existing?.status === "pending") {
-    await deletePath(path).catch(() => {});
-  }
+  if (existing?.status !== "pending" && existing?.status !== "paying") return;
+  await deletePath(path).catch(() => {});
+  await runRtdbTransaction<number>(
+    walletDailyCountPath(wallet, utcDay),
+    (current) => {
+      const n =
+        typeof current === "number" && Number.isFinite(current) ? current : 0;
+      return Math.max(0, n - 1);
+    }
+  ).catch(() => ({ committed: false, snapshot: null }));
+  await runRtdbTransaction<number>(dailyCountPath(utcDay), (current) => {
+    const n =
+      typeof current === "number" && Number.isFinite(current) ? current : 0;
+    return Math.max(0, n - 1);
+  }).catch(() => ({ committed: false, snapshot: null }));
 }

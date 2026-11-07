@@ -44,10 +44,13 @@ export function useGameOpenClaimDetails(
   byId: Record<string, GameOpenClaimUiState>;
   loaded: boolean;
   claimsOpen: boolean;
+  /** False after this wallet reserved 10 slots today (same look as out-of-funds). */
+  walletClaimsOpen: boolean;
 } {
   const [byId, setById] = useState<Record<string, GameOpenClaimUiState>>({});
   const [loaded, setLoaded] = useState(false);
   const [claimsOpen, setClaimsOpen] = useState(true);
+  const [walletClaimsOpen, setWalletClaimsOpen] = useState(true);
   const lastBatchAt = useRef(0);
   const claimsOpenRef = useRef(claimsOpen);
   claimsOpenRef.current = claimsOpen;
@@ -63,6 +66,7 @@ export function useGameOpenClaimDetails(
   useEffect(() => {
     if (!isGameOpenClaimEnabled()) {
       setClaimsOpen(true);
+      setWalletClaimsOpen(true);
       return;
     }
     // Signed-in home gets claimsOpen from the batched status call.
@@ -70,10 +74,16 @@ export function useGameOpenClaimDetails(
     let cancelled = false;
     void fetchGameOpenClaimDay()
       .then((day) => {
-        if (!cancelled) setClaimsOpen(day.claimsOpen);
+        if (!cancelled) {
+          setClaimsOpen(day.claimsOpen);
+          setWalletClaimsOpen(true);
+        }
       })
       .catch(() => {
-        if (!cancelled) setClaimsOpen(true);
+        if (!cancelled) {
+          setClaimsOpen(true);
+          setWalletClaimsOpen(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -102,6 +112,7 @@ export function useGameOpenClaimDetails(
           ])
         )
       );
+      setWalletClaimsOpen(true);
       setLoaded(true);
       return;
     }
@@ -113,21 +124,25 @@ export function useGameOpenClaimDetails(
       rows: Awaited<ReturnType<typeof fetchGameOpenClaimStatuses>>
     ) {
       const dayOpen = rows.claimsOpen;
+      const walletOpen = rows.walletClaimsOpen;
       const entries = live.map((game) => {
         const status = rows.byGameId[game.id];
         if (!status) {
-          return [game.id, { claimable: dayOpen, claimed: false }] as const;
+          return [
+            game.id,
+            { claimable: dayOpen && walletOpen, claimed: false },
+          ] as const;
         }
+        // Match out-of-funds: only show Claim when the server says canClaim.
         const claimable =
           dayOpen &&
           status.claimsOpen !== false &&
           !status.claimed &&
-          (status.canClaim ||
-            status.payoutsEnabled ||
-            status.campaignId != null);
+          Boolean(status.canClaim);
         return [game.id, { claimable, claimed: status.claimed }] as const;
       });
       setClaimsOpen(dayOpen);
+      setWalletClaimsOpen(walletOpen);
       setById(Object.fromEntries(entries));
       setLoaded(true);
     }
@@ -172,6 +187,9 @@ export function useGameOpenClaimDetails(
         ...prev,
         [gameId]: { claimable: false, claimed: true },
       }));
+      // After a claim, refetch so remaining games drop Claim at the wallet cap.
+      lastBatchAt.current = 0;
+      void load(true);
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("arcadex:game-open-claimed", onClaimed);
@@ -193,5 +211,5 @@ export function useGameOpenClaimDetails(
     );
   }, [walletAddress, liveKey, claimsOpen]);
 
-  return { byId, loaded, claimsOpen };
+  return { byId, loaded, claimsOpen, walletClaimsOpen };
 }

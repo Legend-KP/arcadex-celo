@@ -18,7 +18,7 @@ import {
   assertLiveGame,
   GameOpenClaimError,
   getGameOpenClaimStatus,
-  areNewGameOpenClaimsOpen,
+  isGameOpenPoolOpen,
   requireGameOpenCampaign,
   reserveGameOpenClaim,
 } from "@/lib/game-open-claim-server";
@@ -128,7 +128,8 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
-    if (!(await areNewGameOpenClaimsOpen())) {
+    // Pool check only — wallet/global slot caps are enforced atomically in reserve.
+    if (!(await isGameOpenPoolOpen())) {
       throw new GameOpenClaimError(
         "Already reached today's claim limit.",
         "DAILY_CAP"
@@ -146,6 +147,17 @@ export async function POST(request: Request) {
     const nonceBig = await readSpinNonce(wallet, campaignId);
     const nonce = Number(nonceBig);
     const nowSec = Math.floor(Date.now() / 1000);
+
+    // Reserve before signing so parallel requests cannot overshoot caps.
+    // Re-signing an existing pending game reuses the same slot.
+    await reserveGameOpenClaim({
+      walletAddress: wallet,
+      gameId,
+      campaignId,
+      nonce,
+      signature: "",
+      deadline: nowSec + SIGNATURE_TTL_SEC,
+    });
 
     const existingPending = await getShufflePending(wallet, campaignId, nonce);
     if (
@@ -190,14 +202,6 @@ export async function POST(request: Request) {
     };
 
     await saveShufflePending(record);
-    await reserveGameOpenClaim({
-      walletAddress: wallet,
-      gameId,
-      campaignId,
-      nonce,
-      signature: signature as string,
-      deadline,
-    });
 
     return NextResponse.json(formatSignResponse(record, gameId));
   } catch (err) {
@@ -205,7 +209,8 @@ export async function POST(request: Request) {
       const status =
         err.code === "ALREADY_CLAIMED" ||
         err.code === "TOO_SOON" ||
-        err.code === "DAILY_CAP"
+        err.code === "DAILY_CAP" ||
+        err.code === "WALLET_DAILY_CAP"
           ? 409
           : err.code === "NO_GAME" || err.code === "NOT_LIVE"
             ? 404

@@ -24,6 +24,8 @@ export interface GameOpenClaimStatus {
   canClaim: boolean;
   /** False after the shared daily cap. Pending on-chain rewards can still be claimed. */
   claimsOpen: boolean;
+  /** False after this wallet reserved 10 slots today. */
+  walletClaimsOpen: boolean;
 }
 
 export interface GameOpenClaimSignResult {
@@ -67,6 +69,7 @@ export async function fetchGameOpenClaimStatus(
     payoutsEnabled: Boolean(data.payoutsEnabled),
     canClaim: Boolean(data.canClaim ?? (data.payoutsEnabled && !data.claimed)),
     claimsOpen: data.claimsOpen !== false,
+    walletClaimsOpen: data.walletClaimsOpen !== false,
   };
 }
 
@@ -75,6 +78,7 @@ export async function fetchGameOpenClaimStatuses(
   games: { id: string; name?: string }[]
 ): Promise<{
   claimsOpen: boolean;
+  walletClaimsOpen: boolean;
   utcDay: string;
   byGameId: Record<string, GameOpenClaimStatus>;
 }> {
@@ -92,6 +96,7 @@ export async function fetchGameOpenClaimStatuses(
   });
   const data = (await res.json().catch(() => ({}))) as {
     claimsOpen?: boolean;
+    walletClaimsOpen?: boolean;
     utcDay?: string;
     byGameId?: Record<string, GameOpenClaimStatus>;
     error?: string;
@@ -112,10 +117,12 @@ export async function fetchGameOpenClaimStatuses(
       payoutsEnabled: Boolean(row?.payoutsEnabled),
       canClaim: Boolean(row?.canClaim ?? (row?.payoutsEnabled && !row?.claimed)),
       claimsOpen: row?.claimsOpen !== false,
+      walletClaimsOpen: row?.walletClaimsOpen !== false,
     };
   }
   return {
     claimsOpen: data.claimsOpen !== false,
+    walletClaimsOpen: data.walletClaimsOpen !== false,
     utcDay: typeof data.utcDay === "string" ? data.utcDay : "",
     byGameId,
   };

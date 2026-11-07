@@ -265,15 +265,11 @@ export default function GamePageClient() {
           // A saved spin must be claimed before Start Game. Status "claimed"
           // is true while won.pending, so don't hide the button in that case.
           const dayOpen = status.claimsOpen !== false;
+          // Match out-of-funds / wallet-cap: Claim only when server canClaim is true
+          // (or a pending on-chain reward must still be finished).
           setNeedsClaim(
             pending ||
-              Boolean(
-                dayOpen &&
-                  !status.claimed &&
-                  (status.canClaim ||
-                    status.payoutsEnabled ||
-                    status.campaignId != null)
-              )
+              Boolean(dayOpen && !status.claimed && status.canClaim)
           );
           setClaimStatusLoaded(true);
         }
@@ -370,7 +366,9 @@ export default function GamePageClient() {
             msg.includes("too soon") ||
             msg.includes("in progress") ||
             msg.includes("prize pool") ||
-            msg.includes("insufficienttreasury");
+            msg.includes("insufficienttreasury") ||
+            msg.includes("per-wallet") ||
+            msg.includes("claim limit");
           if (!claimUnavailable) throw claimErr;
           setNeedsClaim(false);
         }

@@ -387,7 +387,9 @@ export default function HomePage() {
     for (const game of liveGames) {
       if (game.active === false || gameIsTest(game)) continue;
       if (matchGameOpenCampaignId(game.id, game.name) == null) continue;
-      if (claimDetails.byId[game.id]?.claimed) claimed.push(game);
+      const row = claimDetails.byId[game.id];
+      // Wallet-capped games match out-of-funds: no Claim button.
+      if (row?.claimed || !row?.claimable) claimed.push(game);
       else unclaimed.push(game);
     }
     return { unclaimed, claimed };
@@ -404,6 +406,7 @@ export default function HomePage() {
     !dailyEarnBlocked &&
     !dailyEarnDismissed &&
     claimDetails.claimsOpen &&
+    claimDetails.walletClaimsOpen &&
     dailyEarnGroups.unclaimed.length > 0;
 
   // Keep contest / other home promos parked until daily claim UI is settled.
@@ -420,7 +423,7 @@ export default function HomePage() {
   // daily game claim is already done. The game list popup is separate.
   useEffect(() => {
     if (!isGameOpenClaimEnabled()) return;
-    if (!claimDetails.claimsOpen) return;
+    if (!claimDetails.claimsOpen || !claimDetails.walletClaimsOpen) return;
     if (!isReady || criticalModalsBlocking) return;
     if (!dailyEarnReady || dailyEarnGroups.unclaimed.length > 0) return;
     if (typeof window === "undefined") return;
@@ -437,6 +440,7 @@ export default function HomePage() {
     dailyEarnReady,
     dailyEarnGroups.unclaimed.length,
     claimDetails.claimsOpen,
+    claimDetails.walletClaimsOpen,
   ]);
 
   const catalogGames = useMemo(() => {
@@ -548,9 +552,11 @@ export default function HomePage() {
         <main className="home-main">
           {view === "home" && (
             <>
-              {isGameOpenClaimEnabled() ? (
+              {isGameOpenClaimEnabled() &&
+              claimDetails.claimsOpen &&
+              claimDetails.walletClaimsOpen ? (
                 <EarnNowHomeBanner onOpen={() => setEarnNowOpen(true)} />
-              ) : isDailyXpUiEnabled() ? (
+              ) : isGameOpenClaimEnabled() ? null : isDailyXpUiEnabled() ? (
                 <DailyXpHomeBanner
                   onOpenBoard={() => setActivityBoardOpen(true)}
                 />
