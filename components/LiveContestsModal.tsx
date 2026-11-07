@@ -177,75 +177,88 @@ export default function LiveContestsModal({
             width={900}
             height={320}
           />
+          <div className="live-contests__hero-scrim" aria-hidden />
           <div className="live-contests__hero-copy">
             <h2 id="live-contests-title" className="live-contests__title">
               Live Contests
             </h2>
             <p className="live-contests__subtitle">
-              Play, Compete &amp; Earn{" "}
+              <span className="live-contests__subtitle-text">
+                Play, Compete &amp; Earn
+              </span>{" "}
               <span className="live-contests__usdt-pill">USDT</span>
             </p>
           </div>
         </header>
 
-        <div className="live-contests__status">
-          <p className="live-contests__status-live">
-            <span className="live-contests__dot" aria-hidden />
-            {countLabel}
-          </p>
-          <p className="live-contests__status-hint">
-            <span aria-hidden>🪙</span> Play now &amp; win USDT rewards
-          </p>
-        </div>
-
-        <div className="live-contests__list" role="list">
-          {liveGames.map((game, index) => (
-            <div key={game.id} role="listitem">
-              <ContestCard
-                game={game}
-                tone={CARD_TONES[index % CARD_TONES.length]}
-                now={now}
-                onPlay={onPlay}
-              />
-            </div>
-          ))}
-        </div>
-
-        <footer className="live-contests__footer">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="live-contests__footer-art"
-            src={LIVE_CONTESTS_FOOTER_COINS}
-            alt=""
-            width={120}
-            height={72}
-          />
-          <div className="live-contests__footer-copy">
-            <p className="live-contests__footer-title">
-              Earn USDT by Playing Contests!
+        <div className="live-contests__sheet">
+          <div className="live-contests__status">
+            <p className="live-contests__status-live">
+              <span className="live-contests__dot" aria-hidden />
+              {countLabel}
             </p>
-            <ul className="live-contests__checklist">
-              <li>
-                <span className="live-contests__check" aria-hidden>
-                  ✓
-                </span>
-                Join a live contest
-              </li>
-              <li>
-                <span className="live-contests__check" aria-hidden>
-                  ✓
-                </span>
-                Play your best
-              </li>
-              <li>
-                <span className="live-contests__check" aria-hidden>
-                  ✓
-                </span>
-                Win USDT rewards
-              </li>
-            </ul>
+            <p className="live-contests__status-hint">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="live-contests__status-coin"
+                src="/usdt-mark.svg"
+                alt=""
+                width={14}
+                height={14}
+              />
+              Win USDT rewards
+            </p>
           </div>
-        </footer>
+
+          <div className="live-contests__list" role="list">
+            {liveGames.map((game, index) => (
+              <div key={game.id} role="listitem">
+                <ContestCard
+                  game={game}
+                  tone={CARD_TONES[index % CARD_TONES.length]}
+                  now={now}
+                  onPlay={onPlay}
+                />
+              </div>
+            ))}
+          </div>
+
+          <footer className="live-contests__footer">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="live-contests__footer-art"
+              src={LIVE_CONTESTS_FOOTER_COINS}
+              alt=""
+              width={120}
+              height={72}
+            />
+            <div className="live-contests__footer-copy">
+              <p className="live-contests__footer-title">
+                Earn USDT by Playing Contests!
+              </p>
+              <ul className="live-contests__checklist">
+                <li>
+                  <span className="live-contests__check" aria-hidden>
+                    ✓
+                  </span>
+                  Join a live contest
+                </li>
+                <li>
+                  <span className="live-contests__check" aria-hidden>
+                    ✓
+                  </span>
+                  Play your best
+                </li>
+                <li>
+                  <span className="live-contests__check" aria-hidden>
+                    ✓
+                  </span>
+                  Win USDT rewards
+                </li>
+              </ul>
+            </div>
+          </footer>
+        </div>
       </div>
     </div>,
     document.body
