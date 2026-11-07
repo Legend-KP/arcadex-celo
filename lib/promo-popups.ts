@@ -8,6 +8,8 @@ import {
 } from "@/lib/daily-xp-board";
 import { isDailyXpUiEnabled } from "@/lib/feature-flags";
 import {
+  canShowLiveContestsToday,
+  getLiveContestsShownCountToday,
   getPromoRemainingSlotsToday,
   isPromoEventRead,
   wasPromoShownToday,
@@ -86,12 +88,17 @@ function buildLiveContestsCandidate(
 ): PromoPopupCandidate | null {
   const signature = liveContestSignature(games, now);
   if (!signature) return null;
+  if (!canShowLiveContestsToday(now)) return null;
+  const day = utcDayKey(now);
+  const shown = getLiveContestsShownCountToday(now);
   return {
-    id: `liveContests:${signature}`,
+    // Unique slot id so the same contest set can appear up to 3× / UTC day.
+    id: `liveContests:${day}:${shown}`,
     kind: "liveContests",
     /** After sparks / daily XP urgency; ahead of new arrivals & community. */
     priority: 55,
-    persistent: true,
+    /** Not permanent — closing only consumes one of today's 3 slots. */
+    persistent: false,
   };
 }
 
@@ -172,14 +179,17 @@ function buildSparksUpgradeCandidate(now: number): PromoPopupCandidate | null {
 }
 
 function isCapExemptPromo(kind: PromoPopupKind): boolean {
-  return kind === "sparksUpgrade" || kind === "dailyXp";
+  return (
+    kind === "sparksUpgrade" || kind === "dailyXp" || kind === "liveContests"
+  );
 }
 
 /**
  * Eligible promos for this moment, sorted by priority (highest first).
  * Host shows at most one per app open; daily cap still limits how many
  * opens in a UTC day can surface a promo (max 3).
- * Sparks-upgrade + Daily XP reward bypass the daily cap so everyone can see them.
+ * Sparks-upgrade, Daily XP, and Live Contests bypass the shared daily cap.
+ * Live Contests itself is allowed up to 3 shows per UTC day.
  */
 export function buildPromoQueue(
   games: Game[],

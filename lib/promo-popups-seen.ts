@@ -4,6 +4,8 @@ const READ_KEY = "arcadex_promo_read_v1";
 const DAY_KEY = "arcadex_promo_day_v1";
 
 export const PROMO_DAILY_CAP = 3;
+/** Live Contests home popup — intended shows per UTC day. */
+export const LIVE_CONTESTS_DAILY_SHOWS = 3;
 
 type ReadMap = Record<string, string>;
 
@@ -110,12 +112,26 @@ export function wasPromoShownToday(eventId: string, now = Date.now()): boolean {
   return readDayStore(now).shownIds.includes(eventId);
 }
 
+/** How many Live Contests popups were presented today (UTC). */
+export function getLiveContestsShownCountToday(now = Date.now()): number {
+  const day = utcDayKey(now);
+  const prefix = `liveContests:${day}:`;
+  return readDayStore(now).shownIds.filter((id) => id.startsWith(prefix)).length;
+}
+
+export function canShowLiveContestsToday(now = Date.now()): boolean {
+  return getLiveContestsShownCountToday(now) < LIVE_CONTESTS_DAILY_SHOWS;
+}
+
 /** Record that a promo was presented (counts toward the daily cap). */
 export function recordPromoPresented(eventId: string, now = Date.now()): void {
   if (!eventId) return;
   const store = readDayStore(now);
   if (store.shownIds.includes(eventId)) return;
   store.shownIds.push(eventId);
-  store.shownCount = Math.min(PROMO_DAILY_CAP, store.shownCount + 1);
+  // Live Contests has its own daily quota and should not burn shared slots.
+  if (!eventId.startsWith("liveContests:")) {
+    store.shownCount = Math.min(PROMO_DAILY_CAP, store.shownCount + 1);
+  }
   writeDayStore(store);
 }
