@@ -406,6 +406,12 @@ export default function HomePage() {
     claimDetails.claimsOpen &&
     dailyEarnGroups.unclaimed.length > 0;
 
+  // Keep contest / other home promos parked until daily claim UI is settled.
+  const holdPromosForDailyEarn =
+    isGameOpenClaimEnabled() &&
+    Boolean(walletAddress) &&
+    (!dailyEarnReady || showDailyEarn || earnNowOpen);
+
   const dismissDailyEarn = useCallback(() => {
     setDailyEarnDismissed(true);
   }, []);
@@ -622,6 +628,7 @@ export default function HomePage() {
 
       <PromoPopupHost
         games={games}
+        holdOff={holdPromosForDailyEarn}
         onOpenActivityBoard={() => setActivityBoardOpen(true)}
       />
       {isGameOpenClaimEnabled() ? (

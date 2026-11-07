@@ -20,6 +20,7 @@ import {
   gameIsTest,
 } from "@/types";
 
+/** @deprecated Kept for older stored promo ids; new queue uses liveContests. */
 export const PROMO_MILESTONES_HOURS = [12, 6, 3, 1] as const;
 export type ContestPromoMilestoneHours = (typeof PROMO_MILESTONES_HOURS)[number];
 
@@ -31,8 +32,7 @@ export const SPARKS_UPGRADE_PROMO_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 export const SPARKS_UPGRADE_PROMO_ID = `sparksUpgrade:${SPARK_MAX}`;
 
 export type PromoPopupKind =
-  | "contestEnd"
-  | "contestStart"
+  | "liveContests"
   | "dailyXp"
   | "newGame"
   | "communityTelegram"
@@ -54,31 +54,6 @@ export interface PromoPopupCandidate {
   persistent: boolean;
 }
 
-function milestoneForRemaining(
-  remainingMs: number,
-  milestones: readonly number[]
-): number | null {
-  if (remainingMs <= 0) return null;
-  const hours = remainingMs / (60 * 60 * 1000);
-  for (const m of [...milestones].sort((a, b) => a - b)) {
-    if (hours <= m) return m;
-  }
-  return null;
-}
-
-function contestEndPriority(hours: ContestPromoMilestoneHours): number {
-  switch (hours) {
-    case 1:
-      return 10;
-    case 3:
-      return 20;
-    case 6:
-      return 30;
-    case 12:
-      return 40;
-  }
-}
-
 /** Drop the fees/rewards boilerplate from admin contest task for promo copy. */
 export function sanitizeContestTaskForPromo(task?: string): string | undefined {
   if (!task?.trim()) return undefined;
@@ -89,6 +64,35 @@ export function sanitizeContestTaskForPromo(task?: string): string | undefined {
     .replace(/\s+([.!?])/g, "$1")
     .trim();
   return cleaned || undefined;
+}
+
+function liveContestSignature(games: Game[], now: number): string | null {
+  const parts: string[] = [];
+  for (const game of games) {
+    if (!game.active || gameIsTest(game) || !gameIsLive(game)) continue;
+    if (!isContestActive(game, now)) continue;
+    const startedAt = game.contestStartedAt;
+    if (typeof startedAt !== "number" || !Number.isFinite(startedAt)) continue;
+    parts.push(`${game.id}:${startedAt}`);
+  }
+  if (parts.length === 0) return null;
+  parts.sort();
+  return parts.join("|");
+}
+
+function buildLiveContestsCandidate(
+  games: Game[],
+  now: number
+): PromoPopupCandidate | null {
+  const signature = liveContestSignature(games, now);
+  if (!signature) return null;
+  return {
+    id: `liveContests:${signature}`,
+    kind: "liveContests",
+    /** After sparks / daily XP urgency; ahead of new arrivals & community. */
+    priority: 55,
+    persistent: true,
+  };
 }
 
 function buildGameCandidates(games: Game[], now: number): PromoPopupCandidate[] {
@@ -109,41 +113,6 @@ function buildGameCandidates(games: Game[], now: number): PromoPopupCandidate[] 
         priority: 200,
         gameId: game.id,
         gameName: game.name,
-        persistent: true,
-      });
-    }
-
-    if (!isContestActive(game, now)) continue;
-
-    const startedAt = game.contestStartedAt!;
-    const endsAt = game.contestEndsAt!;
-    const contestTask = sanitizeContestTaskForPromo(game.contestTask);
-
-    out.push({
-      id: `contestStart:${game.id}:${startedAt}`,
-      kind: "contestStart",
-      priority: 100,
-      gameId: game.id,
-      gameName: game.name,
-      contestTask,
-      endsAt,
-      persistent: true,
-    });
-
-    const milestone = milestoneForRemaining(
-      endsAt - now,
-      PROMO_MILESTONES_HOURS
-    ) as ContestPromoMilestoneHours | null;
-    if (milestone != null) {
-      out.push({
-        id: `contestEnd:${game.id}:${endsAt}:${milestone}`,
-        kind: "contestEnd",
-        priority: contestEndPriority(milestone),
-        gameId: game.id,
-        gameName: game.name,
-        contestTask,
-        endsAt,
-        milestoneHours: milestone,
         persistent: true,
       });
     }
@@ -219,10 +188,12 @@ export function buildPromoQueue(
   const remainingSlots = getPromoRemainingSlotsToday(now);
   const sparksUpgrade = buildSparksUpgradeCandidate(now);
   const dailyXp = buildDailyXpCandidate(now);
+  const liveContests = buildLiveContestsCandidate(games, now);
 
   const raw: PromoPopupCandidate[] = [
     ...(sparksUpgrade ? [sparksUpgrade] : []),
     ...(dailyXp ? [dailyXp] : []),
+    ...(liveContests ? [liveContests] : []),
     ...buildGameCandidates(games, now),
     ...buildCommunityCandidates(),
   ];
@@ -249,10 +220,8 @@ export function getPromoTitle(item: PromoPopupCandidate): string {
   switch (item.kind) {
     case "newGame":
       return "New Arrival";
-    case "contestStart":
-      return "New Contest";
-    case "contestEnd":
-      return "Contest Ending Soon";
+    case "liveContests":
+      return "Live Contests";
     case "dailyXp":
       return "Earn Daily";
     case "communityTelegram":
@@ -270,23 +239,8 @@ export function getPromoBody(item: PromoPopupCandidate): string {
       return item.gameName
         ? `${item.gameName} is live on ArcadeX. Jump in and try it out.`
         : "A new game is live on ArcadeX. Jump in and try it out.";
-    case "contestStart":
-      return [
-        item.gameName ? `Contest is live on ${item.gameName}.` : "A new contest is live.",
-        item.contestTask,
-      ]
-        .filter(Boolean)
-        .join(" ");
-    case "contestEnd":
-      return [
-        item.gameName
-          ? `${item.gameName} contest is almost over.`
-          : "A contest is almost over.",
-        item.contestTask,
-        "Play now to climb the board.",
-      ]
-        .filter(Boolean)
-        .join(" ");
+    case "liveContests":
+      return "Play, compete, and earn USDT rewards in live contests.";
     case "dailyXp":
       return `Reach ${DAILY_XP_THRESHOLD} XP today → Claim $${DAILY_XP_REWARD_USDT.toFixed(2)} USDT.`;
     case "communityTelegram":
@@ -302,9 +256,8 @@ export function getPromoCtaLabel(item: PromoPopupCandidate): string {
   switch (item.kind) {
     case "newGame":
       return "Try it out";
-    case "contestStart":
-    case "contestEnd":
-      return "Let's Go";
+    case "liveContests":
+      return "Play Now";
     case "dailyXp":
       return "Let's Play";
     case "communityTelegram":
@@ -321,7 +274,7 @@ export function isCommunityPromo(kind: PromoPopupKind): boolean {
 }
 
 export function isContestPromo(kind: PromoPopupKind): boolean {
-  return kind === "contestStart" || kind === "contestEnd";
+  return kind === "liveContests";
 }
 
 export function isLeaderboardPromo(kind: PromoPopupKind): boolean {

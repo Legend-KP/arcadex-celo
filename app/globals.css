@@ -19600,6 +19600,355 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 8px 18px rgba(22, 163, 74, 0.28);
 }
 
+/* Shared Live Contests promo (replaces per-game contestStart/contestEnd) */
+.live-contests-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 270;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  background: rgba(8, 16, 32, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: promo-popup-in 0.28s ease-out;
+}
+.live-contests {
+  position: relative;
+  width: min(100%, 420px);
+  max-height: min(92vh, 780px);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border-radius: 28px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #eaf7ff 0%, #ffffff 42%, #f3faff 100%);
+  box-shadow: 0 22px 50px rgba(15, 40, 70, 0.35);
+  animation: promo-popup-panel-in 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.live-contests__close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #243044;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(20, 60, 100, 0.18);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.live-contests__hero {
+  position: relative;
+  flex: 0 0 auto;
+  line-height: 0;
+  background: linear-gradient(180deg, #7ed0ff 0%, #c8ebff 100%);
+}
+.live-contests__banner {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 168px;
+  object-fit: cover;
+  object-position: center 42%;
+}
+.live-contests__hero-copy {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  padding: 0 16px;
+  text-align: center;
+  pointer-events: none;
+}
+.live-contests__title {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: clamp(28px, 8vw, 36px);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: #2f6bff;
+  -webkit-text-stroke: 3px #fff;
+  paint-order: stroke fill;
+  text-shadow: 0 3px 0 rgba(255, 255, 255, 0.9), 0 6px 14px rgba(30, 80, 160, 0.25);
+}
+.live-contests__subtitle {
+  margin: 6px 0 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 800;
+  color: #1f2a37;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+.live-contests__usdt-pill {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffe56a, #ffd23a);
+  color: #5b4300;
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7), 0 2px 6px rgba(180, 130, 0, 0.25);
+}
+.live-contests__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px 6px;
+  flex: 0 0 auto;
+}
+.live-contests__status-live,
+.live-contests__status-hint {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.live-contests__status-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #1f2a37;
+}
+.live-contests__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+  flex: 0 0 auto;
+}
+.live-contests__status-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #6b7c90;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.live-contests__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 12px 8px;
+  -webkit-overflow-scrolling: touch;
+}
+.live-contests__card {
+  position: relative;
+  border-radius: 16px;
+  padding: 14px 10px 10px;
+  border: 1px solid rgba(120, 150, 180, 0.16);
+  box-shadow: 0 4px 12px rgba(40, 70, 110, 0.06);
+}
+.live-contests__card--lavender {
+  background: linear-gradient(180deg, #f4ecff 0%, #faf6ff 100%);
+}
+.live-contests__card--butter {
+  background: linear-gradient(180deg, #fff6d8 0%, #fffced 100%);
+}
+.live-contests__card--sky {
+  background: linear-gradient(180deg, #e7f4ff 0%, #f4faff 100%);
+}
+.live-contests__live-pill {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff4d8d, #ff6ea8);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 6px rgba(255, 77, 141, 0.35);
+}
+.live-contests__card-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) max-content;
+  column-gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+.live-contests__thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: #e7f3fb;
+  display: block;
+  box-shadow: 0 2px 8px rgba(30, 60, 100, 0.12);
+}
+.live-contests__thumb--empty {
+  display: block;
+}
+.live-contests__card-copy {
+  min-width: 0;
+}
+.live-contests__card-title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #152033;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-contests__card-meta {
+  margin: 5px 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  color: #7a8ca0;
+  font-variant-numeric: tabular-nums;
+}
+.live-contests__card-clock {
+  font-size: 12px;
+  line-height: 1;
+}
+.live-contests__play {
+  box-sizing: border-box;
+  min-width: 96px;
+  height: 40px;
+  margin: 0;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: none;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  color: #fff;
+  background: linear-gradient(90deg, #2fce4f 0%, #5ee06a 62%, #c6f16d 130%);
+  box-shadow: 0 4px 10px rgba(40, 180, 80, 0.28);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.live-contests__play:active {
+  transform: scale(0.98);
+}
+.live-contests__footer {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin: 4px 12px 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fff8e8 0%, #fff1d2 100%);
+  border: 1px solid rgba(230, 190, 100, 0.35);
+}
+.live-contests__footer-art {
+  width: 88px;
+  height: 56px;
+  object-fit: cover;
+  object-position: left center;
+  border-radius: 10px;
+  display: block;
+}
+.live-contests__footer-title {
+  margin: 0 0 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 900;
+  color: #1e3a5f;
+  line-height: 1.2;
+}
+.live-contests__checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.live-contests__checklist li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  color: #4b627a;
+  line-height: 1.2;
+}
+.live-contests__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #22c55e;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  flex: 0 0 auto;
+}
+@media (max-width: 400px) {
+  .live-contests__card-row {
+    grid-template-columns: 48px minmax(0, 1fr) max-content;
+    column-gap: 8px;
+  }
+  .live-contests__thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+  }
+  .live-contests__card-title {
+    font-size: 13px;
+  }
+  .live-contests__play {
+    min-width: 88px;
+    height: 36px;
+    font-size: 12px;
+    padding: 0 10px;
+  }
+  .live-contests__status-hint {
+    font-size: 11px;
+  }
+  .live-contests__footer {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+  .live-contests__footer-art {
+    width: 72px;
+    height: 48px;
+  }
+}
+
 /* -- 30-day streak mock layout (ladder v2) ----------------- */
 .daily-checkin-modal--ladder-v2 {
   background:

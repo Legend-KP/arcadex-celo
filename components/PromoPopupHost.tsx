@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import LiveContestsModal from "@/components/LiveContestsModal";
 import PromoPopupModal from "@/components/PromoPopupModal";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { gameSquareImageCandidates } from "@/lib/game-assets";
@@ -17,30 +18,45 @@ import {
 } from "@/lib/promo-popups-seen";
 import {
   hasPromoBeenShownThisSession,
+  isForeignUiBusy,
   isPromoUiBusy,
   markPromoShownThisSession,
 } from "@/lib/ui-overlay-gate";
-import { useUiOverlayBusy } from "@/lib/use-ui-overlay-gate";
+import {
+  useClaimUiOverlay,
+  useForeignUiBusy,
+} from "@/lib/use-ui-overlay-gate";
 import { Game } from "@/types";
 
+export const PROMO_POPUP_OVERLAY_ID = "promo-popup";
+
 /** Wait for modal/name/overlay transitions to settle before showing a promo. */
-const PROMO_OPEN_SETTLE_MS = 650;
+const PROMO_OPEN_SETTLE_MS = 700;
+/** Extra settle after claim / daily-earn panels so the handoff feels smooth. */
+const PROMO_AFTER_CLAIM_SETTLE_MS = 450;
 /** Only count toward daily/session after the promo has been stably visible. */
 const PROMO_COMMIT_MS = 400;
 
 interface PromoPopupHostProps {
   games: Game[];
   onOpenActivityBoard: () => void;
+  /**
+   * Hold promos while daily-earn claims are still loading/showing so the
+   * contest popup never races or stacks with the claim flow.
+   */
+  holdOff?: boolean;
 }
 
 export default function PromoPopupHost({
   games,
   onOpenActivityBoard: _onOpenActivityBoard,
+  holdOff = false,
 }: PromoPopupHostProps) {
   const router = useRouter();
   const { criticalModalsBlocking } = usePlayerProfile();
-  const overlayBusy = useUiOverlayBusy();
-  const gateBusy = criticalModalsBlocking || overlayBusy;
+  const foreignBusy = useForeignUiBusy(PROMO_POPUP_OVERLAY_ID);
+  const gateBusy = criticalModalsBlocking || foreignBusy || holdOff;
+  const wasBusyRef = useRef(gateBusy);
 
   const [active, setActive] = useState<PromoPopupCandidate | null>(null);
   const sessionConsumedRef = useRef(hasPromoBeenShownThisSession());
@@ -49,6 +65,9 @@ export default function PromoPopupHost({
   const commitTimerRef = useRef<number | null>(null);
   const gamesRef = useRef(games);
   gamesRef.current = games;
+
+  // Claim while showing so daily-earn / claim popups never stack on top.
+  useClaimUiOverlay(PROMO_POPUP_OVERLAY_ID, Boolean(active));
 
   const clearOpenTimer = useCallback(() => {
     if (openTimerRef.current != null) {
@@ -70,6 +89,9 @@ export default function PromoPopupHost({
   }, []);
 
   useEffect(() => {
+    const justFreed = wasBusyRef.current && !gateBusy;
+    wasBusyRef.current = gateBusy;
+
     if (gateBusy) {
       clearOpenTimer();
       clearCommitTimer();
@@ -82,6 +104,10 @@ export default function PromoPopupHost({
     if (sessionConsumedRef.current || active) return;
 
     clearOpenTimer();
+    const settleMs = justFreed
+      ? PROMO_OPEN_SETTLE_MS + PROMO_AFTER_CLAIM_SETTLE_MS
+      : PROMO_OPEN_SETTLE_MS;
+
     openTimerRef.current = window.setTimeout(function tryOpen() {
       openTimerRef.current = null;
       if (sessionConsumedRef.current) return;
@@ -92,7 +118,7 @@ export default function PromoPopupHost({
       }
       const first = buildPromoQueue(gamesRef.current)[0] ?? null;
       if (first) setActive(first);
-    }, PROMO_OPEN_SETTLE_MS);
+    }, settleMs);
 
     return clearOpenTimer;
   }, [gateBusy, games, active, clearOpenTimer, clearCommitTimer]);
@@ -105,7 +131,7 @@ export default function PromoPopupHost({
     commitTimerRef.current = window.setTimeout(() => {
       commitTimerRef.current = null;
       if (!active || gateBusy) return;
-      if (isPromoUiBusy()) {
+      if (isForeignUiBusy(PROMO_POPUP_OVERLAY_ID)) {
         setActive(null);
         return;
       }
@@ -162,19 +188,36 @@ export default function PromoPopupHost({
     const community = isCommunityPromo(item.kind);
     finish(item, !community);
 
-    if (
-      (item.kind === "newGame" ||
-        item.kind === "contestStart" ||
-        item.kind === "contestEnd") &&
-      item.gameId
-    ) {
+    if (item.kind === "newGame" && item.gameId) {
       router.push(`/game/${item.gameId}`);
       return;
     }
-    // dailyXp: board is already shown in the promo — just dismiss.
+    // dailyXp / liveContests: dismiss only (Play Now handled per card).
   }, [active, finish, router]);
 
-  if (gateBusy || !active) return null;
+  const handleContestPlay = useCallback(
+    (gameId: string) => {
+      if (!active) return;
+      finish(active, true);
+      router.push(`/game/${gameId}`);
+    },
+    [active, finish, router]
+  );
+
+  if (!active) return null;
+  // Keep rendering while our own claim is registered; only foreign busy clears active.
+  if (gateBusy) return null;
+
+  if (active.kind === "liveContests") {
+    return (
+      <LiveContestsModal
+        open
+        games={games}
+        onDismiss={handleDismiss}
+        onPlay={handleContestPlay}
+      />
+    );
+  }
 
   return (
     <PromoPopupModal
