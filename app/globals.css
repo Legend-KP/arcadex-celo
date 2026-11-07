@@ -19658,9 +19658,11 @@ a { color: inherit; text-decoration: none; }
 .live-contests__banner {
   display: block;
   width: 100%;
-  height: 196px;
-  object-fit: cover;
-  object-position: center 38%;
+  height: auto;
+  max-height: 210px;
+  object-fit: contain;
+  object-position: center center;
+  background: linear-gradient(180deg, #6ec8ff 0%, #c8ebff 70%, #ffffff 100%);
 }
 .live-contests__hero-scrim {
   position: absolute;
@@ -19668,10 +19670,10 @@ a { color: inherit; text-decoration: none; }
   background:
     linear-gradient(
       180deg,
-      rgba(8, 24, 48, 0.08) 0%,
-      rgba(8, 24, 48, 0) 28%,
-      rgba(255, 255, 255, 0.12) 52%,
-      rgba(255, 255, 255, 0.82) 78%,
+      rgba(8, 24, 48, 0.04) 0%,
+      rgba(8, 24, 48, 0) 34%,
+      rgba(255, 255, 255, 0.2) 62%,
+      rgba(255, 255, 255, 0.88) 84%,
       #ffffff 100%
     );
   pointer-events: none;
@@ -19680,9 +19682,9 @@ a { color: inherit; text-decoration: none; }
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 18px;
+  bottom: 16px;
   z-index: 1;
-  padding: 0 18px;
+  padding: 0 16px;
   text-align: center;
   pointer-events: none;
 }
@@ -19702,38 +19704,34 @@ a { color: inherit; text-decoration: none; }
     0 8px 18px rgba(30, 80, 160, 0.28);
 }
 .live-contests__subtitle {
-  margin: 10px 0 0;
+  margin: 10px auto 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 100%;
+  padding: 5px 10px 5px 12px;
+  border-radius: 999px;
   font-family: var(--font-body);
   font-size: 13px;
   font-weight: 800;
   line-height: 1.2;
-}
-.live-contests__subtitle-text {
-  display: inline-block;
-  padding: 5px 10px;
-  border-radius: 999px;
   color: #0f1b2d;
-  background: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.94);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.95),
     0 4px 12px rgba(20, 50, 90, 0.14);
 }
 .live-contests__usdt-pill {
   display: inline-block;
-  padding: 5px 10px;
+  padding: 2px 8px;
   border-radius: 999px;
   background: linear-gradient(180deg, #ffe56a, #ffc933);
   color: #5b4300;
   font-size: 12px;
   font-weight: 900;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.75),
-    0 3px 8px rgba(180, 130, 0, 0.28);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 .live-contests__sheet {
   position: relative;
@@ -19987,7 +19985,7 @@ a { color: inherit; text-decoration: none; }
 }
 @media (max-width: 400px) {
   .live-contests__banner {
-    height: 176px;
+    max-height: 180px;
   }
   .live-contests__title {
     font-size: 28px;
@@ -19995,6 +19993,7 @@ a { color: inherit; text-decoration: none; }
   }
   .live-contests__subtitle {
     font-size: 12px;
+    padding: 4px 8px 4px 10px;
   }
   .live-contests__status {
     padding: 9px 10px;

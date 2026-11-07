@@ -183,9 +183,7 @@ export default function LiveContestsModal({
               Live Contests
             </h2>
             <p className="live-contests__subtitle">
-              <span className="live-contests__subtitle-text">
-                Play, Compete &amp; Earn
-              </span>{" "}
+              Play, Compete &amp; Earn{" "}
               <span className="live-contests__usdt-pill">USDT</span>
             </p>
           </div>
@@ -234,7 +232,7 @@ export default function LiveContestsModal({
             />
             <div className="live-contests__footer-copy">
               <p className="live-contests__footer-title">
-                Earn USDT by Playing Contests!
+                Earn USDT by Playing Games!
               </p>
               <ul className="live-contests__checklist">
                 <li>
