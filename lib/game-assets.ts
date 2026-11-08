@@ -51,6 +51,10 @@ const ROOT_GAME_LOGOS: Record<string, string> = {
   freefall: "/games/free-logo.webp",
   free: "/games/free-logo.webp",
   "2048": "/games/2048-logo.webp",
+  "2048-bubbles": "/games/2048bubbles-logo.webp",
+  "2048-bubble": "/games/2048bubbles-logo.webp",
+  "2048bubbles": "/games/2048bubbles-logo.webp",
+  "2048bubble": "/games/2048bubbles-logo.webp",
   zeno: "/games/zeno-logo.webp",
   retro: "/games/retro-logo.webp",
   "retro-blocks": "/games/retro-logo.webp",
@@ -68,6 +72,12 @@ const ROOT_GAME_LOGOS: Record<string, string> = {
   knife: "/games/knife-logo.webp",
   "knife-throw": "/games/knife-logo.webp",
   tower: "/games/tower-logo.webp",
+  "perfect-pile": "/games/pile-logo.webp",
+  perfectpile: "/games/pile-logo.webp",
+  pile: "/games/pile-logo.webp",
+  "bee-brave": "/games/bee-logo.webp",
+  beebrave: "/games/bee-logo.webp",
+  bee: "/games/bee-logo.webp",
 };
 
 /** Remote URLs stay. Local /games, /thumbnails, and /tutorials URLs must exist on disk. */
@@ -98,11 +108,20 @@ function resolveRootLogo(game: Game): string | null {
   if (id && ROOT_GAME_LOGOS[id]) return ROOT_GAME_LOGOS[id];
 
   const haystacks = [nameSlug, isFirestoreAutoId(id) ? "" : id].filter(Boolean);
+
+  // Prefer longest key match so "2048-bubbles" wins over "2048".
+  let bestKey = "";
+  let bestUrl: string | null = null;
   for (const [key, url] of Object.entries(ROOT_GAME_LOGOS)) {
-    if (haystacks.some((h) => h === key || h.startsWith(`${key}-`))) {
-      return url;
+    if (
+      haystacks.some((h) => h === key || h.startsWith(`${key}-`)) &&
+      key.length > bestKey.length
+    ) {
+      bestKey = key;
+      bestUrl = url;
     }
   }
+  if (bestUrl) return bestUrl;
 
   if (nameSlug.includes("jelly") || (!isFirestoreAutoId(id) && id.includes("jelly"))) {
     return ROOT_GAME_LOGOS["jelly-jumble"];
@@ -113,6 +132,29 @@ function resolveRootLogo(game: Game): string | null {
     (!isFirestoreAutoId(id) && id.includes("free") && id.includes("fall"))
   ) {
     return ROOT_GAME_LOGOS["free-fall"];
+  }
+
+  if (
+    (nameSlug.includes("2048") && nameSlug.includes("bubble")) ||
+    (!isFirestoreAutoId(id) && id.includes("2048") && id.includes("bubble"))
+  ) {
+    return ROOT_GAME_LOGOS["2048-bubbles"];
+  }
+
+  if (
+    (nameSlug.includes("bee") && nameSlug.includes("brave")) ||
+    nameSlug.includes("beebrave") ||
+    (!isFirestoreAutoId(id) && id.includes("bee"))
+  ) {
+    return ROOT_GAME_LOGOS["bee-brave"];
+  }
+
+  if (
+    (nameSlug.includes("perfect") && nameSlug.includes("pile")) ||
+    nameSlug.includes("perfectpile") ||
+    (!isFirestoreAutoId(id) && id.includes("pile"))
+  ) {
+    return ROOT_GAME_LOGOS["perfect-pile"];
   }
 
   return null;
@@ -189,7 +231,10 @@ const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
   "retro-blocks",
   "zeno",
   "2048",
+  "2048-bubbles",
   "knife-throw",
+  "perfect-pile",
+  "bee-brave",
 ]);
 
 /** Name/id aliases that map onto a preview-video folder slug. */
@@ -231,6 +276,13 @@ const PREVIEW_VIDEO_FOLDER_ALIASES: Record<string, string> = {
   knife: "knife-throw",
   knifethrow: "knife-throw",
   "knife-throw-game": "knife-throw",
+  "2048-bubble": "2048-bubbles",
+  "2048bubble": "2048-bubbles",
+  "2048bubbles": "2048-bubbles",
+  perfectpile: "perfect-pile",
+  pile: "perfect-pile",
+  beebrave: "bee-brave",
+  bee: "bee-brave",
 };
 
 export type GameVideoSources = {
@@ -339,6 +391,14 @@ function resolvePreviewVideoFolder(game: Game): string | null {
     if (raw.includes("zeno") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("zeno")) {
       return "zeno";
     }
+    if (
+      (raw.includes("2048-bubble") ||
+        raw.includes("2048bubble") ||
+        (raw.includes("2048") && raw.includes("bubble"))) &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("2048-bubbles")
+    ) {
+      return "2048-bubbles";
+    }
     if (raw.includes("2048") && LOCAL_PREVIEW_VIDEO_FOLDERS.has("2048")) {
       return "2048";
     }
@@ -347,6 +407,24 @@ function resolvePreviewVideoFolder(game: Game): string | null {
       LOCAL_PREVIEW_VIDEO_FOLDERS.has("knife-throw")
     ) {
       return "knife-throw";
+    }
+    if (
+      (raw.includes("perfect-pile") ||
+        raw.includes("perfectpile") ||
+        (raw.includes("perfect") && raw.includes("pile")) ||
+        raw === "pile") &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("perfect-pile")
+    ) {
+      return "perfect-pile";
+    }
+    if (
+      (raw.includes("bee-brave") ||
+        raw.includes("beebrave") ||
+        (raw.includes("bee") && raw.includes("brave")) ||
+        raw === "bee") &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("bee-brave")
+    ) {
+      return "bee-brave";
     }
   }
 
