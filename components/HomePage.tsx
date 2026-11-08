@@ -397,25 +397,47 @@ export default function HomePage() {
 
   const dailyEarnReady =
     !isGameOpenClaimEnabled() || !walletAddress || claimDetails.loaded;
-  const showDailyEarn =
+
+  // Eligibility ignores foreign overlays — otherwise promo claim ↔ daily-earn
+  // open/close feedback makes the screen blink.
+  const dailyEarnEligible =
     isGameOpenClaimEnabled() &&
     isReady &&
     !criticalModalsBlocking &&
     !loading &&
     dailyEarnReady &&
-    !dailyEarnBlocked &&
     !dailyEarnDismissed &&
     claimDetails.claimsOpen &&
     claimDetails.walletClaimsOpen &&
     dailyEarnGroups.unclaimed.length > 0;
 
-  // Keep contest / other home promos parked until daily claim UI is settled.
+  // Sticky open: once shown, stay up until the user dismisses — don't tear
+  // down when another overlay briefly claims the gate.
+  const [dailyEarnLatched, setDailyEarnLatched] = useState(false);
+  useEffect(() => {
+    if (dailyEarnDismissed) {
+      setDailyEarnLatched(false);
+      return;
+    }
+    if (dailyEarnEligible && !dailyEarnBlocked) {
+      setDailyEarnLatched(true);
+    }
+  }, [dailyEarnEligible, dailyEarnBlocked, dailyEarnDismissed]);
+
+  const showDailyEarn =
+    dailyEarnLatched || (dailyEarnEligible && !dailyEarnBlocked);
+
+  // Hold promos for the whole daily-earn opportunity (not only while mounted).
   const holdPromosForDailyEarn =
     isGameOpenClaimEnabled() &&
     Boolean(walletAddress) &&
-    (!dailyEarnReady || showDailyEarn || earnNowOpen);
+    (earnNowOpen ||
+      !dailyEarnReady ||
+      (!dailyEarnDismissed &&
+        (dailyEarnEligible || dailyEarnLatched || showDailyEarn)));
 
   const dismissDailyEarn = useCallback(() => {
+    setDailyEarnLatched(false);
     setDailyEarnDismissed(true);
   }, []);
 

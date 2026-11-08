@@ -31,11 +31,13 @@ import { Game } from "@/types";
 export const PROMO_POPUP_OVERLAY_ID = "promo-popup";
 
 /** Wait for modal/name/overlay transitions to settle before showing a promo. */
-const PROMO_OPEN_SETTLE_MS = 700;
+const PROMO_OPEN_SETTLE_MS = 800;
 /** Extra settle after claim / daily-earn panels so the handoff feels smooth. */
-const PROMO_AFTER_CLAIM_SETTLE_MS = 450;
+const PROMO_AFTER_CLAIM_SETTLE_MS = 550;
 /** Only count toward daily/session after the promo has been stably visible. */
-const PROMO_COMMIT_MS = 400;
+const PROMO_COMMIT_MS = 450;
+/** Retry backoff when DOM still reports a blocking overlay. */
+const PROMO_BUSY_RETRY_MS = 500;
 
 interface PromoPopupHostProps {
   games: Game[];
@@ -65,6 +67,8 @@ export default function PromoPopupHost({
   const commitTimerRef = useRef<number | null>(null);
   const gamesRef = useRef(games);
   gamesRef.current = games;
+  const activeRef = useRef<PromoPopupCandidate | null>(null);
+  activeRef.current = active;
 
   // Claim while showing so daily-earn / claim popups never stack on top.
   useClaimUiOverlay(PROMO_POPUP_OVERLAY_ID, Boolean(active));
@@ -95,13 +99,14 @@ export default function PromoPopupHost({
     if (gateBusy) {
       clearOpenTimer();
       clearCommitTimer();
-      // Interrupted by another panel — do not burn the session slot
-      // unless we already committed a stable show.
-      setActive(null);
+      // Only tear down if something is actually showing — avoid null churn.
+      if (activeRef.current) {
+        setActive(null);
+      }
       return;
     }
 
-    if (sessionConsumedRef.current || active) return;
+    if (sessionConsumedRef.current || activeRef.current) return;
 
     clearOpenTimer();
     const settleMs = justFreed
@@ -110,10 +115,10 @@ export default function PromoPopupHost({
 
     openTimerRef.current = window.setTimeout(function tryOpen() {
       openTimerRef.current = null;
-      if (sessionConsumedRef.current) return;
+      if (sessionConsumedRef.current || activeRef.current) return;
       // Final DOM check — covers panels that race the React registry.
       if (isPromoUiBusy()) {
-        openTimerRef.current = window.setTimeout(tryOpen, 400);
+        openTimerRef.current = window.setTimeout(tryOpen, PROMO_BUSY_RETRY_MS);
         return;
       }
       const first = buildPromoQueue(gamesRef.current)[0] ?? null;
@@ -121,7 +126,9 @@ export default function PromoPopupHost({
     }, settleMs);
 
     return clearOpenTimer;
-  }, [gateBusy, games, active, clearOpenTimer, clearCommitTimer]);
+    // Intentionally omit `games` / `active` — use refs so list refreshes
+    // don't restart the open timer and flash the modal.
+  }, [gateBusy, clearOpenTimer, clearCommitTimer]);
 
   // Commit only after the promo stays visible without other overlays.
   useEffect(() => {
@@ -130,14 +137,17 @@ export default function PromoPopupHost({
 
     commitTimerRef.current = window.setTimeout(() => {
       commitTimerRef.current = null;
-      if (!active || gateBusy) return;
+      if (!activeRef.current || wasBusyRef.current) return;
       if (isForeignUiBusy(PROMO_POPUP_OVERLAY_ID)) {
+        // Another panel won — drop quietly; session not consumed yet if
+        // we never reached a stable show... but if we already recorded, keep it.
         setActive(null);
         return;
       }
-      if (!committedIdsRef.current.has(active.id)) {
-        committedIdsRef.current.add(active.id);
-        recordPromoPresented(active.id);
+      const item = activeRef.current;
+      if (!committedIdsRef.current.has(item.id)) {
+        committedIdsRef.current.add(item.id);
+        recordPromoPresented(item.id);
       }
       consumeSession();
     }, PROMO_COMMIT_MS);
@@ -204,9 +214,7 @@ export default function PromoPopupHost({
     [active, finish, router]
   );
 
-  if (!active) return null;
-  // Keep rendering while our own claim is registered; only foreign busy clears active.
-  if (gateBusy) return null;
+  if (!active || gateBusy) return null;
 
   if (active.kind === "liveContests") {
     return (
