@@ -44,7 +44,7 @@ export function useGameOpenClaimDetails(
   byId: Record<string, GameOpenClaimUiState>;
   loaded: boolean;
   claimsOpen: boolean;
-  /** False after this wallet reserved 10 slots today (same look as out-of-funds). */
+  /** False after this wallet reserved 8 slots today (same look as out-of-funds). */
   walletClaimsOpen: boolean;
 } {
   const [byId, setById] = useState<Record<string, GameOpenClaimUiState>>({});

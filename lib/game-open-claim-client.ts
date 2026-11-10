@@ -24,7 +24,7 @@ export interface GameOpenClaimStatus {
   canClaim: boolean;
   /** False after the shared daily cap. Pending on-chain rewards can still be claimed. */
   claimsOpen: boolean;
-  /** False after this wallet reserved 10 slots today. */
+  /** False after this wallet reserved 8 slots today. */
   walletClaimsOpen: boolean;
 }
 

@@ -23,7 +23,7 @@ export const GAME_OPEN_CLAIM_DAILY_CAP = 6_000;
  * Max open-claim slots per wallet per UTC day (pending + claimed).
  * Reserved atomically at claim-sign so parallel requests cannot overshoot.
  */
-export const GAME_OPEN_CLAIM_PER_WALLET_DAILY = 10;
+export const GAME_OPEN_CLAIM_PER_WALLET_DAILY = 8;
 export const GAME_OPEN_CLAIM_REWARD_AMOUNT = BigInt(10_000);
 
 /** 0.01 stays 0.01; a leftover 0.012 pending reward still shows 0.012. */

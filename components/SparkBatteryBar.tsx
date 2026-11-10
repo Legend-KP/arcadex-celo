@@ -226,7 +226,7 @@ export default function SparkBatteryBar() {
             <span className="spark-panel__info-icon" aria-hidden>
               i
             </span>
-            1 Spark = 1 game entry. Sparks refill one at a time — each takes 3
+            1 Spark = 1 game entry. Sparks refill one at a time — each takes 2
             hours, and the next starts only after the previous one is ready.
           </p>
         </section>

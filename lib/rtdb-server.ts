@@ -560,9 +560,9 @@ export async function ensureSparkStateOnServer(
       typeof (existing as { max?: unknown }).max === "number"
         ? (existing as { max: number }).max
         : 0;
-    // Always persist when raising SPARK_MAX so RTDB does not keep the old cap.
+    // Persist when SPARK_MAX / regen changes so RTDB does not keep stale values.
     const needsRewrite =
-      storedMax < SPARK_MAX ||
+      storedMax !== SPARK_MAX ||
       JSON.stringify(forRtdb) !== JSON.stringify(existing);
     if (needsRewrite) {
       await writePath(sparksPath(wallet), forRtdb);

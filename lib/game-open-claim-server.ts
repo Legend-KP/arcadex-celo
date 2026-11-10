@@ -395,7 +395,7 @@ const statusBatchCache = new Map<
 export type GameOpenClaimBatch = {
   utcDay: string;
   claimsOpen: boolean;
-  /** False once this wallet has reserved 10 slots today (pending + claimed). */
+  /** False once this wallet has reserved 8 slots today (pending + claimed). */
   walletClaimsOpen: boolean;
   byGameId: Record<string, GameOpenClaimStatusRow>;
 };
@@ -737,7 +737,7 @@ async function readLedgerStatus(
 
 /**
  * Atomically reserve one open-claim slot for (wallet, game, day).
- * Counts pending + claimed toward both the per-wallet 10 and global 6000 caps.
+ * Counts pending + claimed toward both the per-wallet 8 and global 6000 caps.
  * Re-signing an existing pending row does not consume another slot.
  */
 export async function reserveGameOpenClaim(opts: {

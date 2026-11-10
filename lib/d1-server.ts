@@ -699,7 +699,7 @@ export async function ensureSparkStateOnServer(
     const normalized = sparksRowToState(existing)!;
     const packed = sparkStateForD1(normalized);
     const needsRewrite =
-      existing.max < SPARK_MAX ||
+      existing.max !== SPARK_MAX ||
       packed.slots_json !== existing.slots_json ||
       packed.regen_ms !== existing.regen_ms ||
       packed.infinite_until !== (existing.infinite_until ?? null);
