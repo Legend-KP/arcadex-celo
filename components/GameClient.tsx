@@ -40,6 +40,7 @@ import {
 } from "@/lib/leaderboard-submit-result";
 import {
   getContestSessionBest,
+  isContestRunScore,
   noteContestSessionScore,
   resolveContestSubmitScore,
 } from "@/lib/contest-session-score";
@@ -74,6 +75,8 @@ export default function GameClient({
   );
   const [payingSubmit, setPayingSubmit] = useState(false);
   const personalBestRef = useRef(0);
+  /** False until this game's saved best has been loaded. 0 before that is "unknown", not "no score". */
+  const personalBestKnownRef = useRef(false);
   /** Best run observed during this contest (not lifetime PB). */
   const contestSessionBestRef = useRef(0);
   const leaderboardEnabled = gameHasLeaderboard(game);
@@ -82,6 +85,11 @@ export default function GameClient({
     typeof game.contestStartedAt === "number" ? game.contestStartedAt : null;
   const shellOrigin = getShellOrigin();
   const progressRetryRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    personalBestRef.current = 0;
+    personalBestKnownRef.current = false;
+  }, [game.id]);
 
   useEffect(() => {
     contestSessionBestRef.current = contestLive
@@ -263,6 +271,7 @@ export default function GameClient({
       }
     ) => {
       const previousBest = personalBestRef.current;
+      const bestWasKnown = personalBestKnownRef.current;
       const result = await saveGameProgress(game.id, resolvedWalletAddr, value, {
         playerName: name,
         mode: opts?.mode,
@@ -273,8 +282,15 @@ export default function GameClient({
         result.progress.score ?? (leaderboardEnabled ? value : previousBest);
       const level =
         result.progress.level ?? (leaderboardEnabled ? 0 : value);
-      if (leaderboardEnabled && highScore > previousBest) {
-        personalBestRef.current = highScore;
+      if (leaderboardEnabled) {
+        personalBestKnownRef.current = true;
+        if (highScore > personalBestRef.current) {
+          personalBestRef.current = highScore;
+        }
+        // A save that raises the known best happened during this contest.
+        if (contestLive && bestWasKnown && highScore > previousBest) {
+          noteContestRun(highScore);
+        }
       }
       return {
         highScore,
@@ -282,7 +298,7 @@ export default function GameClient({
         modes: result.progress.modes ?? result.modes ?? opts?.modes ?? null,
       };
     },
-    [game.id, leaderboardEnabled]
+    [game.id, leaderboardEnabled, contestLive, noteContestRun]
   );
 
   const showSubmitFeedback = useCallback((result: LeaderboardSubmitUnityResult) => {
@@ -486,6 +502,7 @@ export default function GameClient({
         const highScore = progress.score ?? 0;
         const level = progress.level ?? 0;
         personalBestRef.current = Math.max(personalBestRef.current, highScore);
+        personalBestKnownRef.current = true;
         if (personalBestRef.current <= 0 && level <= 0 && !progress.modes) return;
 
         deliverProgressToUnity(
@@ -562,6 +579,7 @@ export default function GameClient({
               level = progress.level ?? 0;
               modes = progress.modes ?? null;
               personalBestRef.current = highScore;
+              personalBestKnownRef.current = true;
               if (stateResult) {
                 gameState = stateResult.state;
                 gameStateRevision = stateResult.revision;
@@ -659,7 +677,12 @@ export default function GameClient({
                 : modes
                   ? Math.max(0, ...Object.values(modes))
                   : 0;
-            if (leaderboardEnabled && typeof progressValue === "number") {
+            if (
+              leaderboardEnabled &&
+              personalBestKnownRef.current &&
+              typeof progressValue === "number" &&
+              isContestRunScore(progressValue, personalBestRef.current)
+            ) {
               noteContestRun(progressValue);
             }
             const saved = await persistProgress(
@@ -728,6 +751,7 @@ export default function GameClient({
               modes: progress.modes ?? null,
             };
             personalBestRef.current = payload.highScore;
+            personalBestKnownRef.current = true;
             deliverProgressToUnity(payload, {
               wallet,
               playerName: playerName || profile?.name || "",
@@ -775,12 +799,25 @@ export default function GameClient({
 
           let scoreForConfirm = score;
           if (contestLive) {
-            // Track clear contest runs; ignore lifetime-PB-shaped submits.
-            if (
-              score < personalBestRef.current ||
-              score > personalBestRef.current ||
-              personalBestRef.current <= 0
-            ) {
+            if (!personalBestKnownRef.current) {
+              try {
+                const { progress } = await getGameProgress(game.id, wallet, {
+                  playerName: playerName || profile?.name || undefined,
+                });
+                personalBestRef.current = Math.max(
+                  personalBestRef.current,
+                  progress.score ?? 0
+                );
+                personalBestKnownRef.current = true;
+              } catch {
+                notifyFailure(
+                  "Could not load your saved score. Try submitting again."
+                );
+                break;
+              }
+            }
+            // Equal to the known all-time best is a re-save, not a contest run.
+            if (isContestRunScore(score, personalBestRef.current)) {
               noteContestRun(score);
             }
             const resolved = resolveContestSubmitScore({

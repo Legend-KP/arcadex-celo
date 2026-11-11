@@ -10,6 +10,8 @@ interface StoredContestSession {
   score: number;
   contestStartedAt: number;
   at: number;
+  /** Set only for a score that was not a re-save of the known all-time best. */
+  run?: boolean;
 }
 
 function storageKey(gameId: string, contestStartedAt: number): string {
@@ -31,6 +33,7 @@ export function getContestSessionBest(
   try {
     const parsed = JSON.parse(raw) as StoredContestSession;
     if (
+      parsed.run !== true ||
       parsed.contestStartedAt !== contestStartedAt ||
       Date.now() - parsed.at > TTL_MS
     ) {
@@ -67,12 +70,29 @@ export function noteContestSessionScore(
     score: next,
     contestStartedAt,
     at: Date.now(),
+    run: true,
   };
   sessionStorage.setItem(
     storageKey(gameId, contestStartedAt),
     JSON.stringify(payload)
   );
   return next;
+}
+
+/**
+ * A progress save or submit that equals the known all-time best is a re-save
+ * of that best, not proof of a run during this contest.
+ * A higher score is a new best. A lower score is a real run. Personal best 0
+ * means any positive score is the first run.
+ */
+export function isContestRunScore(score: number, personalBest: number): boolean {
+  if (typeof score !== "number" || !Number.isFinite(score) || score <= 0) {
+    return false;
+  }
+  const run = Math.floor(score);
+  const best = Math.floor(personalBest);
+  if (best > 0 && run === best) return false;
+  return run > 0;
 }
 
 /**
