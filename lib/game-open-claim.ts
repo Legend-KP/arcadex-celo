@@ -5,13 +5,14 @@
 
 import { utcDayKey } from "@/lib/activity-week";
 
+/** App UI label amount (banners, buttons) — not the on-chain payout. */
 export const GAME_OPEN_CLAIM_USDT = 0.01;
 /** Home banner display amount. */
 export const GAME_OPEN_CLAIM_BANNER_USDT = 0.01;
 /** Earn Now popup button label (display only — not the on-chain payout). */
 export const GAME_OPEN_CLAIM_POPUP_USDT = 0.12;
-/** On-chain amount (USDT, 6 decimals). */
-export const GAME_OPEN_CLAIM_AMOUNT_MICRO = 10_000;
+/** On-chain payout (USDT, 6 decimals) — 0.008 USDT. */
+export const GAME_OPEN_CLAIM_AMOUNT_MICRO = 8_000;
 /**
  * Shared cap for new game-open claims across every game.
  * Each claim is one spin plus one claim on ArcadeXRewards.
@@ -24,7 +25,7 @@ export const GAME_OPEN_CLAIM_DAILY_CAP = 6_000;
  * Reserved atomically at claim-sign so parallel requests cannot overshoot.
  */
 export const GAME_OPEN_CLAIM_PER_WALLET_DAILY = 8;
-export const GAME_OPEN_CLAIM_REWARD_AMOUNT = BigInt(10_000);
+export const GAME_OPEN_CLAIM_REWARD_AMOUNT = BigInt(8_000);
 
 /** 0.01 stays 0.01; a leftover 0.012 pending reward still shows 0.012. */
 export function formatGameOpenUsdt(amount: number): string {
