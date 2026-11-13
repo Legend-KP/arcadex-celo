@@ -9,9 +9,9 @@ export const INFINITE_SPARK_SALE_END_MS =
 export const INFINITE_SPARK_NORMAL_USDT = 0.1;
 export const INFINITE_SPARK_SALE_USDT = 0.05;
 
-export const INFINITE_SPARK_SALE_POSTER = "/infinite-spark-sale.jpg";
+export const INFINITE_SPARK_SALE_POSTER = "/infinite-spark-sale.jpg?v=3";
 /** Bump when show logic changes so a prior auto-dismiss doesn't suppress the poster. */
-export const INFINITE_SPARK_SALE_PROMO_ID = "infiniteSparkSale:2026-11-14:v2";
+export const INFINITE_SPARK_SALE_PROMO_ID = "infiniteSparkSale:2026-11-14:v3";
 
 export function isInfiniteSparkSaleLive(now = Date.now()): boolean {
   return now >= INFINITE_SPARK_SALE_START_MS && now < INFINITE_SPARK_SALE_END_MS;

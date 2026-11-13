@@ -245,6 +245,72 @@ export default function SparkBatteryBar() {
             <span aria-hidden>✦</span>
           </h3>
 
+          <div
+            className={`spark-shop-card spark-shop-card--infinite${
+              saleLive ? " spark-shop-card--sale" : ""
+            }`}
+          >
+            {saleLive ? (
+              <span className="spark-shop-card__burst" aria-label="50% off">
+                50% OFF
+              </span>
+            ) : null}
+            <div className="spark-shop-card__main">
+              <span className="spark-shop-card__icon spark-shop-card__icon--infinite" aria-hidden>
+                ∞
+              </span>
+              <div className="spark-shop-card__copy">
+                <p className="spark-shop-card__name">Infinite Spark (24h)</p>
+                <p className="spark-shop-card__desc">
+                  {saleLive
+                    ? "Unlimited game access — half off for 7 days."
+                    : "Unlimited game access for 24 hours."}
+                </p>
+                {saleLive ? (
+                  <p className="spark-shop-card__sale-line">7-day sale</p>
+                ) : null}
+              </div>
+              <div className="spark-shop-card__price-wrap">
+                {saleLive ? (
+                  <span className="spark-shop-card__was">
+                    ${formatInfiniteSparkUsdt(INFINITE_SPARK_NORMAL_USDT)}
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  className="spark-shop-card__price"
+                  disabled={purchasing || loading || !walletAddress}
+                  onClick={() => {
+                    playTouchSfx();
+                    void handlePurchaseInfiniteSpark();
+                  }}
+                >
+                  {purchasing
+                    ? "…"
+                    : `$${formatInfiniteSparkUsdt(
+                        saleLive
+                          ? INFINITE_SPARK_SALE_USDT
+                          : INFINITE_SPARK_NORMAL_USDT
+                      )}`}
+                </button>
+              </div>
+            </div>
+            <span
+              className={`spark-shop-card__tag${
+                saleLive
+                  ? " spark-shop-card__tag--sale"
+                  : " spark-shop-card__tag--purple"
+              }`}
+            >
+              {saleLive ? "Best deal right now" : "Play without limits"}
+            </span>
+            {purchaseError && (
+              <p className="spark-panel__purchase-error" role="alert">
+                {purchaseError}
+              </p>
+            )}
+          </div>
+
           <div className="spark-shop-card">
             <div className="spark-shop-card__main">
               <span className="spark-shop-card__icon spark-shop-card__icon--refill" aria-hidden>
@@ -274,65 +340,6 @@ export default function SparkBatteryBar() {
             {refillError && (
               <p className="spark-panel__purchase-error" role="alert">
                 {refillError}
-              </p>
-            )}
-          </div>
-
-          <div
-            className={`spark-shop-card spark-shop-card--infinite${
-              saleLive ? " spark-shop-card--sale" : ""
-            }`}
-          >
-            <div className="spark-shop-card__main">
-              <span className="spark-shop-card__icon spark-shop-card__icon--infinite" aria-hidden>
-                ∞
-              </span>
-              <div className="spark-shop-card__copy">
-                <p className="spark-shop-card__name">Infinite Spark (24h)</p>
-                <p className="spark-shop-card__desc">
-                  Unlimited game access for 24 hours.
-                </p>
-                {saleLive ? (
-                  <p className="spark-shop-card__sale-line">7-day sale</p>
-                ) : null}
-              </div>
-              <div className="spark-shop-card__price-wrap">
-                {saleLive ? (
-                  <span className="spark-shop-card__was" aria-hidden>
-                    ${formatInfiniteSparkUsdt(INFINITE_SPARK_NORMAL_USDT)}
-                  </span>
-                ) : null}
-                <button
-                  type="button"
-                  className="spark-shop-card__price"
-                  disabled={purchasing || loading || !walletAddress}
-                  onClick={() => {
-                    playTouchSfx();
-                    void handlePurchaseInfiniteSpark();
-                  }}
-                >
-                  {purchasing
-                    ? "…"
-                    : `$${formatInfiniteSparkUsdt(
-                        saleLive
-                          ? INFINITE_SPARK_SALE_USDT
-                          : INFINITE_SPARK_NORMAL_USDT
-                      )}`}
-                </button>
-              </div>
-            </div>
-            {saleLive ? (
-              <span className="spark-shop-card__tag spark-shop-card__tag--sale">
-                50% OFF
-              </span>
-            ) : (
-              <span className="spark-shop-card__tag spark-shop-card__tag--purple">
-                Play without limits
-              </span>
-            )}
-            {purchaseError && (
-              <p className="spark-panel__purchase-error" role="alert">
-                {purchaseError}
               </p>
             )}
           </div>
