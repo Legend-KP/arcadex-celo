@@ -5,6 +5,12 @@ import { createPortal } from "react-dom";
 import { useSparks } from "@/components/SparkProvider";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
 import { formatChainError } from "@/lib/celo-public-client";
+import {
+  formatInfiniteSparkUsdt,
+  INFINITE_SPARK_NORMAL_USDT,
+  INFINITE_SPARK_SALE_USDT,
+  isInfiniteSparkSaleLive,
+} from "@/lib/infinite-spark-sale";
 import { playSuccessSfx, playTouchSfx, preloadSfx } from "@/lib/sfx";
 import { formatSparkDuration } from "@/lib/spark";
 import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
@@ -13,6 +19,7 @@ import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 export default function SparkBatteryBar() {
   const { sparks, loading, purchaseInfiniteSpark, purchaseSparkRefill } = useSparks();
   const { walletAddress } = usePlayerProfile();
+  const saleLive = isInfiniteSparkSaleLive();
   const [open, setOpen] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const [refilling, setRefilling] = useState(false);
@@ -271,7 +278,11 @@ export default function SparkBatteryBar() {
             )}
           </div>
 
-          <div className="spark-shop-card spark-shop-card--infinite">
+          <div
+            className={`spark-shop-card spark-shop-card--infinite${
+              saleLive ? " spark-shop-card--sale" : ""
+            }`}
+          >
             <div className="spark-shop-card__main">
               <span className="spark-shop-card__icon spark-shop-card__icon--infinite" aria-hidden>
                 ∞
@@ -281,22 +292,44 @@ export default function SparkBatteryBar() {
                 <p className="spark-shop-card__desc">
                   Unlimited game access for 24 hours.
                 </p>
+                {saleLive ? (
+                  <p className="spark-shop-card__sale-line">7-day sale</p>
+                ) : null}
               </div>
-              <button
-                type="button"
-                className="spark-shop-card__price"
-                disabled={purchasing || loading || !walletAddress}
-                onClick={() => {
-                  playTouchSfx();
-                  void handlePurchaseInfiniteSpark();
-                }}
-              >
-                {purchasing ? "…" : "$0.10"}
-              </button>
+              <div className="spark-shop-card__price-wrap">
+                {saleLive ? (
+                  <span className="spark-shop-card__was" aria-hidden>
+                    ${formatInfiniteSparkUsdt(INFINITE_SPARK_NORMAL_USDT)}
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  className="spark-shop-card__price"
+                  disabled={purchasing || loading || !walletAddress}
+                  onClick={() => {
+                    playTouchSfx();
+                    void handlePurchaseInfiniteSpark();
+                  }}
+                >
+                  {purchasing
+                    ? "…"
+                    : `$${formatInfiniteSparkUsdt(
+                        saleLive
+                          ? INFINITE_SPARK_SALE_USDT
+                          : INFINITE_SPARK_NORMAL_USDT
+                      )}`}
+                </button>
+              </div>
             </div>
-            <span className="spark-shop-card__tag spark-shop-card__tag--purple">
-              Play without limits
-            </span>
+            {saleLive ? (
+              <span className="spark-shop-card__tag spark-shop-card__tag--sale">
+                50% OFF
+              </span>
+            ) : (
+              <span className="spark-shop-card__tag spark-shop-card__tag--purple">
+                Play without limits
+              </span>
+            )}
             {purchaseError && (
               <p className="spark-panel__purchase-error" role="alert">
                 {purchaseError}
