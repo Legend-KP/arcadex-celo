@@ -62,9 +62,9 @@ const BLOCKING_BACKDROP_SELECTOR = [
   ".admin-modal-backdrop",
   ".daily-earn-backdrop",
   ".earn-now-backdrop",
-  ".infinite-spark-sale-backdrop",
+  // infinite-spark-sale-backdrop intentionally omitted — that modal is hosted
+  // by PromoPopupHost; listing it here made the host dismiss itself instantly.
 ].join(",");
-
 /** DOM fallback for overlays that forgot to claim the registry. */
 export function hasDomBlockingOverlay(): boolean {
   if (typeof document === "undefined") return true;

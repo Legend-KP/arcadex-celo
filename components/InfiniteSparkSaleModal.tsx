@@ -5,9 +5,6 @@ import { createPortal } from "react-dom";
 import { INFINITE_SPARK_SALE_POSTER } from "@/lib/infinite-spark-sale";
 import { playTouchSfx } from "@/lib/sfx";
 import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
-import { useClaimUiOverlay } from "@/lib/use-ui-overlay-gate";
-
-export const INFINITE_SPARK_SALE_OVERLAY_ID = "infinite-spark-sale";
 
 interface InfiniteSparkSaleModalProps {
   open: boolean;
@@ -15,12 +12,17 @@ interface InfiniteSparkSaleModalProps {
   onGrabIt: () => void;
 }
 
+/**
+ * Home sale poster — same image+CTA pattern as EarnNowModal / LiveContestsModal.
+ * Must NOT claim a separate overlay id or use a "blocking" backdrop class:
+ * PromoPopupHost already owns `promo-popup`, and a foreign claim / earn-now
+ * backdrop made the host tear this modal down within ~100ms.
+ */
 export default function InfiniteSparkSaleModal({
   open,
   onClose,
   onGrabIt,
 }: InfiniteSparkSaleModalProps) {
-  useClaimUiOverlay(INFINITE_SPARK_SALE_OVERLAY_ID, open);
   useBodyScrollLock(open);
 
   useEffect(() => {
@@ -38,7 +40,7 @@ export default function InfiniteSparkSaleModal({
 
   return createPortal(
     <div
-      className="earn-now-backdrop infinite-spark-sale-backdrop"
+      className="infinite-spark-sale-backdrop"
       role="presentation"
       onClick={() => {
         playTouchSfx();
