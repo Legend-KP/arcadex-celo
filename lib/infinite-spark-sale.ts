@@ -1,6 +1,7 @@
 /** Timed Infinite Spark half-off window (UI only — on-chain fee via owner setFee). */
 
-export const INFINITE_SPARK_SALE_START_MS = Date.UTC(2026, 10, 14); // 2026-11-14 00:00 UTC
+/** 2026-11-14 00:00 IST (UTC+5:30) — matches "starting today" for the launch locale. */
+export const INFINITE_SPARK_SALE_START_MS = Date.UTC(2026, 10, 13, 18, 30, 0);
 export const INFINITE_SPARK_SALE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 export const INFINITE_SPARK_SALE_END_MS =
   INFINITE_SPARK_SALE_START_MS + INFINITE_SPARK_SALE_DURATION_MS;
