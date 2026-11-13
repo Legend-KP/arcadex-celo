@@ -14,6 +14,12 @@ import {
   isPromoEventRead,
   wasPromoShownToday,
 } from "@/lib/promo-popups-seen";
+import {
+  INFINITE_SPARK_SALE_END_MS,
+  INFINITE_SPARK_SALE_PROMO_ID,
+  INFINITE_SPARK_SALE_START_MS,
+  isInfiniteSparkSaleLive,
+} from "@/lib/infinite-spark-sale";
 import { SPARK_MAX } from "@/lib/spark";
 import {
   Game,
@@ -39,7 +45,8 @@ export type PromoPopupKind =
   | "newGame"
   | "communityTelegram"
   | "communityX"
-  | "sparksUpgrade";
+  | "sparksUpgrade"
+  | "infiniteSparkSale";
 
 export interface PromoPopupCandidate {
   id: string;
@@ -178,9 +185,30 @@ function buildSparksUpgradeCandidate(now: number): PromoPopupCandidate | null {
   };
 }
 
+function buildInfiniteSparkSaleCandidate(
+  now: number
+): PromoPopupCandidate | null {
+  if (!isInfiniteSparkSaleLive(now)) return null;
+  // Guard against stale clocks outside the configured window constants.
+  if (now < INFINITE_SPARK_SALE_START_MS || now >= INFINITE_SPARK_SALE_END_MS) {
+    return null;
+  }
+  return {
+    id: INFINITE_SPARK_SALE_PROMO_ID,
+    kind: "infiniteSparkSale",
+    /** Highest while live so the half-off poster surfaces first. */
+    priority: 1,
+    endsAt: INFINITE_SPARK_SALE_END_MS,
+    persistent: true,
+  };
+}
+
 function isCapExemptPromo(kind: PromoPopupKind): boolean {
   return (
-    kind === "sparksUpgrade" || kind === "dailyXp" || kind === "liveContests"
+    kind === "sparksUpgrade" ||
+    kind === "dailyXp" ||
+    kind === "liveContests" ||
+    kind === "infiniteSparkSale"
   );
 }
 
@@ -188,19 +216,21 @@ function isCapExemptPromo(kind: PromoPopupKind): boolean {
  * Eligible promos for this moment, sorted by priority (highest first).
  * Host shows at most one per app open; daily cap still limits how many
  * opens in a UTC day can surface a promo (max 3).
- * Sparks-upgrade, Daily XP, and Live Contests bypass the shared daily cap.
- * Live Contests itself is allowed up to 3 shows per UTC day.
+ * Sparks-upgrade, Daily XP, Live Contests, and Infinite Spark sale bypass
+ * the shared daily cap. Live Contests itself is allowed up to 3 shows / UTC day.
  */
 export function buildPromoQueue(
   games: Game[],
   now = Date.now()
 ): PromoPopupCandidate[] {
   const remainingSlots = getPromoRemainingSlotsToday(now);
+  const infiniteSparkSale = buildInfiniteSparkSaleCandidate(now);
   const sparksUpgrade = buildSparksUpgradeCandidate(now);
   const dailyXp = buildDailyXpCandidate(now);
   const liveContests = buildLiveContestsCandidate(games, now);
 
   const raw: PromoPopupCandidate[] = [
+    ...(infiniteSparkSale ? [infiniteSparkSale] : []),
     ...(sparksUpgrade ? [sparksUpgrade] : []),
     ...(dailyXp ? [dailyXp] : []),
     ...(liveContests ? [liveContests] : []),
@@ -240,6 +270,8 @@ export function getPromoTitle(item: PromoPopupCandidate): string {
       return "Follow on X";
     case "sparksUpgrade":
       return "More Sparks, more plays";
+    case "infiniteSparkSale":
+      return "Infinite Spark";
   }
 }
 
@@ -259,6 +291,8 @@ export function getPromoBody(item: PromoPopupCandidate): string {
       return "Follow ArcadeX on X for the latest updates and drops.";
     case "sparksUpgrade":
       return `Your Spark bar just got bigger — you now get ${SPARK_MAX} Sparks. Play more games and climb the XP boards faster.`;
+    case "infiniteSparkSale":
+      return "Get unlimited game access for 50% off.";
   }
 }
 
@@ -276,6 +310,8 @@ export function getPromoCtaLabel(item: PromoPopupCandidate): string {
       return "Follow now";
     case "sparksUpgrade":
       return "Start playing";
+    case "infiniteSparkSale":
+      return "Grab it";
   }
 }
 
@@ -293,4 +329,8 @@ export function isLeaderboardPromo(kind: PromoPopupKind): boolean {
 
 export function isSparksUpgradePromo(kind: PromoPopupKind): boolean {
   return kind === "sparksUpgrade";
+}
+
+export function isInfiniteSparkSalePromo(kind: PromoPopupKind): boolean {
+  return kind === "infiniteSparkSale";
 }

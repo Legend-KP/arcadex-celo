@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import InfiniteSparkSaleModal from "@/components/InfiniteSparkSaleModal";
 import LiveContestsModal from "@/components/LiveContestsModal";
 import PromoPopupModal from "@/components/PromoPopupModal";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
@@ -192,18 +193,34 @@ export default function PromoPopupHost({
     finish(active, true);
   }, [active, finish]);
 
+  const openSparkShop = useCallback(() => {
+    try {
+      sessionStorage.setItem("openSparkPanel", "1");
+    } catch {
+      // private mode
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("arcadex:open-spark-panel"));
+    }
+  }, []);
+
   const handlePrimary = useCallback(() => {
     if (!active) return;
     const item = active;
     const community = isCommunityPromo(item.kind);
     finish(item, !community);
 
+    if (item.kind === "infiniteSparkSale") {
+      openSparkShop();
+      return;
+    }
+
     if (item.kind === "newGame" && item.gameId) {
       router.push(`/game/${item.gameId}`);
       return;
     }
     // dailyXp / liveContests: dismiss only (Play Now handled per card).
-  }, [active, finish, router]);
+  }, [active, finish, openSparkShop, router]);
 
   const handleContestPlay = useCallback(
     (gameId: string) => {
@@ -215,6 +232,16 @@ export default function PromoPopupHost({
   );
 
   if (!active || gateBusy) return null;
+
+  if (active.kind === "infiniteSparkSale") {
+    return (
+      <InfiniteSparkSaleModal
+        open
+        onClose={handleDismiss}
+        onGrabIt={handlePrimary}
+      />
+    );
+  }
 
   if (active.kind === "liveContests") {
     return (

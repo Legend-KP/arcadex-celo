@@ -184,27 +184,86 @@ export async function countActivity(db: D1Database): Promise<number> {
   return row?.c ?? 0;
 }
 
-export async function loadAllActivity(
+/** Distinct activity days ascending — small payload. */
+export async function listActivityDays(db: D1Database): Promise<string[]> {
+  const { results } = await db
+    .prepare(`SELECT DISTINCT day FROM chain_activity ORDER BY day ASC`)
+    .all<{ day: string }>();
+  return (results ?? []).map((r) => r.day);
+}
+
+/** Per-day unique tx + DAU via SQL (avoids loading every activity row). */
+export async function loadDailyBaseByDay(
   db: D1Database
-): Promise<
-  Array<{
-    tx_hash: string;
-    player: string;
-    contract: string;
-    day: string;
-  }>
-> {
+): Promise<Map<string, { daily_transactions: number; dau: number }>> {
   const { results } = await db
     .prepare(
-      `SELECT DISTINCT tx_hash, player, contract, day FROM chain_activity`
+      `SELECT day,
+              COUNT(DISTINCT tx_hash) AS daily_transactions,
+              COUNT(DISTINCT player) AS dau
+       FROM chain_activity
+       GROUP BY day`
     )
-    .all<{
-      tx_hash: string;
-      player: string;
-      contract: string;
-      day: string;
-    }>();
-  return results ?? [];
+    .all<{ day: string; daily_transactions: number; dau: number }>();
+  const map = new Map<string, { daily_transactions: number; dau: number }>();
+  for (const r of results ?? []) {
+    map.set(r.day, {
+      daily_transactions: Number(r.daily_transactions) || 0,
+      dau: Number(r.dau) || 0,
+    });
+  }
+  return map;
+}
+
+/** Per-day per-contract unique txs. */
+export async function loadDailyContractCounts(
+  db: D1Database
+): Promise<Map<string, Map<string, number>>> {
+  const { results } = await db
+    .prepare(
+      `SELECT day, contract, COUNT(DISTINCT tx_hash) AS c
+       FROM chain_activity
+       GROUP BY day, contract`
+    )
+    .all<{ day: string; contract: string; c: number }>();
+  const map = new Map<string, Map<string, number>>();
+  for (const r of results ?? []) {
+    let byContract = map.get(r.day);
+    if (!byContract) {
+      byContract = new Map();
+      map.set(r.day, byContract);
+    }
+    byContract.set(r.contract, Number(r.c) || 0);
+  }
+  return map;
+}
+
+/** Distinct players for one day — keeps each D1 response under the 50MB cap. */
+export async function loadPlayerDaysForDay(
+  db: D1Database,
+  day: string
+): Promise<string[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT DISTINCT player FROM chain_activity WHERE day = ?`
+    )
+    .bind(day)
+    .all<{ player: string }>();
+  return (results ?? []).map((r) => r.player);
+}
+
+/** Distinct txs for one day — used for rolling window counts. */
+export async function loadTxDaysForDay(
+  db: D1Database,
+  day: string
+): Promise<string[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT DISTINCT tx_hash FROM chain_activity WHERE day = ?`
+    )
+    .bind(day)
+    .all<{ tx_hash: string }>();
+  return (results ?? []).map((r) => r.tx_hash);
 }
 
 export async function replaceDailyMetrics(

@@ -1,6 +1,10 @@
 import {
   type DailyMetricRow,
-  loadAllActivity,
+  listActivityDays,
+  loadDailyBaseByDay,
+  loadDailyContractCounts,
+  loadPlayerDaysForDay,
+  loadTxDaysForDay,
   replaceDailyMetrics,
 } from "./db";
 
@@ -10,108 +14,97 @@ function addDays(day: string, delta: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function countDistinctInWindow(
+  map: Map<string, Set<string>>,
+  windowStart: string,
+  windowEnd: string
+): number {
+  let n = 0;
+  for (const daysPresent of map.values()) {
+    for (const d of daysPresent) {
+      if (d >= windowStart && d <= windowEnd) {
+        n += 1;
+        break;
+      }
+    }
+  }
+  return n;
+}
+
+/** Drop txs that fell out of the 90-day lookback so memory stays bounded. */
+function pruneTxDayKeys(
+  map: Map<string, Set<string>>,
+  keepFrom: string
+): void {
+  for (const [tx, daysPresent] of map) {
+    for (const d of [...daysPresent]) {
+      if (d < keepFrom) daysPresent.delete(d);
+    }
+    if (daysPresent.size === 0) map.delete(tx);
+  }
+}
+
 /**
  * Mirrors the Dune rolling CTE:
  * unique_activity → daily + lifetime users + tx windows + running total.
- * Only days with activity are emitted (same as Dune GROUP BY day).
+ * Loads day-by-day so D1 never returns a single >50MB result.
  */
 export async function recomputeDailyMetrics(db: D1Database): Promise<number> {
-  const activity = await loadAllActivity(db);
-  if (activity.length === 0) {
+  const days = await listActivityDays(db);
+  if (days.length === 0) {
     await replaceDailyMetrics(db, []);
     return 0;
   }
 
-  const byDay = new Map<
-    string,
-    {
-      txs: Set<string>;
-      players: Set<string>;
-      byContract: Map<string, Set<string>>;
-    }
-  >();
+  const baseByDay = await loadDailyBaseByDay(db);
+  const contractByDay = await loadDailyContractCounts(db);
 
   const txDayKeys = new Map<string, Set<string>>();
-
-  for (const row of activity) {
-    let bucket = byDay.get(row.day);
-    if (!bucket) {
-      bucket = {
-        txs: new Set(),
-        players: new Set(),
-        byContract: new Map(),
-      };
-      byDay.set(row.day, bucket);
-    }
-    bucket.txs.add(row.tx_hash);
-    bucket.players.add(row.player);
-    let cset = bucket.byContract.get(row.contract);
-    if (!cset) {
-      cset = new Set();
-      bucket.byContract.set(row.contract, cset);
-    }
-    cset.add(row.tx_hash);
-
-    let td = txDayKeys.get(row.tx_hash);
-    if (!td) {
-      td = new Set();
-      txDayKeys.set(row.tx_hash, td);
-    }
-    td.add(row.day);
-  }
-
-  function countDistinctInWindow(
-    map: Map<string, Set<string>>,
-    windowStart: string,
-    windowEnd: string
-  ): number {
-    let n = 0;
-    for (const daysPresent of map.values()) {
-      for (const d of daysPresent) {
-        if (d >= windowStart && d <= windowEnd) {
-          n += 1;
-          break;
-        }
-      }
-    }
-    return n;
-  }
-
-  const days = [...byDay.keys()].sort();
-  const nowIso = new Date().toISOString();
-  const metrics: DailyMetricRow[] = [];
-  let runningTotal = 0;
   const lifetimeUsers = new Set<string>();
+  const metrics: DailyMetricRow[] = [];
+  const nowIso = new Date().toISOString();
+  let runningTotal = 0;
 
   for (const day of days) {
-    const bucket = byDay.get(day)!;
-    const dailyTx = bucket.txs.size;
-    runningTotal += dailyTx;
-    for (const player of bucket.players) {
-      lifetimeUsers.add(player);
+    const d90 = addDays(day, -89);
+    pruneTxDayKeys(txDayKeys, d90);
+
+    const base = baseByDay.get(day) ?? { daily_transactions: 0, dau: 0 };
+    runningTotal += base.daily_transactions;
+
+    const players = await loadPlayerDaysForDay(db, day);
+    for (const player of players) lifetimeUsers.add(player);
+
+    const txs = await loadTxDaysForDay(db, day);
+    for (const tx of txs) {
+      let td = txDayKeys.get(tx);
+      if (!td) {
+        td = new Set();
+        txDayKeys.set(tx, td);
+      }
+      td.add(day);
     }
 
+    const contracts = contractByDay.get(day) ?? new Map<string, number>();
     const wStart = addDays(day, -6);
     const mStart = addDays(day, -29);
     const d60 = addDays(day, -59);
-    const d90 = addDays(day, -89);
 
     metrics.push({
       day,
-      daily_transactions: dailyTx,
-      dau: bucket.players.size,
+      daily_transactions: base.daily_transactions,
+      dau: base.dau,
       total_users: lifetimeUsers.size,
       transactions_last_7_days: countDistinctInWindow(txDayKeys, wStart, day),
       transactions_last_30_days: countDistinctInWindow(txDayKeys, mStart, day),
       transactions_last_60_days: countDistinctInWindow(txDayKeys, d60, day),
       transactions_last_90_days: countDistinctInWindow(txDayKeys, d90, day),
       total_transactions_to_date: runningTotal,
-      txhub_transactions: bucket.byContract.get("ArcadeXTxHub")?.size ?? 0,
-      rewards_transactions: bucket.byContract.get("ArcadeXRewards")?.size ?? 0,
-      sparkrefill_transactions: bucket.byContract.get("SparkRefill")?.size ?? 0,
-      scoresubmit_transactions: bucket.byContract.get("ScoreSubmit")?.size ?? 0,
-      infinitespark_transactions:
-        bucket.byContract.get("InfiniteSpark")?.size ?? 0,
+      txhub_transactions: contracts.get("ArcadeXTxHub") ?? 0,
+      rewards_transactions: contracts.get("ArcadeXRewards") ?? 0,
+      sparkrefill_transactions: contracts.get("SparkRefill") ?? 0,
+      scoresubmit_transactions: contracts.get("ScoreSubmit") ?? 0,
+      infinitespark_transactions: contracts.get("InfiniteSpark") ?? 0,
       updated_at: nowIso,
     });
   }

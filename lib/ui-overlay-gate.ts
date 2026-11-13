@@ -62,6 +62,7 @@ const BLOCKING_BACKDROP_SELECTOR = [
   ".admin-modal-backdrop",
   ".daily-earn-backdrop",
   ".earn-now-backdrop",
+  ".infinite-spark-sale-backdrop",
 ].join(",");
 
 /** DOM fallback for overlays that forgot to claim the registry. */
