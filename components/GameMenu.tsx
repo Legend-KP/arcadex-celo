@@ -9,10 +9,6 @@ import {
   getGameTutorialCandidates,
   getGameTutorialSeenKey,
 } from "@/lib/game-assets";
-import {
-  INFINITE_SPARK_SALE_POSTER,
-  isInfiniteSparkSaleLive,
-} from "@/lib/infinite-spark-sale";
 import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
 
 interface GameMenuProps {
@@ -70,26 +66,18 @@ export default function GameMenu({
 
   const tutorialSeenKey = useMemo(() => getGameTutorialSeenKey(game), [game]);
   const contestPosterSrc = "/contest-tutorial.webp";
-  const salePosterSrc = INFINITE_SPARK_SALE_POSTER;
 
   const [bgIdx, setBgIdx] = useState(0);
   const [logoIdx, setLogoIdx] = useState(0);
   const [tutorialIdx, setTutorialIdx] = useState(0);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [contestPosterDismissed, setContestPosterDismissed] = useState(false);
-  const [salePosterDismissed, setSalePosterDismissed] = useState(false);
 
   const bgSrc = bgCandidates[bgIdx];
   const menuImageSrc = logoCandidates[logoIdx];
   const tutorialSrc = tutorialCandidates[tutorialIdx];
   const contestPosterOpen =
     contestLive && !contestPosterDismissed && !tutorialOpen;
-  // Contest poster wins while a contest is live; sale only when no contest.
-  const salePosterOpen =
-    isInfiniteSparkSaleLive() &&
-    !contestLive &&
-    !tutorialOpen &&
-    !salePosterDismissed;
 
   const dismissTutorial = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -102,26 +90,11 @@ export default function GameMenu({
     setContestPosterDismissed(true);
   }, []);
 
-  const dismissSalePoster = useCallback(() => {
-    setSalePosterDismissed(true);
-  }, []);
-
-  const grabSalePoster = useCallback(() => {
-    setSalePosterDismissed(true);
-    try {
-      sessionStorage.setItem("openSparkPanel", "1");
-    } catch {
-      // private mode
-    }
-    router.push("/");
-  }, [router]);
-
   useEffect(() => {
     setBgIdx(0);
     setLogoIdx(0);
     setTutorialIdx(0);
     setContestPosterDismissed(false);
-    setSalePosterDismissed(false);
   }, [game.id, primaryImageSrc]);
 
   useEffect(() => {
@@ -135,7 +108,7 @@ export default function GameMenu({
   }, [tutorialSrc, tutorialSeenKey]);
 
   useEffect(() => {
-    if (!tutorialOpen && !contestPosterOpen && !salePosterOpen) return;
+    if (!tutorialOpen && !contestPosterOpen) return;
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
@@ -143,11 +116,7 @@ export default function GameMenu({
         dismissTutorial();
         return;
       }
-      if (contestPosterOpen) {
-        dismissContestPoster();
-        return;
-      }
-      if (salePosterOpen) dismissSalePoster();
+      if (contestPosterOpen) dismissContestPoster();
     }
 
     document.addEventListener("keydown", handleKeyDown);
@@ -157,10 +126,8 @@ export default function GameMenu({
   }, [
     tutorialOpen,
     contestPosterOpen,
-    salePosterOpen,
     dismissTutorial,
     dismissContestPoster,
-    dismissSalePoster,
   ]);
 
   const tutorialModal =
@@ -220,36 +187,6 @@ export default function GameMenu({
           onClick={dismissContestPoster}
         >
           Let&apos;s Go
-        </button>
-      </div>
-    </div>
-  ) : null;
-
-  const salePosterModal = salePosterOpen ? (
-    <div className="game-tutorial-backdrop" role="presentation">
-      <div
-        className="game-tutorial"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Infinite Spark 7-day sale"
-      >
-        <div className="game-tutorial-media game-tutorial-media--contest">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={salePosterSrc}
-            alt="Infinite Spark 7-day sale — unlimited game access for 50% off"
-            className="game-tutorial-img"
-            loading="eager"
-            fetchPriority="high"
-            decoding="async"
-          />
-        </div>
-        <button
-          type="button"
-          className="game-tutorial-btn"
-          onClick={grabSalePoster}
-        >
-          Grab it
         </button>
       </div>
     </div>
@@ -386,12 +323,9 @@ export default function GameMenu({
       </div>
 
       {typeof document !== "undefined"
-        ? (tutorialModal || contestPosterModal || salePosterModal) &&
-          createPortal(
-            tutorialModal || contestPosterModal || salePosterModal,
-            document.body
-          )
-        : tutorialModal || contestPosterModal || salePosterModal}
+        ? (tutorialModal || contestPosterModal) &&
+          createPortal(tutorialModal || contestPosterModal, document.body)
+        : tutorialModal || contestPosterModal}
     </div>
   );
 }

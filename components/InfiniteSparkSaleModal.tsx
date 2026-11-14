@@ -56,7 +56,7 @@ export default function InfiniteSparkSaleModal({
       >
         <button
           type="button"
-          className="earn-now-modal__close"
+          className="earn-now-modal__close infinite-spark-sale-modal__close"
           aria-label="Close"
           onClick={() => {
             playTouchSfx();
