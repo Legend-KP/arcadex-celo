@@ -235,6 +235,7 @@ const LOCAL_PREVIEW_VIDEO_FOLDERS = new Set([
   "knife-throw",
   "perfect-pile",
   "bee-brave",
+  "quake-cannon",
 ]);
 
 /** Name/id aliases that map onto a preview-video folder slug. */
@@ -283,6 +284,9 @@ const PREVIEW_VIDEO_FOLDER_ALIASES: Record<string, string> = {
   pile: "perfect-pile",
   beebrave: "bee-brave",
   bee: "bee-brave",
+  quakecannon: "quake-cannon",
+  quake: "quake-cannon",
+  cannon: "quake-cannon",
 };
 
 export type GameVideoSources = {
@@ -425,6 +429,16 @@ function resolvePreviewVideoFolder(game: Game): string | null {
       LOCAL_PREVIEW_VIDEO_FOLDERS.has("bee-brave")
     ) {
       return "bee-brave";
+    }
+    if (
+      (raw.includes("quake-cannon") ||
+        raw.includes("quakecannon") ||
+        (raw.includes("quake") && raw.includes("cannon")) ||
+        raw === "quake" ||
+        raw === "cannon") &&
+      LOCAL_PREVIEW_VIDEO_FOLDERS.has("quake-cannon")
+    ) {
+      return "quake-cannon";
     }
   }
 
