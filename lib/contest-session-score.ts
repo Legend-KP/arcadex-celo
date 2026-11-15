@@ -10,7 +10,7 @@ interface StoredContestSession {
   score: number;
   contestStartedAt: number;
   at: number;
-  /** Set only for a score that was not a re-save of the known all-time best. */
+  /** Set only for a score that was not a naked re-save of the known all-time best. */
   run?: boolean;
 }
 
@@ -80,11 +80,34 @@ export function noteContestSessionScore(
 }
 
 /**
- * A progress save or submit that equals the known all-time best is a re-save
- * of that best, not proof of a run during this contest.
- * A higher score is a new best. A lower score is a real run. Personal best 0
- * means any positive score is the first run.
+ * Whether this score should update the contest-session best.
+ *
+ * - Lower or higher than the known all-time best → real contest run / new best.
+ * - Equal to the all-time best with no contest play yet → reject (classic mint).
+ * - Equal to the all-time best after a near contest run (e.g. 127 then 128) →
+ *   accept the finishing score so off-by-one saves are not stuck one point low.
  */
+export function shouldNoteContestRunScore(
+  score: number,
+  personalBest: number,
+  sessionBest: number
+): boolean {
+  if (typeof score !== "number" || !Number.isFinite(score) || score <= 0) {
+    return false;
+  }
+  const run = Math.floor(score);
+  const best = Math.floor(personalBest);
+  const session = Math.floor(sessionBest);
+
+  if (best <= 0) return true;
+  if (run !== best) return true;
+
+  // Matching all-time PB: only when this contest already has a run that reached
+  // at least PB-1 (same finish / mid-run save ordering), not a throwaway low score.
+  return session > 0 && run > session && session >= best - 1;
+}
+
+/** @deprecated Use shouldNoteContestRunScore — kept for call-site clarity. */
 export function isContestRunScore(score: number, personalBest: number): boolean {
   if (typeof score !== "number" || !Number.isFinite(score) || score <= 0) {
     return false;
@@ -116,14 +139,15 @@ export function resolveContestSubmitScore(opts: {
   let best = sessionBest;
 
   if (submitted > 0) {
-    const looksLikeContestRun =
-      personalBest <= 0 ||
-      submitted < personalBest ||
-      submitted > personalBest;
-    if (looksLikeContestRun) {
+    if (personalBest <= 0 || submitted !== personalBest) {
+      best = Math.max(best, submitted);
+    } else if (
+      shouldNoteContestRunScore(submitted, personalBest, sessionBest)
+    ) {
+      // Finishing score that matches all-time PB after a near contest run.
       best = Math.max(best, submitted);
     }
-    // submitted === personalBest with sessionBest > 0: keep session best only
+    // else: naked PB submit while session has only a distant low score → keep session
   }
 
   return best > 0 ? best : null;

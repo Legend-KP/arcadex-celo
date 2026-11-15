@@ -232,7 +232,11 @@ export default function Leaderboard({
           {!loading &&
             entries.map((e, i) => (
               <div
-                key={`${e.walletAddress ?? e.name}-${i}`}
+                key={
+                  e.walletAddress
+                    ? `w:${e.walletAddress.toLowerCase()}`
+                    : `n:${e.name}:${i}`
+                }
                 className={`lb-row${i === 0 ? " lb-row--first" : ""}${
                   i < 3 ? " lb-row--podium" : ""
                 }${showContestBoard ? " lb-row--contest" : ""}`}

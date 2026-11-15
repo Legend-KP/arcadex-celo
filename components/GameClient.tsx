@@ -40,9 +40,9 @@ import {
 } from "@/lib/leaderboard-submit-result";
 import {
   getContestSessionBest,
-  isContestRunScore,
   noteContestSessionScore,
   resolveContestSubmitScore,
+  shouldNoteContestRunScore,
 } from "@/lib/contest-session-score";
 import { Game, gameHasContestLive, gameHasLeaderboard } from "@/types";
 
@@ -681,7 +681,11 @@ export default function GameClient({
               leaderboardEnabled &&
               personalBestKnownRef.current &&
               typeof progressValue === "number" &&
-              isContestRunScore(progressValue, personalBestRef.current)
+              shouldNoteContestRunScore(
+                progressValue,
+                personalBestRef.current,
+                contestSessionBestRef.current
+              )
             ) {
               noteContestRun(progressValue);
             }
@@ -816,13 +820,21 @@ export default function GameClient({
                 break;
               }
             }
-            // Equal to the known all-time best is a re-save, not a contest run.
-            if (isContestRunScore(score, personalBestRef.current)) {
+            if (
+              shouldNoteContestRunScore(
+                score,
+                personalBestRef.current,
+                contestSessionBestRef.current
+              )
+            ) {
               noteContestRun(score);
             }
             const resolved = resolveContestSubmitScore({
               submittedScore: score,
-              contestSessionBest: contestSessionBestRef.current,
+              contestSessionBest: Math.max(
+                contestSessionBestRef.current,
+                getContestSessionBest(game.id, contestStartedAt)
+              ),
               personalBest: personalBestRef.current,
             });
             if (resolved == null || resolved <= 0) {

@@ -1883,10 +1883,24 @@ export async function fetchContestLeaderboardFromServer(
        ORDER BY score DESC
        LIMIT ?`
     )
-    .bind(gameId, contestStartedAt, limit)
+    .bind(gameId, contestStartedAt, Math.max(limit * 3, limit))
     .all<LeaderboardRow>();
 
-  return (results ?? []).map(rowToLeaderboardEntry);
+  // One row per wallet (PK already enforces this; keep best if any legacy dupes).
+  const best = new Map<string, LeaderboardEntry>();
+  for (const row of results ?? []) {
+    const entry = rowToLeaderboardEntry(row);
+    const wallet = tryNormalizeWalletAddress(entry.walletAddress);
+    const key = wallet ?? `name:${entry.name.trim().toLowerCase()}`;
+    const current = best.get(key);
+    if (!current || entry.score > current.score) {
+      best.set(key, entry);
+    }
+  }
+
+  return Array.from(best.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
 }
 
 /** Total wallets that submitted to this contest (not capped to top-N). */
