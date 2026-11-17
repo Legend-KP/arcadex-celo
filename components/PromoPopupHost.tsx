@@ -6,6 +6,7 @@ import InfiniteSparkSaleModal from "@/components/InfiniteSparkSaleModal";
 import LiveContestsModal from "@/components/LiveContestsModal";
 import PromoPopupModal from "@/components/PromoPopupModal";
 import { usePlayerProfile } from "@/components/PlayerProfileProvider";
+import { useSparks } from "@/components/SparkProvider";
 import { gameSquareImageCandidates } from "@/lib/game-assets";
 import { getGameTheme } from "@/lib/game-themes";
 import {
@@ -57,9 +58,14 @@ export default function PromoPopupHost({
 }: PromoPopupHostProps) {
   const router = useRouter();
   const { criticalModalsBlocking } = usePlayerProfile();
+  const { sparks, loading: sparksLoading } = useSparks();
   const foreignBusy = useForeignUiBusy(PROMO_POPUP_OVERLAY_ID);
   const gateBusy = criticalModalsBlocking || foreignBusy || holdOff;
   const wasBusyRef = useRef(gateBusy);
+  const saleDismissedThisMountRef = useRef(false);
+  const previousHasInfiniteRef = useRef(sparks.hasInfinite);
+  const suppressInfiniteSparkSale =
+    sparksLoading || sparks.hasInfinite || saleDismissedThisMountRef.current;
 
   const [active, setActive] = useState<PromoPopupCandidate | null>(null);
   const sessionConsumedRef = useRef(hasPromoBeenShownThisSession());
@@ -68,11 +74,20 @@ export default function PromoPopupHost({
   const commitTimerRef = useRef<number | null>(null);
   const gamesRef = useRef(games);
   gamesRef.current = games;
+  const suppressInfiniteSparkSaleRef = useRef(suppressInfiniteSparkSale);
+  suppressInfiniteSparkSaleRef.current = suppressInfiniteSparkSale;
   const activeRef = useRef<PromoPopupCandidate | null>(null);
   activeRef.current = active;
 
   // Claim while showing so daily-earn / claim popups never stack on top.
   useClaimUiOverlay(PROMO_POPUP_OVERLAY_ID, Boolean(active));
+
+  useEffect(() => {
+    if (previousHasInfiniteRef.current && !sparks.hasInfinite) {
+      saleDismissedThisMountRef.current = false;
+    }
+    previousHasInfiniteRef.current = sparks.hasInfinite;
+  }, [sparks.hasInfinite]);
 
   const clearOpenTimer = useCallback(() => {
     if (openTimerRef.current != null) {
@@ -107,7 +122,10 @@ export default function PromoPopupHost({
       return;
     }
 
-    if (sessionConsumedRef.current || activeRef.current) return;
+    const saleMayOpen = !suppressInfiniteSparkSaleRef.current;
+    if ((!saleMayOpen && sessionConsumedRef.current) || activeRef.current) {
+      return;
+    }
 
     clearOpenTimer();
     const settleMs = justFreed
@@ -116,20 +134,34 @@ export default function PromoPopupHost({
 
     openTimerRef.current = window.setTimeout(function tryOpen() {
       openTimerRef.current = null;
-      if (sessionConsumedRef.current || activeRef.current) return;
+      const canShowSale = !suppressInfiniteSparkSaleRef.current;
+      if ((!canShowSale && sessionConsumedRef.current) || activeRef.current) {
+        return;
+      }
       // Final DOM check — covers panels that race the React registry.
       if (isPromoUiBusy()) {
         openTimerRef.current = window.setTimeout(tryOpen, PROMO_BUSY_RETRY_MS);
         return;
       }
-      const first = buildPromoQueue(gamesRef.current)[0] ?? null;
-      if (first) setActive(first);
+      const first =
+        buildPromoQueue(gamesRef.current, Date.now(), {
+          suppressInfiniteSparkSale: !canShowSale,
+        })[0] ?? null;
+      if (!first) return;
+      if (first.kind === "infiniteSparkSale" || !sessionConsumedRef.current) {
+        setActive(first);
+      }
     }, settleMs);
 
     return clearOpenTimer;
     // Intentionally omit `games` / `active` — use refs so list refreshes
     // don't restart the open timer and flash the modal.
-  }, [gateBusy, clearOpenTimer, clearCommitTimer]);
+  }, [
+    gateBusy,
+    suppressInfiniteSparkSale,
+    clearOpenTimer,
+    clearCommitTimer,
+  ]);
 
   // Commit only after the promo stays visible without other overlays.
   useEffect(() => {
@@ -146,6 +178,7 @@ export default function PromoPopupHost({
         return;
       }
       const item = activeRef.current;
+      if (item.kind === "infiniteSparkSale") return;
       if (!committedIdsRef.current.has(item.id)) {
         committedIdsRef.current.add(item.id);
         recordPromoPresented(item.id);
@@ -175,6 +208,11 @@ export default function PromoPopupHost({
     (item: PromoPopupCandidate, markPersistent: boolean) => {
       clearOpenTimer();
       clearCommitTimer();
+      if (item.kind === "infiniteSparkSale") {
+        saleDismissedThisMountRef.current = true;
+        setActive(null);
+        return;
+      }
       if (markPersistent && item.persistent) {
         markPromoEventRead(item.id);
       }

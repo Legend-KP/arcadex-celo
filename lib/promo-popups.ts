@@ -186,8 +186,10 @@ function buildSparksUpgradeCandidate(now: number): PromoPopupCandidate | null {
 }
 
 function buildInfiniteSparkSaleCandidate(
-  now: number
+  now: number,
+  suppress = false
 ): PromoPopupCandidate | null {
+  if (suppress) return null;
   if (!isInfiniteSparkSaleLive(now)) return null;
   // Guard against stale clocks outside the configured window constants.
   if (now < INFINITE_SPARK_SALE_START_MS || now >= INFINITE_SPARK_SALE_END_MS) {
@@ -199,7 +201,7 @@ function buildInfiniteSparkSaleCandidate(
     /** Highest while live so the half-off poster surfaces first. */
     priority: 1,
     endsAt: INFINITE_SPARK_SALE_END_MS,
-    persistent: true,
+    persistent: false,
   };
 }
 
@@ -221,10 +223,14 @@ function isCapExemptPromo(kind: PromoPopupKind): boolean {
  */
 export function buildPromoQueue(
   games: Game[],
-  now = Date.now()
+  now = Date.now(),
+  options: { suppressInfiniteSparkSale?: boolean } = {}
 ): PromoPopupCandidate[] {
   const remainingSlots = getPromoRemainingSlotsToday(now);
-  const infiniteSparkSale = buildInfiniteSparkSaleCandidate(now);
+  const infiniteSparkSale = buildInfiniteSparkSaleCandidate(
+    now,
+    Boolean(options.suppressInfiniteSparkSale)
+  );
   const sparksUpgrade = buildSparksUpgradeCandidate(now);
   const dailyXp = buildDailyXpCandidate(now);
   const liveContests = buildLiveContestsCandidate(games, now);
@@ -239,7 +245,11 @@ export function buildPromoQueue(
   ];
 
   const eligible = raw.filter((item) => {
-    if (wasPromoShownToday(item.id, now)) return false;
+    // Keep showing the sale on future home visits until the user actually has
+    // Infinite Spark active; dismissal should not suppress the campaign.
+    if (item.kind !== "infiniteSparkSale" && wasPromoShownToday(item.id, now)) {
+      return false;
+    }
     if (item.persistent && isPromoEventRead(item.id)) return false;
     return true;
   });
