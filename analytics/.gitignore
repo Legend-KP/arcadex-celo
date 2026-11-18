@@ -4,3 +4,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 worker-configuration.d.ts
+
+# CIP-64 / MiniPay research dumps
+scripts/out/
