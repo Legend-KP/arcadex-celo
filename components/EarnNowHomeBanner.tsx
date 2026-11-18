@@ -8,7 +8,7 @@ interface EarnNowHomeBannerProps {
 
 /** Home promo strip — replaces Daily XP banner (code kept, UI gated). */
 export default function EarnNowHomeBanner({ onOpen }: EarnNowHomeBannerProps) {
-  const rewardLabel = `$${formatGameOpenUsdt(GAME_OPEN_CLAIM_BANNER_USDT)} USDT`;
+  const rewardLabel = `upto $${formatGameOpenUsdt(GAME_OPEN_CLAIM_BANNER_USDT)} USDT`;
   return (
     <section className="daily-xp-home-banner" aria-label="Earn everyday reward">
       <div className="daily-xp-home-banner__card">
