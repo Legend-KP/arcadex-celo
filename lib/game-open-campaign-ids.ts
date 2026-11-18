@@ -38,12 +38,15 @@ export const DEFAULT_GAME_OPEN_CAMPAIGN_BY_SLUG: Record<string, number> = {
   // 24 Dot Connect (was 11)
   "dot-connect": 24,
   dotconnect: 24,
-  // 25 Coin (Coin Sort) (was 12)
+  // 25 Coin (Coin Sort) + Perfect Pile
   coin: 25,
   "coin-sort": 25,
   coinsort: 25,
   "coin-spot": 25,
   coinspot: 25,
+  "perfect-pile": 25,
+  perfectpile: 25,
+  pile: 25,
   // 26 BaseDrop (was 13)
   basedrop: 26,
   "base-drop": 26,
@@ -51,21 +54,31 @@ export const DEFAULT_GAME_OPEN_CAMPAIGN_BY_SLUG: Record<string, number> = {
   "orbit-flow": 27,
   orbitflow: 27,
   orbit: 27,
-  // 28 Jelly Jumble (was 15)
+  // 28 Jelly Jumble + 2048 Bubbles
   "jelly-jumble": 28,
   jellyjumble: 28,
   jelly: 28,
-  // 29 Hungry Hole ("Hunger Hoel") (was 16)
+  "2048-bubbles": 28,
+  "2048-bubble": 28,
+  "2048bubbles": 28,
+  "2048bubble": 28,
+  // 29 Hungry Hole ("Hunger Hoel") + Bee Brave
   "hungry-hole": 29,
   hungryhole: 29,
   hungry: 29,
   hunger: 29,
   "hunger-hoel": 29,
-  // 30 Fruit Swipe (was 17)
+  "bee-brave": 29,
+  beebrave: 29,
+  // 30 Fruit Swipe + Quake Cannon
   "fruit-swipe": 30,
   fruitswipe: 30,
   "fruit-game": 30,
   fruit: 30,
+  "quake-cannon": 30,
+  quakecannon: 30,
+  quake: 30,
+  cannon: 30,
   // 31 Block Blast (was 18)
   "block-blast": 31,
   blockblast: 31,
