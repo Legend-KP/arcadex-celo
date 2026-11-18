@@ -106,8 +106,9 @@ export interface Game {
   /** Display order on the home page (lower = earlier). Set via admin drag-and-drop. */
   sortOrder?: number;
   /**
-   * Unix ms when the game went live as a new arrival (create live, or Coming Soon → live).
-   * Drives the New Arrival card tag (4 days) and promo popup.
+   * Unix ms when the game became publicly live (create live, Coming Soon → live,
+   * or test → public). Drives the New Arrival card tag (4 days) and promo popup.
+   * Not stamped while the game is test-only.
    */
   newArrivalAt?: number;
   createdAt: number;

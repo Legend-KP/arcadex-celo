@@ -386,8 +386,12 @@ export async function createGameOnServer(
     payload = { ...payload, active: true, live: true };
     await clearTestFlagOnOtherGames(existing, null);
   }
-  // Stamp New Arrival when created already live (Coming Soon waits until go-live).
-  if (payload.live !== false && typeof payload.newArrivalAt !== "number") {
+  // Stamp New Arrival only for public live creates (not test / Coming Soon).
+  if (
+    payload.live !== false &&
+    payload.isTest !== true &&
+    typeof payload.newArrivalAt !== "number"
+  ) {
     payload = { ...payload, newArrivalAt: now };
   }
 
@@ -431,7 +435,7 @@ export async function updateGameOnServer(
 ): Promise<void> {
   let patch = { ...data };
   const existing =
-    patch.live !== undefined || patch.isTest === true
+    patch.live !== undefined || patch.isTest !== undefined
       ? await fetchGameFromFirestore(id)
       : null;
 
@@ -441,17 +445,22 @@ export async function updateGameOnServer(
     patch = { ...patch, active: true, live: true };
   }
 
-  // New Arrival: Coming Soon → live (or first live via isTest force).
-  const becomingLive =
+  // New Arrival starts at public launch only (not while test-gated).
+  const willBeTest =
+    patch.isTest === true ||
+    (patch.isTest !== false && existing?.isTest === true);
+  const becomingPublicLive =
     patch.live === true &&
     existing != null &&
-    existing.live === false;
-  const forcedLiveFromTest =
-    patch.isTest === true &&
-    existing != null &&
-    existing.live === false;
+    existing.live === false &&
+    !willBeTest;
+  const leavingTestWhileLive =
+    patch.isTest === false &&
+    existing?.isTest === true &&
+    patch.live !== false &&
+    (patch.live === true || existing.live !== false);
   if (
-    (becomingLive || forcedLiveFromTest) &&
+    (becomingPublicLive || leavingTestWhileLive) &&
     typeof patch.newArrivalAt !== "number"
   ) {
     const games = await fetchAllGamesFromServer();
