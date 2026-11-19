@@ -737,7 +737,7 @@ async function readLedgerStatus(
 
 /**
  * Atomically reserve one open-claim slot for (wallet, game, day).
- * Counts pending + claimed toward both the per-wallet 8 and global 6000 caps.
+ * Counts pending + claimed toward both the per-wallet 8 and global 7000 caps.
  * Re-signing an existing pending row does not consume another slot.
  */
 export async function reserveGameOpenClaim(opts: {
