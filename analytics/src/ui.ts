@@ -285,6 +285,11 @@ export function renderAnalyticsHtml(): string {
       "infinitespark_transactions"
     ];
 
+    const COLUMN_LABELS = {
+      total_users: "total_transacting_users",
+      rewards_transactions: "gameplay_transactions"
+    };
+
     const PAGE_SIZE = 25;
     let rows = [];
     let filtered = [];
@@ -387,7 +392,7 @@ export function renderAnalyticsHtml(): string {
       const slice = filtered.slice(start, start + PAGE_SIZE);
 
       let html = "<table><thead><tr>";
-      for (const c of COLUMNS) html += "<th>" + c + "</th>";
+      for (const c of COLUMNS) html += "<th>" + (COLUMN_LABELS[c] || c) + "</th>";
       html += "</tr></thead><tbody>";
       for (const r of slice) {
         html += "<tr>";
