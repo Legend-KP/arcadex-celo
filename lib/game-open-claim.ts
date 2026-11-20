@@ -12,7 +12,7 @@ export const GAME_OPEN_CLAIM_BANNER_USDT = 0.1;
 /** Earn Now popup button label (display only — not the on-chain payout). */
 export const GAME_OPEN_CLAIM_POPUP_USDT = 0.12;
 /** On-chain payout (USDT, 6 decimals) — 0.005 USDT. */
-export const GAME_OPEN_CLAIM_AMOUNT_MICRO = 5_000;
+export const GAME_OPEN_CLAIM_AMOUNT_MICRO = 6_000;
 /**
  * Shared cap for new game-open claims across every game.
  * Each claim is one spin plus one claim on ArcadeXRewards.
@@ -24,7 +24,7 @@ export const GAME_OPEN_CLAIM_DAILY_CAP = 7_000;
  * Max open-claim slots per wallet per UTC day (pending + claimed).
  * Reserved atomically at claim-sign so parallel requests cannot overshoot.
  */
-export const GAME_OPEN_CLAIM_PER_WALLET_DAILY = 8;
+export const GAME_OPEN_CLAIM_PER_WALLET_DAILY = 10;
 export const GAME_OPEN_CLAIM_REWARD_AMOUNT = BigInt(5_000);
 
 /** 0.01 stays 0.01; a leftover 0.012 pending reward still shows 0.012. */
