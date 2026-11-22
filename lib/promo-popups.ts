@@ -191,8 +191,11 @@ function buildInfiniteSparkSaleCandidate(
 ): PromoPopupCandidate | null {
   if (suppress) return null;
   if (!isInfiniteSparkSaleLive(now)) return null;
-  // Guard against stale clocks outside the configured window constants.
-  if (now < INFINITE_SPARK_SALE_START_MS || now >= INFINITE_SPARK_SALE_END_MS) {
+  if (now < INFINITE_SPARK_SALE_START_MS) return null;
+  if (
+    Number.isFinite(INFINITE_SPARK_SALE_END_MS) &&
+    now >= INFINITE_SPARK_SALE_END_MS
+  ) {
     return null;
   }
   return {
@@ -200,7 +203,9 @@ function buildInfiniteSparkSaleCandidate(
     kind: "infiniteSparkSale",
     /** Highest while live so the half-off poster surfaces first. */
     priority: 1,
-    endsAt: INFINITE_SPARK_SALE_END_MS,
+    ...(Number.isFinite(INFINITE_SPARK_SALE_END_MS)
+      ? { endsAt: INFINITE_SPARK_SALE_END_MS }
+      : {}),
     persistent: false,
   };
 }

@@ -1,20 +1,21 @@
-/** Timed Infinite Spark half-off window (UI only — on-chain fee via owner setFee). */
+/** Infinite Spark half-off (UI only — on-chain fee via owner setFee). */
 
-/** 2026-11-14 00:00 IST (UTC+5:30) — matches "starting today" for the launch locale. */
-export const INFINITE_SPARK_SALE_START_MS = Date.UTC(2026, 10, 13, 18, 30, 0);
-export const INFINITE_SPARK_SALE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
-export const INFINITE_SPARK_SALE_END_MS =
-  INFINITE_SPARK_SALE_START_MS + INFINITE_SPARK_SALE_DURATION_MS;
+/** Restarted 2026-11-22 — open-ended until manually disabled. */
+export const INFINITE_SPARK_SALE_START_MS = Date.UTC(2026, 10, 22);
+/** No end — sale stays live while this is Infinity (set a real ms to stop). */
+export const INFINITE_SPARK_SALE_END_MS = Number.POSITIVE_INFINITY;
 
 export const INFINITE_SPARK_NORMAL_USDT = 0.1;
 export const INFINITE_SPARK_SALE_USDT = 0.05;
 
 export const INFINITE_SPARK_SALE_POSTER = "/infinite-spark-sale.jpg?v=3";
-/** Bump when show logic changes so a prior auto-dismiss doesn't suppress the poster. */
-export const INFINITE_SPARK_SALE_PROMO_ID = "infiniteSparkSale:2026-11-14:v3";
+/** Bump when the campaign restarts so prior dismissals don't suppress the poster. */
+export const INFINITE_SPARK_SALE_PROMO_ID = "infiniteSparkSale:2026-11-22:open";
 
 export function isInfiniteSparkSaleLive(now = Date.now()): boolean {
-  return now >= INFINITE_SPARK_SALE_START_MS && now < INFINITE_SPARK_SALE_END_MS;
+  return (
+    now >= INFINITE_SPARK_SALE_START_MS && now < INFINITE_SPARK_SALE_END_MS
+  );
 }
 
 export function formatInfiniteSparkUsdt(amount: number): string {

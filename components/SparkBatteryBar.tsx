@@ -269,6 +269,7 @@ export default function SparkBatteryBar() {
                 {saleLive ? (
                   <p className="spark-shop-card__sale-line">7-day sale</p>
                 ) : null}
+
               </div>
               <div className="spark-shop-card__price-wrap">
                 {saleLive ? (
