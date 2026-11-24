@@ -2,6 +2,9 @@
 
 A multi-game arcade shell for Unity WebGL games, built with Next.js + TypeScript + Firebase.
 
+**Public game release changelog (dates + MiniPay link):** [docs/GAME_RELEASES.md](docs/GAME_RELEASES.md)  
+**MiniPay app:** https://link.minipay.xyz/miniapp?id=4f8ff9f8-7eee-4fc9-ba0e-aad06b094d39
+
 ## File Structure
 
 ```
